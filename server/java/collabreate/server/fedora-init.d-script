@@ -1,0 +1,210 @@
+#!/bin/bash
+#
+#   /etc/rc.d/init.d/collabreate
+#
+#   This controls the collabREate server component.
+#   You must have java jre, and for database mode a 
+#       database mysql|postgresql, and the appropriate 
+#       jdbc connector installed and configured.
+#       See the collabREate README for more information.
+#
+# Author: Tim Vidas tvidas<at>gmail[dot]com   
+#
+# chkconfig: 2345 99 99 
+# description: collabREate server daemon.  Provides central \
+# collaborative point for those collabREating with IDA Pro.
+#
+# this file is based on the init.d sample script provided with fedora
+# it can be found at: /usr/share/doc/initscripts-####/sysvinitfiles
+#
+# to use this script, copy it to /etc/init.d/collabreate (or /etc/rc.d/init.d)
+
+# Source function library.
+. /etc/init.d/functions
+
+# these are user configurable - but you should prob them across all aux files #
+SERVICE_NAME=collabreate
+JAVA_OPTS="-verbose -jar"
+COLLAB_SERVER_JAR="collabreate_server.jar"
+COLLAB_MANAGER_JAR="collabreate_manager.jar"
+COLLAB_CONF="server.conf"
+IDENT="collab>"
+PID_FILE=/var/run/$SERVICE_NAME.pid
+
+# these can also be set via exported environmental variables                  #
+# eg:  >INSTALLDIR=/usr/local/collabreate/server                              #
+#      >export INSTALLDIR                                                     #
+#      >make install                                                          #
+# if you do set these via the environment, you should configure your system   #
+# to always set them (other scripts depend upon the values of these variables)#
+COLLAB_SERVER_DIR="${COLLAB_SERVER_DIR:-/opt/collabreate/server}"
+COLLAB_LOG="${COLLAB_LOG:-/var/log/collab}"
+COLLAB_SCRIPT="${COLLAB_SCRIPT:-/usr/sbin/collabctl}"
+COLLAB_USER="${COLLAB_USER:-collab}"
+COLLAB_GROUP="${COLLAB_GROUP:-collab}"
+# end #
+
+#might be more portable:
+#if [ -z "$COLLAB_USER" ];
+#then
+#   COLLAB_USER=collab
+#fi
+
+#uncomment to override
+JAVA_HOME=/etc/alternatives/java_sdk
+
+#find java
+if [ -z "$JAVA_HOME" ]; 
+then
+    JAVA=`which java`
+    if [ -n "$JAVA" ] ; 
+    then
+        JAVA_BINDIR=`dirname ${JAVA}`
+        JAVA_HOME="${JAVA_BINDIR}/.."
+    fi
+    if [ -z "$JAVA_HOME" ]; 
+    then
+        echo "No JAVA_HOME defined and no java found in PATH"
+        exit 1
+    else
+        echo "Found JAVA_HOME: ${JAVA_HOME}"
+        echo "Please configure JAVA_HOME so I don't have to look for it next time"
+    fi
+fi
+
+`export JAVA_HOME`
+
+JAVA_BIN="$JAVA_HOME"/bin/java
+JAVA_JAVAC="$JAVA_HOME"/bin/javac
+
+
+# for those that actually use SELinux
+if [ -x "/sbin/runuser" ]; 
+then
+    SU="/sbin/runuser"
+else
+    SU="su"
+fi
+
+
+#DAEMON="$JAVA_BIN -jar ./collabreate_server.jar ./server.conf >/dev/null 2>&1 &"
+#SHUTDOWNAPP="$JAVA_BIN -jar ./collabreate_manager.jar ./server.conf shutdown" 
+
+
+start() {
+   echo -n "Starting collabreate server: "
+   echo "(init.d) start recieved " >> $COLLAB_LOG
+   apid=$(pgrep -u $COLLAB_USER java)
+   if checkpid $apid 2>&1; 
+   then
+      failure
+      echo
+      echo " Sever appears already be running: pid $apid"
+      return -1
+   else
+      #echo "$SU - $COLLAB_USER -c "$COLLAB_SCRIPT start" >> $COLLAB_LOG 2>&1"
+     `$SU - $COLLAB_USER -c "$COLLAB_SCRIPT start" >> $COLLAB_LOG 2>&1`
+      RETVAL=$?
+      if [ $RETVAL -eq 0 ]; 
+      then
+         TPID=$(pgrep -u $COLLAB_USER java)
+         `echo -n $TPID > $PID_FILE`
+         `touch /var/lock/subsys/collabreate`
+         `chown ${COLLAB_USER}:${COLLAB_USER} $PID_FILE`
+         success
+         echo
+      else
+         failure
+         echo
+         return -1
+      fi
+   fi
+   
+   return 0
+}   
+
+stop() {
+   echo -n "Shutting down collabreate server: "
+   echo "(init.d) stop recieved " >> $COLLAB_LOG
+   #check for pid started from this script:
+   if [ -f $PID_FILE ]; 
+   then
+      #killproc would have to be something like "killproc java" which may not be very nice
+      #kill the 'correct' program, using kill instead of killproc
+      read kpid < $PID_FILE
+
+      #first try to 'safely' shutdown the server using the management application
+      `$SU - $COLLAB_USER -c "$COLLAB_SCRIPT stop" >> $COLLAB_LOG 2>&1`
+      sleep 2
+
+      #if it's still running, the script "stop" must not have worked
+      if checkpid $kpid 2>&1;
+      then
+         `kill $kpid > /dev/null 2>&1`
+         sleep 2
+      fi 
+
+      #if it's still running, then just fail
+      if checkpid $kpid 2>&1;
+      then
+         failure
+         echo
+      else
+         rm -f $PID_FILE
+         rm -f /var/lock/subsys/collabreate
+         success
+         echo
+      fi
+   else
+      failure $"Stopping collabreate server"
+      #echo -e "\n"A
+      #this basically assumes that collabreate is the only java process running as USER
+      apid=$(pgrep -u $COLLAB_USER java)
+      if checkpid $apid 2>&1; 
+      then
+         echo " The server may have been started without using this init script!"
+         echo " Sever appears already be running: pid $apid"
+         echo " Use the management application to shutdown the server"
+      else
+         echo " Server appears to not be running"
+      fi
+      echo
+   fi
+   return 0
+}
+
+case "$1" in
+    start)
+   start
+   ;;
+    stop)
+   stop
+   ;;
+    status)
+   #relies upon a few things, like the location of the pid file
+   if status collabreate;
+   then
+      echo ""
+   else
+      #look for other pids, just in case
+           #can't use pidofproc becuase it matches other java services
+      apid=$(ps ax | grep "$COLLAB_SERVER_JAR" |grep -v grep | cut -d" " -f1)
+      if checkpid $apid 2>&1; 
+      then
+         echo " The server may have been started without using this init script!"
+         echo " Possible pids: $apid "
+      fi
+   fi
+   ;;
+    restart)
+       stop
+   start
+   ;;
+    *)
+   echo "Usage: $0 {start|stop|status|restart}"
+   exit 1
+   ;;
+esac
+exit $?
+
+

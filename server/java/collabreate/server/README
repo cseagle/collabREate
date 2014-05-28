@@ -1,0 +1,253 @@
+/*
+    IDA Pro Collabreation/Synchronization Plugin
+    Copyright (C) 2008 Chris Eagle <cseagle at gmail d0t com>
+    Copyright (C) 2008 Tim Vidas <tvidas at gmail d0t com>
+
+
+    This program is free software; you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by the Free
+    Software Foundation; either version 2 of the License, or (at your option)
+    any later version.
+
+    This program is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+    more details.
+
+    You should have received a copy of the GNU General Public License along with
+    this program; if not, write to the Free Software Foundation, Inc., 59 Temple
+    Place, Suite 330, Boston, MA 02111-1307 USA
+
+*/
+
+Version 0.2.0 Initial release
+
+Note:  This server component is also released as FC15 based virtual appliance.
+       This Virtual Machine is largely a stock FC15 minimal install, with postgres/
+       postgres-server, openjdk-java-1.6.0 packages, and 
+       collabreate software already installed.
+       See www.idabook.com/collabreate for more information.
+
+
+QUICKSTART GUIDE
+
+Of course you should read this entire file prior to using the collabreate server.
+For the other 90% of users, here is a 6 step process that attempts to get you 
+started.
+
+1) install postgres (or mysql) and configure permissions (eg pg_hba.conf)
+2) #./init_database.sh
+3) #make
+4) #make test     (to visually inspect)
+5) #make install  (optional)
+
+if you performed step 5 you can start the server by:
+6) #/etc/init.d/collabreate start
+
+if you chose not to install you can run from the build directory via scripts:
+6) #./launch_server.sh server.conf
+
+Add users using the manager interface.  Connect to the server via the plugin.
+
+#./launch_manager.sh server.conf
+
+EDITING THE CONFIGURATION
+
+Several parameters are tunable, include database information, logging verbosity,
+the TCP port number, etc.  These can be changed by editing server.conf
+
+At the very least you should skim this file to verify default settings.  The 
+default database type is PostgreSQL.
+
+
+BUILDING THE SERVER 
+
+Building the collabreate server requires the java SDK (tested with 1.6). For 
+full functionality you also need a JDBC connector for your database (PostgreSQL
+9.0 http://jdbc.postgresql.org/download/postgresql-9.0-801.jdbc4.jar)
+
+Due to the structure of some queries, PostgreSQL 8.2 or higher is required.
+
+Unpack the archive:
+
+#tar -zxf collabreate.tgz
+
+The server subdirectory contains all the server components:
+
+Compile the required classes:
+
+#javac collabreate/server/*.java
+
+At this point you can try out the server:
+
+#java collabreate.server.CollabreateServer collabreate/server/server.conf
+
+
+EXECUTABLE JAR FILES
+
+Alternatively, cd into collabreate/server/ and use make:
+
+#make all
+
+At this point you can run the server via the launch_server.sh script
+
+#./launch_server.sh server.conf
+
+This launches the server in the background
+
+#make install
+
+This installs server files, control files, etc.  To visually inspect the 
+install process prior to install, run "make test".  You can now start via
+init.d
+
+#/etc/init.d/collabreate start
+
+
+CUSTOMIZING VIA YOUR ENVIRONMENT (optional)
+
+While using the environmental variables is optional, specify JAVA_HOME is 
+recommended.
+
+Several build and management items can be configure by exporting environmental
+variables.  If these variables are not set, either the script will attempt to
+determine the correct setting or default values will be used.
+
+JAVA_HOME   - home directory for java 
+INSTALLDIR  - where to install the server, full path
+MANDIR      - full path to the location of man files
+INITDIR     - path to init.d
+INITBIN     - name of file to place in init.d
+COLLAB_USER - name of user account the server will run as
+COLLAB_GROUP- group account
+
+the provided management scripts also provide similar customization.  If you 
+modified paths at build/install, you may need to make modifications here.
+
+JAVA_HOME   - home directory for java 
+COLLAB_SERVER_DIR - directory the server was installed into
+COLLAB_LOG        - file that the scripts will log to
+COLLAB_SCRIPT     - full path to collabctl
+COLLAB_USER       - user account for collabreate server
+COLLAB_GROUP      = group account
+
+DATABASE SETUP
+
+For database functionality there are a few more steps:
+
+A database must be setup for use with collabreate.  
+create a database user and a database (collabDB for example):
+postgres:
+   # createuser -U postgres collab 
+   Shall the new role be a superuser? (y/n) y
+   Shall the new role be allowed to create databases? (y/n) y
+   Shall the new role be allowed to create more new roles? (y/n) n
+   CREATE ROLE
+   # createdb -U collab collabDB
+   CREATE DATABASE
+
+   A sample .sql file is provided to install the schema:
+   # psql -U collab -d collabDB -f dbschema.sql
+
+mysql:
+   The user account creation is part of the provided sql script
+   # mysql < my_dbschema.sql
+
+Finally you need to either install the JDBC jar file where java can find it, or 
+provide the jar in the classpath on the command line:
+
+(the following two lines should be executed as one line)
+#java -cp "postgresql-9.0-801.jdbc4.jar:." 
+collabreate/server/CollabreateServer server.conf
+
+Alternatively, if you have built jars, you can use the launch_server.sh script.
+
+
+USING THE SERVER
+
+By default (via the example server.conf) the server logs to /var/log/collab.
+You may specify an alternate log file location via the LogFile setting in the 
+server configuration file.
+
+
+INTERACTING WITH THE SERVER
+
+A ServerManager application is included that allows you to create and list users
+and projects from the local console.  The ServerManager may be launched using
+the provided launch_manager.sh script:
+
+#./launch_manager.sh
+
+which uses the same server configuration file used for the server to determine
+appropriate database parameters.
+
+Once started, the manager provides a simple menu to the console.  The 
+implemented functions are fairly easy to grasp, and perform actions such as 
+adding users, listing users, listing projects, etc.  Listing and editing users
+and projects have no effect in BASIC mode.
+
+
+IMPORT/EXPORT
+
+The ServerManager allows for importing and exporting projects.  Exported 
+projects are stored in a binary file format, that contains all project
+information including updates.  Currently, related projects (parent, child, 
+snapshot, etc) and related users (owner, updaters, etc) are not imported. 
+For this reason, when importing from a file a new owner must be selected from 
+the current server.
+
+PROJECT DELETION
+
+Currently, project deletion does not 'cascade' in any way.  Deleting a
+project simply deletes the project information and related updates - not
+snapshots, child/parent projects, etc.
+
+
+PERMISSIONS
+Permissions can be assigned to users and to projects, furthermore both users
+and projects each have a set of publish and subscribe permissions.
+
+For a user to receive an update, that subscribe permission for that type of 
+update must be granted for both the user and the project.
+
+For a user that is connected to a project to make a particular update, the 
+publish permission for that type of update must by granted for both the user 
+and that project.
+
+Permissions are granted by setting bits in the permissions bitfield (long)
+here is a summary of that bitfeild (least significant is bit 0)
+0      "Undefine"
+1      "Make Code"
+2      "Make Data"
+3      "Segments"
+4      "Renames"
+5      "Functions"
+6      "Byte Patch"
+7      "Comments"
+8      "Optypes"
+9      "Enums"
+10     "Structs"
+11     "Flirt"
+12     "Thunk"
+13     "Xrefs"
+14-63  "Reserved for future use"
+
+If a user has only "Change comment" and "Name Change" publish permissions 
+(0x48), those are the only to operations the user can perform, even if the 
+project allows all changes (0x1FFF)
+
+Similarly if a project only allows "Change comment", "Change Name", "Patch
+Byte", and "Create/Delete/Change Struct" permissions (0x268) these are all 
+that ANY user can perform even if the user is allows to make all changes i
+(0x1FFF).
+
+EXCEPTION: the project owner (which defaults to the creator), always has all 
+permissions.
+
+The default operation of the server is to allow all users and all projects 
+to have full publish and subscribe permissions.
+
+Note: these permissions are applied at the collabREate server and are 
+independant of the publish and subscribe requests applied by the plugin.
+This allows for creating complex publish and subscribe models to fit almost 
+any scenario.

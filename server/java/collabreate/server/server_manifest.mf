@@ -1,0 +1,10 @@
+Main-Class: collabreate.server.CollabreateServer
+Class-Path: mysql-connector-java-5.1.13-bin.jar postgresql-9.0-801.jdbc4.jar
+Name: collabreate/server/CollabreateServer/
+Specification-Title: CollabREate Server
+Specification-Version: 0.4.0
+Specification-Vendor: Chris Eagle & Tim Vidas.
+Implementation-Title: CollabREate Server
+Implementation-Version: Ida Qt
+Implementation-Vendor: Chris Eagle & Tim Vidas
+Implementation-URL: www.idabook.com/collabreate/

@@ -1,0 +1,207 @@
+#! /bin/sh
+### BEGIN INIT INFO
+# Provides:          collabREate
+# Required-Start:    $local_fs $remote_fs $network
+# Required-Stop:     $local_fs $remote_fs $network
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Start collabREate
+# Description:       collabREate server daemon.  Collaborative point for collabREating with IDA Pro.
+### END INIT INFO
+
+# /etc/init.d/collabREate -- startup script for the collabREate collaboration engine for IDA Pro
+# Written By William Bartell
+# Based on fedora-init.d-script by Tim Vidas tvidas<at>gmail[dot]com 
+# Based on Ubuntu skeleton /etc/init.d/skeleton
+
+# PATH should only include /usr/* if it runs after the mountnfs.sh script
+PATH=/sbin:/usr/sbin:/bin:/usr/bin
+DESC="CollabREate server Daemon:"
+NAME=collabREate
+DAEMON=/usr/bin/java
+COLLAB_BASE=/var/collabreate
+JARFILE=$COLLAB_BASE/server/collabreate_server.jar
+DAEMON_ARGS="-jar $JARFILE $COLLAB_BASE/server/server.conf"
+PIDFILE=/var/run/$NAME.pid
+SCRIPTNAME=/etc/init.d/$NAME
+STOP_COMMAND="$DAEMON -jar $COLLAB_BASE/server/collabreate_manager.jar $COLLAB_BASE/server/server.conf shutdown"
+
+# Exit if the package is not installed
+[ -x "$DAEMON" ] || exit 0
+
+if [ `id -u` -ne 0 ]; then
+        echo "You need root privileges to run this script"
+        exit 1
+fi
+
+# Read configuration variable file if it is present
+[ -r /etc/default/$NAME ] && . /etc/default/$NAME
+
+# Load the VERBOSE setting and other rcS variables
+. /lib/init/vars.sh
+
+# Define LSB log_* functions.
+# Depend on lsb-base (>= 3.0-6) to ensure that this file is present.
+. /lib/lsb/init-functions
+
+#
+# Function that retrieves the pid
+#
+get_pid()
+{
+        #get the pid
+        the_pid=-1
+
+        if [ -e $PIDFILE ]
+        then
+                read the_pid < $PIDFILE
+        else # go find it myself
+                the_pid=`ps ax | grep "$DAEMON $DAEMON_ARGS" | grep -v grep | awk '{print $1}'`
+		echo $the_pid > $PIDFILE
+        fi
+	return $the_pid
+}
+
+#
+# Function that checks if the daemon is running
+# utilzing get_pid()
+#
+is_running()
+{
+	get_pid
+        # if it's running.
+        if [ -d "/proc/$?" ] # or kill -0 $pid?
+        then
+                return 1;
+        else
+                return 0;
+        fi
+}
+
+#
+# Function that starts the daemon/service
+#
+do_start()
+{
+	# Return
+	#   0 if daemon has been started
+	#   1 if daemon was already running
+	#   2 if daemon could not be started
+	is_running
+	if [ $? -eq 1 ]
+        then
+		return 1;
+	fi
+
+
+	# test then start daemon
+	start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON --test > /dev/null \
+		|| return 1
+	start-stop-daemon --start --make-pidfile --quiet --background --pidfile $PIDFILE --exec $DAEMON -- \
+		$DAEMON_ARGS \
+		|| return 2
+	sleep 2
+
+	# if it's running.
+	is_running
+        if [ $? -eq 1 ]
+        then
+		return 0;
+	else
+        	if [ -e $PIDFILE ]
+        	then
+                	rm -f $PIDFILE
+        	fi
+		return 2;
+	fi
+}
+
+#
+# Function that stops the daemon/service
+#
+do_stop()
+{
+	# Return
+	#   0 if daemon has been stopped
+	#   1 if daemon was already stopped
+	#   2 if daemon could not be stopped
+	#   other if a failure occurred
+
+	#return an error state if it isn't changed later
+	RETVAL=3
+
+	# first try and do a safe shutdown
+	is_running
+	if [ $? -eq 1 ]
+	then
+		$STOP_COMMAND >/dev/null 2>&1
+		sleep 2
+	else
+		RETVAL=1
+	fi
+
+	# if that fails be mean
+	is_running
+	if [ $? -eq 1 -a $RETVAL -eq 3 ]
+	then
+		start-stop-daemon --stop --quiet --retry=TERM/30/KILL/5 --pidfile $PIDFILE --name $NAME
+		RETVAL="$?"
+		#if we couldn't stop the deamon, then no reason to continue and remove the pidfile
+		[ "$RETVAL" = 2 ] && return 2
+		sleep 2
+	else 
+		RETVAL=0;
+	fi
+
+	# Many daemons don't delete their pidfiles when they exit.
+	if [ -e $PIDFILE ]
+	then
+		rm -f $PIDFILE
+	fi
+	return "$RETVAL"
+}
+
+case "$1" in
+  start)
+	log_daemon_msg "Starting $DESC" "$NAME"
+	do_start
+	case "$?" in
+		0|1) log_end_msg 0 ;;
+		2) log_end_msg 1 ;;
+		*) log_end_msg 255 ;;
+	esac
+	;;
+  stop)
+	log_daemon_msg "Stopping $DESC" "$NAME"
+	do_stop
+	case "$?" in
+		0|1) log_end_msg 0 ;;
+		2) log_end_msg 1 ;;
+		*) log_end_msg 255 ;;
+	esac
+	;;
+  restart|force-reload)
+	log_daemon_msg "Restarting $DESC" "$NAME"
+	do_stop
+	case "$?" in
+	  0|1)
+		do_start
+		case "$?" in
+			0) log_end_msg 0 ;;
+			1) log_end_msg 1 ;; # Old process is still running
+			*) log_end_msg 1 ;; # Failed to start
+		esac
+		;;
+	  *)
+	  	# Failed to stop
+		log_end_msg 1
+		;;
+	esac
+	;;
+  *)
+	echo "Usage: $SCRIPTNAME {start|stop|restart|force-reload}" >&2
+	exit 3
+	;;
+esac
+
+:

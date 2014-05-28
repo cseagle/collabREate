@@ -1,0 +1,6 @@
+#!/bin/sh
+
+qmake -o Makefile.msvc collab.pro -platform win32-msvc2008
+nmake -f Makefile.msvc clean
+nmake -f Makefile.msvc
+

@@ -1,0 +1,178 @@
+#/bin/sh
+#
+# collabreate   This is the server startup script for the CollabREate server
+#
+# chkconfig: 2345 96 04
+# description: CollabREate server
+
+### BEGIN INIT INFO
+# Provides: collabreate
+# Required-Start: $local_fs $network $named postgresql
+# Required-Stop: $local_fs $network $named postgresql
+# Default-Start: 2 3 4 5
+# Default-Stop: 0 1 6
+# Short-Description: The collabreate server service
+# Description: collabreate is a collaborative reverse engineering tool
+### END INIT INFO
+
+# these are user configurable - but you should prob them across all aux files #
+SERVICE_NAME=collabreate
+JAVA_OPTS="-verbose -jar"
+COLLAB_SERVER_JAR="collabreate_server.jar"
+COLLAB_MANAGER_JAR="collabreate_manager.jar"
+COLLAB_CONF="server.conf"
+IDENT="collabctl"
+PID_FILE=/var/run/"$SERVICE_NAME".pid
+PID=""
+
+# these can also be set via exported environmental variables                  #
+# eg:  >INSTALLDIR=/usr/local/collabreate/server                              #
+#      >export INSTALLDIR                                                     #
+#      >make install                                                          #
+# if you do set these via the environment, you should configure your system   #
+# to always set them (other scripts depend upon the values of these variables)#
+COLLAB_SERVER_DIR="${COLLAB_SERVER_DIR:-/opt/collabreate/server}"
+COLLAB_LOG="${COLLAB_LOG:-/var/log/collab}"
+COLLAB_SCRIPT="${COLLAB_SCRIPT:-/usr/sbin/collabctl}"
+COLLAB_USER="${COLLAB_USER:-collab}"
+# end #
+
+USER=`whoami`
+IDENT="$IDENT ($USER)"
+#uncomment to override
+JAVA_HOME=/etc/alternatives/jre
+
+#find java
+if [ -z "$JAVA_HOME" ]; 
+then
+   JAVA=`which java`
+   if [ -n "$JAVA" ] ; 
+   then
+      JAVA_BINDIR=`dirname ${JAVA}`
+      JAVA_HOME="${JAVA_BINDIR}/.."
+   fi
+   if [ -z "$JAVA_HOME" ]; 
+   then
+      echo "$IDENT No JAVA_HOME defined and no java found in PATH"
+      exit 1
+   fi
+fi
+
+JAVA_BIN="$JAVA_HOME"/bin/java
+JAVA_JAVAC="$JAVA_HOME"/bin/javac
+
+script_result=0
+
+pidof(){
+   PID=`ps ax | grep "$COLLAB_SERVER_JAR" |grep -v grep`
+   PID=`echo $PID | cut -d" " -f1`
+}
+
+start(){
+   local pg
+   cd "$COLLAB_SERVER_DIR"
+# this is ridiculous but can't get Fedora to start the service
+# properly otherwise because it is not waiting for postgres to
+# be up and running
+   for (( i = 0; i < 3; i++ )) ; do
+      pg=`netstat -anp --inet | grep postmaster`
+      if [ -n "$pg" ] ; then
+         break
+      fi
+      sleep 3
+   done
+   if [ $i -eq 3 ]; then
+      echo "$0: Tired of waiting for postgres, quiting"
+      exit 1
+   fi
+   echo "$IDENT : starting server!"
+   "$JAVA_BIN" $JAVA_OPTS "$COLLAB_SERVER_JAR" "$COLLAB_CONF" >/dev/null 2>&1 < /dev/null & 
+   sleep 2
+   pidof
+   if [ -n "$PID" ] ; 
+   then
+      echo "$PID" > "$PID_FILE"
+   else
+      script_result=1
+   fi
+}
+
+stop(){
+   cd "$COLLAB_SERVER_DIR"
+   echo "$IDENT : stopping server!"
+   "$JAVA_BIN" $JAVA_OPTS "$COLLAB_MANAGER_JAR" \
+       "$COLLAB_CONF" shutdown >/dev/null 2>&1 < /dev/null & 
+   rm -f "$PID_FILE"
+}
+
+kill(){
+   echo "$IDENT : killing server!"
+   pidof
+   if [ -n "$PID" ] ; 
+   then 
+      echo "$IDENT killing $PID"
+      `kill -9 $PID`
+   else
+      echo "no server process found"
+   fi
+   rm -f "$PID_FILE"
+}
+
+restart(){
+    stop
+    start
+}
+
+condrestart(){
+    [ -e "$PID_FILE" ] && restart || :
+}
+
+status(){
+   pidof
+   if [ -n "$PID" ] ;
+   then
+      script_result=0
+   elif [ -f "$PID_FILE" ] ;
+   then
+      script_result=1
+   else
+      script_result=3
+   fi
+}
+
+reload(){
+   script_result=3
+}
+
+# See how we were called.
+case "$1" in
+  start)
+        start
+        ;;
+  stop)
+        stop
+        ;;
+  status)
+        status
+        ;;
+  restart)
+        restart
+        ;;
+  condrestart|try-restart)
+        condrestart
+        ;;
+  reload)
+        reload
+        ;;
+  force-reload)
+        restart
+        ;;
+  kill)
+        kill
+        ;;
+  *)
+        echo $"Usage: $0 {start|stop|status|restart|condrestart|try-restart|reload|force-reload|kill}"
+        exit 2
+esac
+
+exit $script_result

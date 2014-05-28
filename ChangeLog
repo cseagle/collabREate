@@ -1,0 +1,55 @@
+* 05/25/14
+  Added primitive messaging capability in CollabREate window. Message history is
+  cached in the IDB and restored with each session.
+  Added primitive support for working offline. If IDB has been previously joined
+  to a project, then all changes in subsequent sessions will be cached locally
+  until reconnected to the project server.
+
+* 10/04/13
+  Added support for repeatable comments in struct/enum per suggestion of Nico Bendlin
+  Added support for additional offset reference types in COMMAND_OP_TYPE_CHANGED per
+  contribution of Willem Jan Palenstijn
+  Fixed handling of enum member comments and struct member comments
+
+* 10/01/13
+  Incorporated patch contributions from Willem Jan Palenstijn
+  
+* 08/24/12
+  Removed dependency on QtNetwork. Reworked asynchronous networking
+  for IDA versions 5.5 and later to make use of the IDA SDK execute_sync
+  function.
+
+* 09/08/11
+  Added support for ida64, released version 0.3.0
+
+* 10/20/10
+  Added message handler for MSG_PROJECT_SNAPSHOT_REPLY
+
+* 10/12/10
+  Completed port to Qt for Linux and OS X
+
+* 10/08/10
+  Added initial Qt interface for Ida >= 6.0
+  Added ubuntu-init.d-script server startup script contributed by William Bartell
+  Added NO_OBSOLETE_FUNCTIONS macro into the project
+  
+* 02/28/09
+  Fixed buffer overflow problem pointed out by Jeremy Cooper
+
+* 08/27/08
+  Added local tracking of enum names to allow renaming of enums to work.
+  Added more tests to narrow down the exact type being referenced when
+  an operand type is changed.  Specifically enum and structure offsets.
+  These changes will not fix enum and struct updates in existing project
+  databases, however new enum and struct updates will be properly stored
+  into those databases once you have upgraded you plugin.
+
+* 08/24/08
+  Fix to allow proper publishing of name changes that take place in the 
+  .bss section
+
+* 08/16/08
+  added permission handling for COMMAND_AREA_CMT_CHANGED
+
+* 08/15/08
+  Initial release of version 1.0

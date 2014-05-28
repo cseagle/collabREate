@@ -1,0 +1,93 @@
+.TH collabreate_manager 7 "Aug 16\, 2008" "CollabREate 0.1.0" "CollabREate Collaboration Server"
+.SH NAME
+collabreate_manager - manager intended to be used with the collabREate server 
+.SH SYNOPSIS
+.B java collabreate.server.ServerManager [ shutdown ] /path/to/server.conf 
+.SH DESCRIPTION
+.I collabreate_manager
+is the manager component for the collabREate server.  Once ServerManager can connect to a server
+instance at a time.  By default, the server only listens for a ServerManager on localhost.
+Consult the 
+.I collabreate_server
+README file or www.idabook.com/collabreate for more information 
+.PP
+.SH OPTIONS
+Most options are configured via the server.conf file, which can be shared with the server
+.PP
+.TP 18
+.B shutdown
+When this option is passed on the command line, it causes the ServerManager to invoke the shutdown
+process on the server.  This allows the server to perform actions prior to termination and is prefered 
+over a 'kill'
+.B LogFile
+Specifies the full path that the server will log to.  Needs to be creatable/writable by service user.
+.TP
+.B LogVerbosity
+The port that the server will listen on.  This port is required for collabREate clients to connect. (4)
+.TP
+.B SERVER_PORT
+defines the TCP port on which the collabreate server will accept connections from IDA plugins (5042)
+not used by the manager
+.TP
+.B SERVER_MODE
+Explicitly sets the collabreate server mode.  It must be either
+.I basic
+or
+.I database.
+Note that if the server cannot start in database mode, it falls back to basic mode. (database)
+.TP
+.B JDBC_DRIVER
+defines the 'java name' of the JDBC driver.  Only
+.I org.postgresql.Driver
+and
+.I con.mysql.jdbc.Driver
+are currently supported. (org.postgresql.Driver)
+.TP
+.B JDBC_URL
+this is a 'long style' JDBC url specifier.  If you use this option other database configuration
+options (like DB_HOST, DB_NAME, DB_USER, etc) are ignored.  (undefined)
+.TP
+.B DB_HOST
+the hostname or IP of the database server (127.0.0.1)
+.TP
+.B DB_NAME
+the name of the database (collabDB)
+.TP
+.B USE_SSL
+determins whether JDBC will attmpt so use SSL when connected to the database.  Must be set to
+.I yes
+or
+.I no
+and both your JDBC driver AND your database must support SSL (many installs do not by default). (no)
+.TP
+.B DB_USER
+the username to use when connecting to the database (collab)
+.TP
+.B DB_PASS
+the password to use when connecting to the database (collabpass)
+.TP
+.B MANAGE_PORT
+defines the TCP port number that the manager will use to connect to the server (5043)
+.TP
+.B MANAGE_HOST
+defines the host that ServerManager will connect to. (localhost)
+.TP
+.B MANAGE_LOCAL
+if this value is non-zero, the listening management socket on the server will only accept connections
+from localhost - not really used by the manager. (1)
+
+.SH RESOURCES
+collabREate documentation and updates are available at
+http://www.idabook.com/collabreate/
+.PP        
+.SH AUTHOR
+Man page written by Tim Vidas.  
+
+CollabREate is written and maintainted by Chris Eagle and Tim Vidas.
+.SH BUGS
+None that we know of.
+.SH VERSION
+CollabREate 0.1.0
+.SH SEE ALSO
+java(n), collabreate_server(7), collabctl(7)
+

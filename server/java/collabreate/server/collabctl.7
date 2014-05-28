@@ -1,0 +1,39 @@
+.TH collabctl 7 "Aug 16\, 2008" "CollabREate 0.1.0" "CollabREate control script"
+.SH NAME
+collabctl - crude control over the collabreate server (java)
+.SH SYNOPSIS
+.B collabctl [ 
+.I options
+]
+.SH DESCRIPTION
+.I collabctl 
+is a control script for the java collabreate server component. It is recommended that you
+do not use this script directly, but use the init.d service control which uses this script.
+.PP
+.SH OPTIONS
+Options are given as command line arguements. 
+.PP
+.TP 18
+.B start
+attempts to start the server
+.TP
+.B stop 
+attempts to nicely stop the server
+.TP
+.B kill 
+attempts to kill the server (and not other java processes)
+.SH RESOURCES
+collabREate documentation and updates are available at
+http://www.idabook.com/collabreate/
+.PP        
+.SH AUTHOR
+Man page written by Tim Vidas.  
+
+CollabREate is written and maintainted by Chris Eagle and Tim Vidas.
+.SH BUGS
+None that we know of.
+.SH VERSION
+CollabREate 0.1.0
+.SH SEE ALSO
+java(n), collabreate_server(7), collabreate_manager(7)
+
