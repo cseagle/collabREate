@@ -402,6 +402,22 @@ bool do_choose_perms(Buffer &b) {
    return memcmp(&current, &tempOpts, sizeof(Options)) != 0;
 }
 
+#ifndef FORM_MDI
+#define FORM_MDI 0
+#endif
+
+void createCollabStatus() {
+	HWND hwnd = NULL;
+	TForm *form = create_tform("CollabREate", &hwnd);
+	if (hwnd != NULL) {
+		//hook_to_notification_point(HT_UI, ui_collab, form);
+		open_tform(form, FORM_MDI | FORM_TAB | FORM_MENU | FORM_RESTORE | FORM_QWIDGET);
+	}
+	else {
+		close_tform(form, FORM_SAVE);
+	}
+}
+
 bool sameDay(time_t t1, time_t t2) {
    tm tm1 = *localtime(&t1);
    tm tm2 = *localtime(&t2);
