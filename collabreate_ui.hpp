@@ -29,6 +29,7 @@ bool do_connect(Dispatcher d);
 int  do_auth(unsigned char *challenge, int challenge_len);
 void do_set_req_perms(void);
 void do_set_proj_perms(void);
+void createCollabStatus();
 
 //void showOptionsDlg(HWND parent, Options *in, Options *out, Options *mask, char * title);
 

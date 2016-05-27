@@ -1592,7 +1592,7 @@ void change_op_ti(ea_t ea, int n, const type_t *type, const p_list *fnames) {
 //lookup structure offset info about operand n at address ea and
 //add the information into the provided buffer
 void gatherStructOffsetInfo(Buffer &b, ea_t ea, int n) {
-   char name[MAXNAMESIZE];
+   qstring name;
    tid_t path[MAXSTRUCPATH];
    adiff_t delta;
    int path_len = get_stroff_path(ea, n, path, &delta);
@@ -1603,23 +1603,23 @@ void gatherStructOffsetInfo(Buffer &b, ea_t ea, int n) {
    //because different versions of IDA may assign different tid values
    //the the same struct type
    for (int i = 0; i < path_len; i++) {
-      /*ssize_t sz =*/ get_struc_name(path[i], name, sizeof(name));
-      b.writeUTF8(name);
+	  name = get_struc_name(path[i]);
+      b.writeUTF8(name.c_str());
    }
 }
 
 //lookup enum type info about operand n at address ea and
 //add the information into the provided buffer
 void gatherEnumInfo(Buffer &b, ea_t ea, int n) {
-   char name[MAXNAMESIZE];
+   qstring name;
    uchar serial;
    enum_t id = get_enum_id(ea, n, &serial);
-   ssize_t len = get_enum_name(id, name, sizeof(name));
+   ssize_t len = get_enum_name(&name, id);
    if (len > 0) {
       //We pass a name here rather than enum_t because different
       //versions of IDA may assign different enum_t values
       //the the same enum type
-      b.writeUTF8(name);
+      b.writeUTF8(name.c_str());
       b.write(serial);
    }
 }
@@ -1696,26 +1696,26 @@ void change_op_type(ea_t ea, int n) {
 void create_enum(enum_t id) {
    //get enum name (and fields?) and send to server
    Buffer b;
-   char name[MAXNAMESIZE];
-   ssize_t sz = get_enum_name(id, name, sizeof(name));
+   qstring name;
+   ssize_t sz = get_enum_name(&name, id);
    if (sz > 0) {
       b.writeInt(COMMAND_ENUM_CREATED);
-      b.writeUTF8(name);
+      b.writeUTF8(name.c_str());
       if (send_data(b) == -1) {
          msg(PLUGIN_NAME": send error on create_enum %s\n", name);
       }
-      cnn.supset(id, name, 0, COLLABREATE_ENUMS_TAG);
+      cnn.supset(id, name.c_str(), 0, COLLABREATE_ENUMS_TAG);
    }
 }
 
 void delete_enum(enum_t id) {
    //get enum name and send to server
    Buffer b;
-   char name[MAXNAMESIZE];
-   ssize_t sz = get_enum_name(id, name, sizeof(name));
+   qstring name;
+   ssize_t sz = get_enum_name(&name, id);
    if (sz > 0) {
       b.writeInt(COMMAND_ENUM_DELETED);
-      b.writeUTF8(name);
+      b.writeUTF8(name.c_str());
       if (send_data(b) == -1) {
          msg(PLUGIN_NAME": send error on delete_enum %s\n", name);
       }
@@ -1728,11 +1728,11 @@ void delete_enum(enum_t id) {
  ***/
 void change_enum_bf(enum_t id) {
    Buffer b;
-   char name[MAXNAMESIZE];
-   ssize_t sz = get_enum_name(id, name, sizeof(name));
+   qstring name;
+   ssize_t sz = get_enum_name(&name, id);
    if (sz > 0) {
       b.writeInt(COMMAND_ENUM_BF_CHANGED);
-      b.writeUTF8(name);
+      b.writeUTF8(name.c_str());
 /*
       if (send_data(b) == -1) {
          msg(PLUGIN_NAME": send error on change_enum %s\n", name);
@@ -1743,15 +1743,15 @@ void change_enum_bf(enum_t id) {
 
 void rename_enum(tid_t t) {
    Buffer b;
-   char newname[MAXNAMESIZE];
+   qstring newname;
    char oldname[MAXNAMESIZE];
-   ssize_t sz = get_enum_name(t, newname, sizeof(newname));
+   ssize_t sz = get_enum_name(&newname, t);
    ssize_t len = cnn.supstr(t, oldname, sizeof(oldname), COLLABREATE_ENUMS_TAG);
    if (sz > 0 && len > 0) {
       b.writeInt(COMMAND_ENUM_RENAMED);
-      b.writeUTF8(newname);
+      b.writeUTF8(newname.c_str());
       b.writeUTF8(oldname);
-      cnn.supset(t, newname, 0, COLLABREATE_ENUMS_TAG);
+      cnn.supset(t, newname.c_str(), 0, COLLABREATE_ENUMS_TAG);
       if (send_data(b) == -1) {
          msg(PLUGIN_NAME": send error on rename_enum %s\n", newname);
       }
@@ -1760,13 +1760,13 @@ void rename_enum(tid_t t) {
 
 void change_enum_cmt(tid_t t, bool rep) {
    Buffer b;
-   char name[MAXNAMESIZE];
+   qstring name;
    char cmt[MAXNAMESIZE];
-   ssize_t sz = get_enum_name(t, name, sizeof(name));
+   ssize_t sz = get_enum_name(&name, t);
    /*ssize_t csz =*/ get_enum_cmt(t, rep, cmt, sizeof(cmt));
    if (sz > 0) {
       b.writeInt(COMMAND_ENUM_CMT_CHANGED);
-      b.writeUTF8(name);
+      b.writeUTF8(name.c_str());
       b.writeUTF8(cmt);
       b.write(&rep, 1);
       if (send_data(b) == -1) {
@@ -1783,18 +1783,17 @@ void create_enum_member(enum_t id, const_t cid) {
 #else
    uval_t value = get_const_value(cid);
 #endif
-   char ename[MAXNAMESIZE];
-   char mname[MAXNAMESIZE];
-   get_enum_name(id, ename, MAXNAMESIZE);
+   qstring ename = get_enum_name(id);
+   qstring mname;
 #if IDA_SDK_VERSION >= 570
-   get_enum_member_name(cid, mname, MAXNAMESIZE);
+   get_enum_member_name(&mname, cid);
 #else
    get_const_name(cid, mname, MAXNAMESIZE);
 #endif
    b.writeInt(COMMAND_ENUM_CONST_CREATED);
    b.writeInt((int)value);
-   b.writeUTF8(ename);
-   b.writeUTF8(mname);
+   b.writeUTF8(ename.c_str());
+   b.writeUTF8(mname.c_str());
    send_data(b);
 }
 
@@ -1810,43 +1809,42 @@ void delete_enum_member(enum_t id, const_t cid) {
    bmask_t bmask = get_const_bmask(cid);
    uchar serial = get_const_serial(cid);
 #endif
-   char ename[MAXNAMESIZE];
-   get_enum_name(id, ename, MAXNAMESIZE);
+   qstring ename = get_enum_name(id);
    b.writeInt(COMMAND_ENUM_CONST_DELETED);
    b.writeInt((int)value);
    b.writeInt((int)bmask);
    b.write(serial);
-   b.writeUTF8(ename);
+   b.writeUTF8(ename.c_str());
    send_data(b);
 }
 
 void create_struct(tid_t t) {
    //get struct name (and fields?) and send to server
    Buffer b;
-   char name[MAXNAMESIZE];
-   ssize_t sz = get_struc_name(t, name, sizeof(name));
+   qstring name;
+   ssize_t sz = get_struc_name(&name, t);
    if (sz > 0) {
       struc_t *s = get_struc(t);
       b.writeInt(COMMAND_STRUC_CREATED);
       b.writeInt((int)t);   //send the tid to create map on the server
       b.write(s->is_union());
-      b.writeUTF8(name);
+      b.writeUTF8(name.c_str());
       if (send_data(b) == -1) {
          msg(PLUGIN_NAME": send error on create_struct %s\n", name);
       }
       //remember the name of the struct in case it is renamed later
-      cnn.supset(t, name, 0, COLLABREATE_STRUCTS_TAG);
+      cnn.supset(t, name.c_str(), 0, COLLABREATE_STRUCTS_TAG);
    }
 }
 
 void delete_struct(tid_t s) {
    //get struct name and send to server
    Buffer b;
-   char name[MAXNAMESIZE];
-   ssize_t sz = get_struc_name(s, name, sizeof(name));
+   qstring name;
+   ssize_t sz = get_struc_name(&name, s);
    if (sz > 0) {
       b.writeInt(COMMAND_STRUC_DELETED);
-      b.writeUTF8(name);
+      b.writeUTF8(name.c_str());
       if (send_data(b) == -1) {
          msg(PLUGIN_NAME": send error on delete_struct %s\n", name);
       }
@@ -1857,17 +1855,17 @@ void rename_struct(struc_t *s) {
    //get struct name (and fields?) and send to server
    //how do we know old struct name
    Buffer b;
-   char newname[MAXNAMESIZE];
+   qstring newname;
    char oldname[MAXNAMESIZE];
-   ssize_t sz = get_struc_name(s->id, newname, sizeof(newname));
+   ssize_t sz = get_struc_name(&newname, s->id);
    ssize_t len = cnn.supstr(s->id, oldname, sizeof(oldname), COLLABREATE_STRUCTS_TAG);
    if (sz > 0 && len > 0) {
       b.writeInt(COMMAND_STRUC_RENAMED);
       //tids are never guaranteed to map beween any two IDBs
       b.writeInt((int)s->id);   //need to try to map struct id to other instances ID
-      b.writeUTF8(newname);
+      b.writeUTF8(newname.c_str());
       b.writeUTF8(oldname);
-      cnn.supset(s->id, newname, 0, COLLABREATE_STRUCTS_TAG);
+      cnn.supset(s->id, newname.c_str(), 0, COLLABREATE_STRUCTS_TAG);
       if (send_data(b) == -1) {
          msg(PLUGIN_NAME": send error on rename_struct %s\n", newname);
       }
@@ -1877,15 +1875,15 @@ void rename_struct(struc_t *s) {
 void expand_struct(struc_t *s) {
    //what info to send to indicate expansion?
    Buffer b;
-   char name[MAXNAMESIZE];
-   ssize_t sz = get_struc_name(s->id, name, sizeof(name));
+   qstring name;
+   ssize_t sz = get_struc_name(&name, s->id);
    if (sz > 0) {
 #ifdef DEBUG
       msg(PLUGIN_NAME": struct %s has been expanded\n", name);
 #endif
       b.writeInt(COMMAND_STRUC_EXPANDED);
       b.writeInt((int)s->id);   //need to try to map struct id to other instances ID
-      b.writeUTF8(name);
+      b.writeUTF8(name.c_str());
       if (send_data(b) == -1) {
          msg(PLUGIN_NAME": send error on rename_struct %s\n", name);
       }
@@ -1895,11 +1893,11 @@ void expand_struct(struc_t *s) {
 void change_struc_cmt(tid_t t, bool rep) {
    Buffer b;
    char cmt[MAXNAMESIZE];
-   char name[MAXNAMESIZE];
-   /*ssize_t sz =*/ get_struc_name(t, name, sizeof(name));
+   qstring name = get_struc_name(t);
+   
    /*ssize_t csz =*/ get_struc_cmt(t, rep, cmt, sizeof(cmt));
    b.writeInt(COMMAND_STRUC_CMT_CHANGED);
-   b.writeUTF8(name);
+   b.writeUTF8(name.c_str());
    b.writeUTF8(cmt);
    b.write(&rep, 1);
    if (send_data(b) == -1) {
@@ -1911,8 +1909,8 @@ void create_struct_member(struc_t *s, member_t *m) {
    //get struct name and member name/offs and send to server
    Buffer b;
    opinfo_t ti, *pti;
-   char mbr[MAXNAMESIZE];
-   char name[MAXNAMESIZE];
+   qstring mbr;
+   qstring name;
 
    pti = retrieve_member_info(m, &ti);
 /*
@@ -1926,8 +1924,8 @@ void create_struct_member(struc_t *s, member_t *m) {
       //in this case, we need to send the ti info in some manner
       if (isStruct(m->flag)) {
          b.writeInt(COMMAND_CREATE_STRUC_MEMBER_STRUCT);
-         /*ssize_t tsz =*/ get_struc_name(ti.tid, name, sizeof(name));
-         b.writeUTF8(name);
+         /*ssize_t tsz =*/ name = get_struc_name(ti.tid);
+         b.writeUTF8(name.c_str());
       }
       else if (isASCII(m->flag)) {
          b.writeInt(COMMAND_CREATE_STRUC_MEMBER_STR);
@@ -1940,8 +1938,8 @@ void create_struct_member(struc_t *s, member_t *m) {
       }
       else if (isEnum0(m->flag) || isEnum1(m->flag)) {
          b.writeInt(COMMAND_CREATE_STRUC_MEMBER_ENUM);
-         /*ssize_t tsz =*/ get_struc_name(ti.ec.tid, name, sizeof(name));
-         b.writeUTF8(name);
+         /*ssize_t tsz =*/ name = get_struc_name(ti.ec.tid);
+         b.writeUTF8(name.c_str());
          b.write(ti.ec.serial);
       }
       else {
@@ -1962,10 +1960,10 @@ void create_struct_member(struc_t *s, member_t *m) {
    b.writeInt((int)(m->unimem() ? m->eoff : (m->eoff - m->soff)));
 
    //should send opinfo_t as well
-   /*ssize_t ssz =*/ get_struc_name(s->id, name, sizeof(name));
-   /*ssize_t msz =*/ get_member_name(m->id, mbr, sizeof(mbr));
-   b.writeUTF8(name);
-   b.writeUTF8(mbr);
+   /*ssize_t ssz =*/ name = get_struc_name(s->id);
+   /*ssize_t msz =*/ mbr = get_member_name2(m->id);
+   b.writeUTF8(name.c_str());
+   b.writeUTF8(mbr.c_str());
 //   msg(PLUGIN_NAME": create_struct_member %s.%s off: %d, sz: %d\n", name, mbr, m->soff, m->eoff - m->soff);
    if (send_data(b) == -1) {
       msg(PLUGIN_NAME": send error on create_struct_member %s\n", name);
@@ -1975,12 +1973,11 @@ void create_struct_member(struc_t *s, member_t *m) {
 void delete_struct_member(struc_t *s, tid_t /*m*/, ea_t offset) {
    //get struct name and member name/offs and send to server
    Buffer b;
-   char name[MAXNAMESIZE];
-   /*ssize_t ssz =*/ get_struc_name(s->id, name, sizeof(name));
+   qstring name = get_struc_name(s->id);
 //   msg(PLUGIN_NAME": delete_struct_member %s, tid %x, offset %x\n", name, m, offset);
    b.writeInt(COMMAND_STRUC_MEMBER_DELETED);
    b.writeInt((int)offset);
-   b.writeUTF8(name);
+   b.writeUTF8(name.c_str());
    if (send_data(b) == -1) {
       msg(PLUGIN_NAME": send error on delete_struct_member %s\n", name);
    }
@@ -1994,26 +1991,23 @@ void rename_struct_member(struc_t *s, member_t *m) {
 //   if (s->props & SF_FRAME) {   //SF_FRAME is only available in SDK520 and later
 //      func_t *pfn = func_from_frame(s);
       //send func ea, member offset, name
-      char name[MAXNAMESIZE];
-      get_member_name(m->id, name, MAXNAMESIZE);
+      qstring name = get_member_name2(m->id);
       b.writeInt(COMMAND_SET_STACK_VAR_NAME);
       b.writeLong(pfn->startEA);  //lookup function on remote side
       b.writeInt((int)m->soff);
-      b.writeUTF8(name);
+      b.writeUTF8(name.c_str());
       if (send_data(b) == -1) {
          msg(PLUGIN_NAME": send error on rename_stack_member %x, %x, %s\n", (uint32_t)pfn->startEA, (uint32_t)m->soff, name);
       }
    }
    else {
       //send struct name and member name and offset
-      char sname[MAXNAMESIZE];
-      char mname[MAXNAMESIZE];
-      get_struc_name(s->id, sname, MAXNAMESIZE);
-      get_member_name(m->id, mname, MAXNAMESIZE);
+	  qstring sname = get_struc_name(s->id);
+	  qstring mname = get_member_name2(m->id);
       b.writeInt(COMMAND_SET_STRUCT_MEMBER_NAME);
       b.writeInt((int)m->soff);
-      b.writeUTF8(sname);
-      b.writeUTF8(mname);
+      b.writeUTF8(sname.c_str());
+      b.writeUTF8(mname.c_str());
       if (send_data(b) == -1) {
          msg(PLUGIN_NAME": send error on rename_struct_member %x, %s, %s\n", (uint32_t)m->soff, sname, mname);
       }
@@ -2025,7 +2019,7 @@ void change_struct_member(struc_t *s, member_t *m) {
    //get struct name and member name/offs and send to server
    Buffer b;
    opinfo_t ti, *pti;
-   char name[MAXNAMESIZE];
+   qstring name;
 
    pti = retrieve_member_info(m, &ti);
 
@@ -2033,8 +2027,8 @@ void change_struct_member(struc_t *s, member_t *m) {
       //in this case, we need to send the ti info in some manner
       if (isStruct(m->flag)) {
          b.writeInt(COMMAND_STRUC_MEMBER_CHANGED_STRUCT);
-         /*ssize_t tsz =*/ get_struc_name(ti.tid, name, sizeof(name));
-         b.writeUTF8(name);
+         /*ssize_t tsz =*/ name = get_struc_name(ti.tid);
+         b.writeUTF8(name.c_str());
       }
       else if (isASCII(m->flag)) {
          b.writeInt(COMMAND_STRUC_MEMBER_CHANGED_STR);
@@ -2046,8 +2040,8 @@ void change_struct_member(struc_t *s, member_t *m) {
       }
       else if (isEnum0(m->flag) || isEnum1(m->flag)) {
          b.writeInt(COMMAND_STRUC_MEMBER_CHANGED_ENUM);
-         /*ssize_t tsz =*/ get_struc_name(ti.ec.tid, name, sizeof(name));
-         b.writeUTF8(name);
+         /*ssize_t tsz =*/ name = get_struc_name(ti.ec.tid);
+         b.writeUTF8(name.c_str());
          b.write(ti.ec.serial);
       }
       else {
@@ -2069,8 +2063,8 @@ void change_struct_member(struc_t *s, member_t *m) {
    b.writeInt(m->flag);
 
    //should send opinfo_t as well
-   /*ssize_t ssz =*/ get_struc_name(s->id, name, sizeof(name));
-   b.writeUTF8(name);
+   /*ssize_t ssz =*/ name = get_struc_name(s->id);
+   b.writeUTF8(name.c_str());
 //   msg(PLUGIN_NAME": create_struct_member %s.%s off: %d, sz: %d\n", name, mbr, m->soff, m->eoff - m->soff);
    if (send_data(b) == -1) {
       msg(PLUGIN_NAME": send error on create_struct_member %s\n", name);
@@ -2692,14 +2686,14 @@ void idp_make_code(ea_t ea, asize_t len) {
 void idp_make_data(ea_t ea, flags_t f, tid_t t, asize_t len) {
    //send all to server
    Buffer b;
-   char name[MAXNAMESIZE];
+   qstring name;
    b.writeInt(COMMAND_MAKE_DATA);
    b.writeLong(ea);
    b.writeInt(f);
    b.writeLong(len);
    if (t != BADNODE) {
-      get_struc_name(t, name, sizeof(name));
-      b.writeUTF8(name);
+      name = get_struc_name(t);
+      b.writeUTF8(name.c_str());
    }
    else {
       b.writeUTF8("");
@@ -3072,10 +3066,10 @@ int idaapi init(void) {
       }
    }
    if (init_network()) {
-#if IDA_SDK_VERSION < 600
+//#if IDA_SDK_VERSION < 600
       mainWindow = (HWND)callui(ui_get_hwnd).vptr;
       hModule = GetModuleHandle("collabreate.plw");
-#endif
+//#endif
       return PLUGIN_KEEP;
    }
    else {
