@@ -1592,7 +1592,11 @@ void change_op_ti(ea_t ea, int n, const type_t *type, const p_list *fnames) {
 //lookup structure offset info about operand n at address ea and
 //add the information into the provided buffer
 void gatherStructOffsetInfo(Buffer &b, ea_t ea, int n) {
+#if IDA_SDK_VERSION < 680
    char name[MAXNAMESIZE];
+#else
+   qstring name;
+#endif
    tid_t path[MAXSTRUCPATH];
    adiff_t delta;
    int path_len = get_stroff_path(ea, n, path, &delta);
@@ -1603,7 +1607,11 @@ void gatherStructOffsetInfo(Buffer &b, ea_t ea, int n) {
    //because different versions of IDA may assign different tid values
    //the the same struct type
    for (int i = 0; i < path_len; i++) {
+#if IDA_SDK_VERSION < 680
       /*ssize_t sz =*/ get_struc_name(path[i], name, sizeof(name));
+#else
+      name = get_struc_name(path[i]);
+#endif
       b.writeUTF8(name);
    }
 }
@@ -1611,10 +1619,18 @@ void gatherStructOffsetInfo(Buffer &b, ea_t ea, int n) {
 //lookup enum type info about operand n at address ea and
 //add the information into the provided buffer
 void gatherEnumInfo(Buffer &b, ea_t ea, int n) {
+#if IDA_SDK_VERSION < 680
    char name[MAXNAMESIZE];
+#else
+   qstring name;
+#endif
    uchar serial;
    enum_t id = get_enum_id(ea, n, &serial);
+#if IDA_SDK_VERSION < 680
    ssize_t len = get_enum_name(id, name, sizeof(name));
+#else
+   ssize_t len = get_enum_name(&name, id);
+#endif
    if (len > 0) {
       //We pass a name here rather than enum_t because different
       //versions of IDA may assign different enum_t values
@@ -1696,28 +1712,50 @@ void change_op_type(ea_t ea, int n) {
 void create_enum(enum_t id) {
    //get enum name (and fields?) and send to server
    Buffer b;
+#if IDA_SDK_VERSION < 680
    char name[MAXNAMESIZE];
    ssize_t sz = get_enum_name(id, name, sizeof(name));
+#else
+   qstring name;
+   ssize_t sz = get_enum_name(&name, id);
+#endif
    if (sz > 0) {
       b.writeInt(COMMAND_ENUM_CREATED);
       b.writeUTF8(name);
       if (send_data(b) == -1) {
+#if IDA_SDK_VERSION < 680
          msg(PLUGIN_NAME": send error on create_enum %s\n", name);
+#else
+         msg(PLUGIN_NAME": send error on create_enum %s\n", name.c_str());
+#endif
       }
+#if IDA_SDK_VERSION < 680
       cnn.supset(id, name, 0, COLLABREATE_ENUMS_TAG);
+#else
+      cnn.supset(id, name.c_str(), 0, COLLABREATE_ENUMS_TAG);
+#endif
    }
 }
 
 void delete_enum(enum_t id) {
    //get enum name and send to server
    Buffer b;
+#if IDA_SDK_VERSION < 680
    char name[MAXNAMESIZE];
    ssize_t sz = get_enum_name(id, name, sizeof(name));
+#else
+   qstring name;
+   ssize_t sz = get_enum_name(&name, id);
+#endif
    if (sz > 0) {
       b.writeInt(COMMAND_ENUM_DELETED);
       b.writeUTF8(name);
       if (send_data(b) == -1) {
+#if IDA_SDK_VERSION < 680
          msg(PLUGIN_NAME": send error on delete_enum %s\n", name);
+#else
+         msg(PLUGIN_NAME": send error on delete_enum %s\n", name.c_str());
+#endif
       }
       cnn.supdel(id, COLLABREATE_ENUMS_TAG);
    }
@@ -1728,8 +1766,13 @@ void delete_enum(enum_t id) {
  ***/
 void change_enum_bf(enum_t id) {
    Buffer b;
+#if IDA_SDK_VERSION < 680
    char name[MAXNAMESIZE];
    ssize_t sz = get_enum_name(id, name, sizeof(name));
+#else
+   qstring name;
+   ssize_t sz = get_enum_name(&name, id);
+#endif
    if (sz > 0) {
       b.writeInt(COMMAND_ENUM_BF_CHANGED);
       b.writeUTF8(name);
@@ -1743,26 +1786,44 @@ void change_enum_bf(enum_t id) {
 
 void rename_enum(tid_t t) {
    Buffer b;
-   char newname[MAXNAMESIZE];
    char oldname[MAXNAMESIZE];
+#if IDA_SDK_VERSION < 680
+   char newname[MAXNAMESIZE];
    ssize_t sz = get_enum_name(t, newname, sizeof(newname));
+#else
+   qstring newname;
+   ssize_t sz = get_enum_name(&newname, t);
+#endif
    ssize_t len = cnn.supstr(t, oldname, sizeof(oldname), COLLABREATE_ENUMS_TAG);
    if (sz > 0 && len > 0) {
       b.writeInt(COMMAND_ENUM_RENAMED);
       b.writeUTF8(newname);
       b.writeUTF8(oldname);
+#if IDA_SDK_VERSION < 680
       cnn.supset(t, newname, 0, COLLABREATE_ENUMS_TAG);
+#else
+      cnn.supset(t, newname.c_str(), 0, COLLABREATE_ENUMS_TAG);
+#endif
       if (send_data(b) == -1) {
+#if IDA_SDK_VERSION < 680
          msg(PLUGIN_NAME": send error on rename_enum %s\n", newname);
+#else
+         msg(PLUGIN_NAME": send error on rename_enum %s\n", newname.c_str());
+#endif
       }
    }
 }
 
 void change_enum_cmt(tid_t t, bool rep) {
    Buffer b;
-   char name[MAXNAMESIZE];
    char cmt[MAXNAMESIZE];
+#if IDA_SDK_VERSION < 680
+   char name[MAXNAMESIZE];
    ssize_t sz = get_enum_name(t, name, sizeof(name));
+#else
+   qstring name;
+   ssize_t sz = get_enum_name(&name, t);
+#endif
    /*ssize_t csz =*/ get_enum_cmt(t, rep, cmt, sizeof(cmt));
    if (sz > 0) {
       b.writeInt(COMMAND_ENUM_CMT_CHANGED);
@@ -1770,7 +1831,11 @@ void change_enum_cmt(tid_t t, bool rep) {
       b.writeUTF8(cmt);
       b.write(&rep, 1);
       if (send_data(b) == -1) {
+#if IDA_SDK_VERSION < 680
          msg(PLUGIN_NAME": send error on change_enum_cmt %s\n", name);
+#else
+         msg(PLUGIN_NAME": send error on change_enum_cmt %s\n", name.c_str());
+#endif
       }
    }
 }
@@ -1783,11 +1848,22 @@ void create_enum_member(enum_t id, const_t cid) {
 #else
    uval_t value = get_const_value(cid);
 #endif
+
+#if IDA_SDK_VERSION < 680
    char ename[MAXNAMESIZE];
    char mname[MAXNAMESIZE];
    get_enum_name(id, ename, MAXNAMESIZE);
+#else
+   qstring ename = get_enum_name(id);
+   qstring mname;
+#endif
+
 #if IDA_SDK_VERSION >= 570
+#if IDA_SDK_VERSION < 680
    get_enum_member_name(cid, mname, MAXNAMESIZE);
+#else
+   get_enum_member_name(&mname, cid);
+#endif
 #else
    get_const_name(cid, mname, MAXNAMESIZE);
 #endif
@@ -1810,8 +1886,12 @@ void delete_enum_member(enum_t id, const_t cid) {
    bmask_t bmask = get_const_bmask(cid);
    uchar serial = get_const_serial(cid);
 #endif
+#if IDA_SDK_VERSION < 680
    char ename[MAXNAMESIZE];
    get_enum_name(id, ename, MAXNAMESIZE);
+#else
+   qstring ename = get_enum_name(id);
+#endif
    b.writeInt(COMMAND_ENUM_CONST_DELETED);
    b.writeInt((int)value);
    b.writeInt((int)bmask);
@@ -1823,8 +1903,13 @@ void delete_enum_member(enum_t id, const_t cid) {
 void create_struct(tid_t t) {
    //get struct name (and fields?) and send to server
    Buffer b;
+#if IDA_SDK_VERSION < 680
    char name[MAXNAMESIZE];
    ssize_t sz = get_struc_name(t, name, sizeof(name));
+#else
+   qstring name;
+   ssize_t sz = get_struc_name(&name, t);
+#endif
    if (sz > 0) {
       struc_t *s = get_struc(t);
       b.writeInt(COMMAND_STRUC_CREATED);
@@ -1832,23 +1917,40 @@ void create_struct(tid_t t) {
       b.write(s->is_union());
       b.writeUTF8(name);
       if (send_data(b) == -1) {
+#if IDA_SDK_VERSION < 680
          msg(PLUGIN_NAME": send error on create_struct %s\n", name);
+#else
+         msg(PLUGIN_NAME": send error on create_struct %s\n", name.c_str());
+#endif
       }
       //remember the name of the struct in case it is renamed later
+#if IDA_SDK_VERSION < 680
       cnn.supset(t, name, 0, COLLABREATE_STRUCTS_TAG);
+#else
+      cnn.supset(t, name.c_str(), 0, COLLABREATE_STRUCTS_TAG);
+#endif
    }
 }
 
 void delete_struct(tid_t s) {
    //get struct name and send to server
    Buffer b;
+#if IDA_SDK_VERSION < 680
    char name[MAXNAMESIZE];
    ssize_t sz = get_struc_name(s, name, sizeof(name));
+#else
+   qstring name;
+   ssize_t sz = get_struc_name(&name, s);
+#endif
    if (sz > 0) {
       b.writeInt(COMMAND_STRUC_DELETED);
       b.writeUTF8(name);
       if (send_data(b) == -1) {
+#if IDA_SDK_VERSION < 680
          msg(PLUGIN_NAME": send error on delete_struct %s\n", name);
+#else
+         msg(PLUGIN_NAME": send error on delete_struct %s\n", name.c_str());
+#endif
       }
    }
 }
@@ -1857,9 +1959,14 @@ void rename_struct(struc_t *s) {
    //get struct name (and fields?) and send to server
    //how do we know old struct name
    Buffer b;
+#if IDA_SDK_VERSION < 680
    char newname[MAXNAMESIZE];
-   char oldname[MAXNAMESIZE];
    ssize_t sz = get_struc_name(s->id, newname, sizeof(newname));
+#else
+   qstring newname;
+   ssize_t sz = get_struc_name(&newname, s->id);
+#endif
+   char oldname[MAXNAMESIZE];
    ssize_t len = cnn.supstr(s->id, oldname, sizeof(oldname), COLLABREATE_STRUCTS_TAG);
    if (sz > 0 && len > 0) {
       b.writeInt(COMMAND_STRUC_RENAMED);
@@ -1867,9 +1974,17 @@ void rename_struct(struc_t *s) {
       b.writeInt((int)s->id);   //need to try to map struct id to other instances ID
       b.writeUTF8(newname);
       b.writeUTF8(oldname);
+#if IDA_SDK_VERSION < 680
       cnn.supset(s->id, newname, 0, COLLABREATE_STRUCTS_TAG);
+#else
+      cnn.supset(s->id, newname.c_str(), 0, COLLABREATE_STRUCTS_TAG);
+#endif
       if (send_data(b) == -1) {
+#if IDA_SDK_VERSION < 680
          msg(PLUGIN_NAME": send error on rename_struct %s\n", newname);
+#else
+         msg(PLUGIN_NAME": send error on rename_struct %s\n", newname.c_str());
+#endif
       }
    }
 }
@@ -1877,17 +1992,30 @@ void rename_struct(struc_t *s) {
 void expand_struct(struc_t *s) {
    //what info to send to indicate expansion?
    Buffer b;
+#if IDA_SDK_VERSION < 680
    char name[MAXNAMESIZE];
    ssize_t sz = get_struc_name(s->id, name, sizeof(name));
+#else
+   qstring name;
+   ssize_t sz = get_struc_name(&name, s->id);
+#endif
    if (sz > 0) {
 #ifdef DEBUG
+#if IDA_SDK_VERSION < 680
       msg(PLUGIN_NAME": struct %s has been expanded\n", name);
+#else
+      msg(PLUGIN_NAME": struct %s has been expanded\n", name.c_str());
+#endif
 #endif
       b.writeInt(COMMAND_STRUC_EXPANDED);
       b.writeInt((int)s->id);   //need to try to map struct id to other instances ID
       b.writeUTF8(name);
       if (send_data(b) == -1) {
+#if IDA_SDK_VERSION < 680
          msg(PLUGIN_NAME": send error on rename_struct %s\n", name);
+#else
+         msg(PLUGIN_NAME": send error on rename_struct %s\n", name.c_str());
+#endif
       }
    }
 }
@@ -1895,15 +2023,24 @@ void expand_struct(struc_t *s) {
 void change_struc_cmt(tid_t t, bool rep) {
    Buffer b;
    char cmt[MAXNAMESIZE];
+#if IDA_SDK_VERSION < 680
    char name[MAXNAMESIZE];
    /*ssize_t sz =*/ get_struc_name(t, name, sizeof(name));
+#else
+   qstring name;
+   /*ssize_t sz =*/ get_struc_name(&name, t);
+#endif
    /*ssize_t csz =*/ get_struc_cmt(t, rep, cmt, sizeof(cmt));
    b.writeInt(COMMAND_STRUC_CMT_CHANGED);
    b.writeUTF8(name);
    b.writeUTF8(cmt);
    b.write(&rep, 1);
    if (send_data(b) == -1) {
+#if IDA_SDK_VERSION < 680
       msg(PLUGIN_NAME": send error on change_struc_cmt %s\n", name);
+#else
+      msg(PLUGIN_NAME": send error on change_struc_cmt %s\n", name.c_str());
+#endif
    }
 }
 
@@ -1911,8 +2048,13 @@ void create_struct_member(struc_t *s, member_t *m) {
    //get struct name and member name/offs and send to server
    Buffer b;
    opinfo_t ti, *pti;
+#if IDA_SDK_VERSION < 680
    char mbr[MAXNAMESIZE];
    char name[MAXNAMESIZE];
+#else
+   qstring name;
+   qstring mbr;
+#endif
 
    pti = retrieve_member_info(m, &ti);
 /*
@@ -1926,7 +2068,11 @@ void create_struct_member(struc_t *s, member_t *m) {
       //in this case, we need to send the ti info in some manner
       if (isStruct(m->flag)) {
          b.writeInt(COMMAND_CREATE_STRUC_MEMBER_STRUCT);
+#if IDA_SDK_VERSION < 680
          /*ssize_t tsz =*/ get_struc_name(ti.tid, name, sizeof(name));
+#else
+         /*ssize_t tsz =*/ get_struc_name(&name, ti.tid);
+#endif
          b.writeUTF8(name);
       }
       else if (isASCII(m->flag)) {
@@ -1940,7 +2086,11 @@ void create_struct_member(struc_t *s, member_t *m) {
       }
       else if (isEnum0(m->flag) || isEnum1(m->flag)) {
          b.writeInt(COMMAND_CREATE_STRUC_MEMBER_ENUM);
+#if IDA_SDK_VERSION < 680
          /*ssize_t tsz =*/ get_struc_name(ti.ec.tid, name, sizeof(name));
+#else
+         /*ssize_t tsz =*/ get_struc_name(&name, ti.ec.tid);
+#endif
          b.writeUTF8(name);
          b.write(ti.ec.serial);
       }
@@ -1962,27 +2112,45 @@ void create_struct_member(struc_t *s, member_t *m) {
    b.writeInt((int)(m->unimem() ? m->eoff : (m->eoff - m->soff)));
 
    //should send opinfo_t as well
+#if IDA_SDK_VERSION < 680
    /*ssize_t ssz =*/ get_struc_name(s->id, name, sizeof(name));
    /*ssize_t msz =*/ get_member_name(m->id, mbr, sizeof(mbr));
+#else
+   /*ssize_t ssz =*/ get_struc_name(&name, s->id);
+   /*ssize_t msz =*/ get_member_name2(&mbr, m->id);
+#endif
    b.writeUTF8(name);
    b.writeUTF8(mbr);
 //   msg(PLUGIN_NAME": create_struct_member %s.%s off: %d, sz: %d\n", name, mbr, m->soff, m->eoff - m->soff);
    if (send_data(b) == -1) {
+#if IDA_SDK_VERSION < 680
       msg(PLUGIN_NAME": send error on create_struct_member %s\n", name);
+#else
+      msg(PLUGIN_NAME": send error on create_struct_member %s\n", name.c_str());
+#endif
    }
 }
 
 void delete_struct_member(struc_t *s, tid_t /*m*/, ea_t offset) {
    //get struct name and member name/offs and send to server
    Buffer b;
+#if IDA_SDK_VERSION < 680
    char name[MAXNAMESIZE];
    /*ssize_t ssz =*/ get_struc_name(s->id, name, sizeof(name));
+#else
+   qstring name;
+   /*ssize_t sz =*/ get_struc_name(&name, s->id);
+#endif
 //   msg(PLUGIN_NAME": delete_struct_member %s, tid %x, offset %x\n", name, m, offset);
    b.writeInt(COMMAND_STRUC_MEMBER_DELETED);
    b.writeInt((int)offset);
    b.writeUTF8(name);
    if (send_data(b) == -1) {
+#if IDA_SDK_VERSION < 680
       msg(PLUGIN_NAME": send error on delete_struct_member %s\n", name);
+#else
+      msg(PLUGIN_NAME": send error on delete_struct_member %s\n", name.c_str());
+#endif
    }
 }
 
@@ -1994,28 +2162,48 @@ void rename_struct_member(struc_t *s, member_t *m) {
 //   if (s->props & SF_FRAME) {   //SF_FRAME is only available in SDK520 and later
 //      func_t *pfn = func_from_frame(s);
       //send func ea, member offset, name
+#if IDA_SDK_VERSION < 680
       char name[MAXNAMESIZE];
       get_member_name(m->id, name, MAXNAMESIZE);
+#else
+      qstring name;
+      get_member_name2(&name, m->id);
+#endif
       b.writeInt(COMMAND_SET_STACK_VAR_NAME);
       b.writeLong(pfn->startEA);  //lookup function on remote side
       b.writeInt((int)m->soff);
       b.writeUTF8(name);
       if (send_data(b) == -1) {
+#if IDA_SDK_VERSION < 680
          msg(PLUGIN_NAME": send error on rename_stack_member %x, %x, %s\n", (uint32_t)pfn->startEA, (uint32_t)m->soff, name);
+#else
+         msg(PLUGIN_NAME": send error on rename_stack_member %x, %x, %s\n", (uint32_t)pfn->startEA, (uint32_t)m->soff, name.c_str());
+#endif
       }
    }
    else {
       //send struct name and member name and offset
+#if IDA_SDK_VERSION < 680
       char sname[MAXNAMESIZE];
       char mname[MAXNAMESIZE];
       get_struc_name(s->id, sname, MAXNAMESIZE);
       get_member_name(m->id, mname, MAXNAMESIZE);
+#else
+      qstring sname;
+      qstring mname;
+      /*ssize_t sz =*/ get_struc_name(&sname, s->id);
+      get_member_name2(&mname, m->id);
+#endif
       b.writeInt(COMMAND_SET_STRUCT_MEMBER_NAME);
       b.writeInt((int)m->soff);
       b.writeUTF8(sname);
       b.writeUTF8(mname);
       if (send_data(b) == -1) {
+#if IDA_SDK_VERSION < 680
          msg(PLUGIN_NAME": send error on rename_struct_member %x, %s, %s\n", (uint32_t)m->soff, sname, mname);
+#else
+         msg(PLUGIN_NAME": send error on rename_struct_member %x, %s, %s\n", (uint32_t)m->soff, sname.c_str(), mname.c_str());
+#endif
       }
    }
 }
@@ -2025,7 +2213,11 @@ void change_struct_member(struc_t *s, member_t *m) {
    //get struct name and member name/offs and send to server
    Buffer b;
    opinfo_t ti, *pti;
+#if IDA_SDK_VERSION < 680
    char name[MAXNAMESIZE];
+#else
+   qstring name;
+#endif
 
    pti = retrieve_member_info(m, &ti);
 
@@ -2033,7 +2225,11 @@ void change_struct_member(struc_t *s, member_t *m) {
       //in this case, we need to send the ti info in some manner
       if (isStruct(m->flag)) {
          b.writeInt(COMMAND_STRUC_MEMBER_CHANGED_STRUCT);
+#if IDA_SDK_VERSION < 680
          /*ssize_t tsz =*/ get_struc_name(ti.tid, name, sizeof(name));
+#else
+         /*ssize_t tsz =*/ get_struc_name(&name, ti.tid);
+#endif
          b.writeUTF8(name);
       }
       else if (isASCII(m->flag)) {
@@ -2046,7 +2242,11 @@ void change_struct_member(struc_t *s, member_t *m) {
       }
       else if (isEnum0(m->flag) || isEnum1(m->flag)) {
          b.writeInt(COMMAND_STRUC_MEMBER_CHANGED_ENUM);
+#if IDA_SDK_VERSION < 680
          /*ssize_t tsz =*/ get_struc_name(ti.ec.tid, name, sizeof(name));
+#else
+         /*ssize_t tsz =*/ get_struc_name(&name, ti.ec.tid);
+#endif
          b.writeUTF8(name);
          b.write(ti.ec.serial);
       }
@@ -2069,11 +2269,19 @@ void change_struct_member(struc_t *s, member_t *m) {
    b.writeInt(m->flag);
 
    //should send opinfo_t as well
+#if IDA_SDK_VERSION < 680
    /*ssize_t ssz =*/ get_struc_name(s->id, name, sizeof(name));
+#else
+   /*ssize_t ssz =*/ get_struc_name(&name, s->id);
+#endif
    b.writeUTF8(name);
 //   msg(PLUGIN_NAME": create_struct_member %s.%s off: %d, sz: %d\n", name, mbr, m->soff, m->eoff - m->soff);
    if (send_data(b) == -1) {
+#if IDA_SDK_VERSION < 680
       msg(PLUGIN_NAME": send error on create_struct_member %s\n", name);
+#else
+      msg(PLUGIN_NAME": send error on create_struct_member %s\n", name.c_str());
+#endif
    }
 }
 
@@ -2692,13 +2900,22 @@ void idp_make_code(ea_t ea, asize_t len) {
 void idp_make_data(ea_t ea, flags_t f, tid_t t, asize_t len) {
    //send all to server
    Buffer b;
+#if IDA_SDK_VERSION < 680
    char name[MAXNAMESIZE];
+   /*ssize_t ssz =*/ get_struc_name(s->id, name, sizeof(name));
+#else
+   qstring name;
+#endif
    b.writeInt(COMMAND_MAKE_DATA);
    b.writeLong(ea);
    b.writeInt(f);
    b.writeLong(len);
    if (t != BADNODE) {
+#if IDA_SDK_VERSION < 680
       get_struc_name(t, name, sizeof(name));
+#else
+      get_struc_name(&name, t);
+#endif
       b.writeUTF8(name);
    }
    else {

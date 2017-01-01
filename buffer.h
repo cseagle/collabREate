@@ -31,6 +31,8 @@
 #include <stdint.h>
 #endif
 
+#include <pro.h>
+
 class Buffer {
 public:
    Buffer();
@@ -54,6 +56,7 @@ public:
    bool writeShort(int val);
    bool write(int val);
    bool writeUTF8(const char *data);
+   bool writeUTF8(const qstring &data) {return writeUTF8(data.c_str());};
    bool writeWide(const char *data);
    int size() {return wptr;};
    
