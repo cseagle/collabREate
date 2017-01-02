@@ -48,7 +48,7 @@ CREATE TABLE projects (
    created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
    touched TIMESTAMP,
 --   parent INTEGER,  --for forked projects, should reference projects.pid
-   owner INTEGER REFERENCES users(userid),
+   owner TEXT REFERENCES users(username),
    --project permissions (initial creator of project is 'owner' - sets default perms)
    sub BIGINT,
    pub BIGINT,
@@ -69,10 +69,10 @@ CREATE SEQUENCE updates_updateid_seq START 1;
 
 CREATE TABLE updates (
    updateid BIGINT DEFAULT nextval('updates_updateid_seq') NOT NULL,
-   userid INTEGER REFERENCES users(userid),
+   username text REFERENCES users(username),
    pid INTEGER REFERENCES projects(pid) ON DELETE CASCADE,  --pid not gpid for faster comparison
-   cmd INTEGER,
-   data BYTEA,
+   cmd TEXT NOT NULL,
+   json TEXT NOT NULL,
    created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
    PRIMARY KEY (updateid,pid)
 );
@@ -87,10 +87,10 @@ CREATE TABLE forklist (
 );
 --tracker is no longer required, since the last update is stored in the idb
 --CREATE TABLE tracker (
---   userid INTEGER references users(userid),
+--   username TEXT references users(username),
 --   project INTEGER references projects(pid),
 --   updates INTEGER references updates(updateid),
---   PRIMARY KEY (userid, project, updates)
+--   PRIMARY KEY (username, project, updates)
 --);
 
 CREATE LANGUAGE plpgsql;
@@ -110,15 +110,15 @@ BEGIN
    newpid := next_project_id();
    INSERT INTO projects VALUES(newpid, projects_row.hash);
 
---   SELECT newpid, cmd, data FROM updates WHERE pid == oldpid AS fork_updates;
---   INSERT INTO updates(pid, cmd, data) SELECT * from fork_updates;
+--   SELECT newpid, cmd, json FROM updates WHERE pid == oldpid AS fork_updates;
+--   INSERT INTO updates(pid, cmd, json) SELECT * from fork_updates;
 END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION copy_updates(ppid integer, maxid integer, lpid integer) RETURNS VOID AS $$
 DECLARE
 BEGIN
-   INSERT INTO updates (SELECT updateid,userid,lpid,cmd,data,created FROM updates WHERE pid = ppid AND updateid <= maxid);
+   INSERT INTO updates (SELECT updateid,username,lpid,cmd,json,created FROM updates WHERE pid = ppid AND updateid <= maxid);
 END;
 $$ LANGUAGE plpgsql;
 
