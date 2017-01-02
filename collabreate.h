@@ -22,8 +22,6 @@
 #ifndef __COLLABREATE_H__
 #define __COLLABREATE_H__
 
-#include "buffer.h"
-
 #ifdef _MSC_VER
 #if _MSC_VER >= 1600
 #include <stdint.h>
@@ -34,130 +32,137 @@
 #include <stdint.h>
 #endif
 
+#include <stdarg.h>
 #include <time.h>
+#include <json.h>
 
 #define NO_OBSOLETE_FUNCS
 #define USE_DANGEROUS_FUNCTIONS
+
+#include <pro.h>
+
 #define PLUGIN_NAME "collabREate"
 
-#define PROTOCOL_VERSION             2 
+#define PROTOCOL_VERSION             4
 
-#define COMMAND_BYTE_PATCHED         1
-#define COMMAND_CMT_CHANGED          2
-#define COMMAND_TI_CHANGED           3
-#define COMMAND_OP_TI_CHANGED        4
-#define COMMAND_OP_TYPE_CHANGED      5
-#define COMMAND_ENUM_CREATED         6
-#define COMMAND_ENUM_DELETED         7
-#define COMMAND_ENUM_BF_CHANGED      8
-#define COMMAND_ENUM_RENAMED         9
-#define COMMAND_ENUM_CMT_CHANGED     10
-#define COMMAND_ENUM_CONST_CREATED   11
-#define COMMAND_ENUM_CONST_DELETED   12
-#define COMMAND_STRUC_CREATED        13
-#define COMMAND_STRUC_DELETED        14
-#define COMMAND_STRUC_RENAMED        15
-#define COMMAND_STRUC_EXPANDED       16
-#define COMMAND_STRUC_CMT_CHANGED    17
+#define JSON_NEW_CONST_KEY (JSON_C_OBJECT_ADD_KEY_IS_NEW | JSON_C_OBJECT_KEY_IS_CONSTANT)
 
-#define COMMAND_CREATE_STRUC_MEMBER_DATA 18
-#define COMMAND_CREATE_STRUC_MEMBER_STRUCT 19
-#define COMMAND_CREATE_STRUC_MEMBER_REF 20
-#define COMMAND_CREATE_STRUC_MEMBER_STROFF 21
-#define COMMAND_CREATE_STRUC_MEMBER_STR 22
-#define COMMAND_CREATE_STRUC_MEMBER_ENUM 23
+#define COMMAND_BYTE_PATCHED         "byte_patched"
+#define COMMAND_CMT_CHANGED          "cmt_changed"
+#define COMMAND_TI_CHANGED           "ti_changed"
+#define COMMAND_OP_TI_CHANGED        "op_ti_changed"
+#define COMMAND_OP_TYPE_CHANGED      "op_type_changed"
+#define COMMAND_ENUM_CREATED         "enum_created"
+#define COMMAND_ENUM_DELETED         "enum_deleted"
+#define COMMAND_ENUM_BF_CHANGED      "enum_bf_changed"
+#define COMMAND_ENUM_RENAMED         "enum_renamed"
+#define COMMAND_ENUM_CMT_CHANGED     "enum_cmt_changed"
+#define COMMAND_ENUM_CONST_CREATED   "enum_const_created"
+#define COMMAND_ENUM_CONST_DELETED   "enum_const_deleted"
+#define COMMAND_STRUC_CREATED        "struc_created"
+#define COMMAND_STRUC_DELETED        "struc_deleted"
+#define COMMAND_STRUC_RENAMED        "struc_renamed"
+#define COMMAND_STRUC_EXPANDED       "struc_expanded"
+#define COMMAND_STRUC_CMT_CHANGED    "struc_cmt_changed"
 
-#define COMMAND_STRUC_MEMBER_DELETED 24
+#define COMMAND_CREATE_STRUC_MEMBER_DATA   "create_struc_mbr_data"
+#define COMMAND_CREATE_STRUC_MEMBER_STRUCT "create_struc_mbr_struc"
+#define COMMAND_CREATE_STRUC_MEMBER_REF    "create_struc_mbr_ref"
+#define COMMAND_CREATE_STRUC_MEMBER_STROFF "create_struc_mbr_stroff"
+#define COMMAND_CREATE_STRUC_MEMBER_STR    "create_struc_mbr_str"
+#define COMMAND_CREATE_STRUC_MEMBER_ENUM   "create_struc_mbr_enum"
+
+#define COMMAND_STRUC_MEMBER_DELETED      "struc_mbr_deleted"
 
 //#define COMMAND_STRUC_MEMBER_RENAMED
-#define COMMAND_SET_STACK_VAR_NAME     25
-#define COMMAND_SET_STRUCT_MEMBER_NAME 26
+#define COMMAND_SET_STACK_VAR_NAME        "set_stack_var_name"
+#define COMMAND_SET_STRUCT_MEMBER_NAME    "set_struc_mbr_name"
 
 //#define COMMAND_STRUC_MEMBER_CHANGED
-#define COMMAND_STRUC_MEMBER_CHANGED_DATA 27
-#define COMMAND_STRUC_MEMBER_CHANGED_STRUCT 28
-#define COMMAND_STRUC_MEMBER_CHANGED_STR 29
+#define COMMAND_STRUC_MEMBER_CHANGED_DATA   "struc_mbr_chg_data"
+#define COMMAND_STRUC_MEMBER_CHANGED_STRUCT "struc_mbr_chg_struc"
+#define COMMAND_STRUC_MEMBER_CHANGED_STR    "struc_mbr_chg_str"
 
-#define COMMAND_THUNK_CREATED        30
-#define COMMAND_FUNC_TAIL_APPENDED   31
-#define COMMAND_FUNC_TAIL_REMOVED    32
-#define COMMAND_TAIL_OWNER_CHANGED   33
-#define COMMAND_FUNC_NORET_CHANGED   34
-#define COMMAND_SEGM_ADDED           35
-#define COMMAND_SEGM_DELETED         36
-#define COMMAND_SEGM_START_CHANGED   37
-#define COMMAND_SEGM_END_CHANGED     38
-#define COMMAND_SEGM_MOVED           39     
-#define COMMAND_AREA_CMT_CHANGED     40
-#define COMMAND_STRUC_MEMBER_CHANGED_OFFSET 41
-#define COMMAND_STRUC_MEMBER_CHANGED_ENUM 42
-#define COMMAND_CREATE_STRUC_MEMBER_OFFSET 43
+#define COMMAND_THUNK_CREATED        "thunk_created"
+#define COMMAND_FUNC_TAIL_APPENDED   "func_tail_appended"
+#define COMMAND_FUNC_TAIL_REMOVED    "func_tail_removed"
+#define COMMAND_TAIL_OWNER_CHANGED   "tail_owner_chg"
+#define COMMAND_FUNC_NORET_CHANGED   "func_noret_chg"
+#define COMMAND_SEGM_ADDED           "segm_added"
+#define COMMAND_SEGM_DELETED         "segm_deleted"
+#define COMMAND_SEGM_START_CHANGED   "segm_start_chg"
+#define COMMAND_SEGM_END_CHANGED     "segm_end_chg"
+#define COMMAND_SEGM_MOVED           "segm_moved"
+#define COMMAND_AREA_CMT_CHANGED     "area_cmt_chg"
+#define COMMAND_STRUC_MEMBER_CHANGED_OFFSET "struc_mbr_chg_offset"
+#define COMMAND_STRUC_MEMBER_CHANGED_ENUM   "struc_mbr_chg_enum"
+#define COMMAND_CREATE_STRUC_MEMBER_OFFSET  "create_struc_mbr_offset"
 
-#define AREACB_FUNCS                  1
-#define AREACB_SEGS                   2
+#define AREACB_FUNCS                  "funcs"
+#define AREACB_SEGS                   "segs"
 
 #define COMMAND_IDP                 128
-#define COMMAND_UNDEFINE            129
-#define COMMAND_MAKE_CODE           130
-#define COMMAND_MAKE_DATA           131
-#define COMMAND_MOVE_SEGM           132
-#define COMMAND_RENAMED             133
-#define COMMAND_ADD_FUNC            134
-#define COMMAND_DEL_FUNC            135
-#define COMMAND_SET_FUNC_START      137
-#define COMMAND_SET_FUNC_END        138
-#define COMMAND_VALIDATE_FLIRT_FUNC 139
-#define COMMAND_ADD_CREF            140
-#define COMMAND_ADD_DREF            141
-#define COMMAND_DEL_CREF            142
-#define COMMAND_DEL_DREF            143
+#define COMMAND_UNDEFINE            "undefine"
+#define COMMAND_MAKE_CODE           "make_code"
+#define COMMAND_MAKE_DATA           "make_data"
+#define COMMAND_MOVE_SEGM           "move_segm"
+#define COMMAND_RENAMED             "renamed"
+#define COMMAND_ADD_FUNC            "add_func"
+#define COMMAND_DEL_FUNC            "del_func"
+#define COMMAND_SET_FUNC_START      "set_func_start"
+#define COMMAND_SET_FUNC_END        "set_func_end"
+#define COMMAND_VALIDATE_FLIRT_FUNC "validate_flirt_func"
+#define COMMAND_ADD_CREF            "add_cref"
+#define COMMAND_ADD_DREF            "add_dref"
+#define COMMAND_DEL_CREF            "del_cref"
+#define COMMAND_DEL_DREF            "del_dref"
 
 #define SERVER_MAP_TID              200
 #define SERVER_RENAME_STRUCT        201
-#define COMMAND_USER_MESSAGE        202
+#define COMMAND_USER_MESSAGE        "user_message"
 
 //all idb manipulation messages must be <= this number
 #define MSG_IDA_MAX                 255
 
-#define MSG_CONTROL_FIRST            1000
-#define MSG_INITIAL_CHALLENGE        1000
-#define MSG_AUTH_REQUEST             1001
-#define MSG_AUTH_REPLY               1002
-#define AUTH_REPLY_SUCCESS           0
-#define AUTH_REPLY_FAIL              1
-#define MSG_PROJECT_LIST             1003
-#define MSG_PROJECT_JOIN_REQUEST     1004
-#define MSG_PROJECT_JOIN_REPLY       1005   //should include gpid of the project
-#define JOIN_REPLY_SUCCESS           0
-#define JOIN_REPLY_FAIL              1
-#define MSG_PROJECT_NEW_REQUEST      1006
-#define MSG_SEND_UPDATES             1007
-#define MSG_PROJECT_REJOIN_REQUEST   1008
-#define MSG_ACK_UPDATEID             1009
-#define MSG_PROJECT_SNAPSHOT_REQUEST 1010
-#define MSG_PROJECT_SNAPSHOT_REPLY   1011
-#define MSG_PROJECT_SNAPSHOT_SUCCESS 0
-#define MSG_PROJECT_SNAPSHOT_FAIL    1
-#define MSG_PROJECT_FORK_REQUEST     1012
-#define MSG_PROJECT_SNAPFORK_REQUEST 1013
-#define MSG_PROJECT_FORK_FOLLOW      1014
-#define MSG_PROJECT_LEAVE            1015
-#define MSG_GET_REQ_PERMS            1016
-#define MSG_GET_REQ_PERMS_REPLY      1017
-#define MSG_SET_REQ_PERMS            1018
-#define MSG_SET_REQ_PERMS_REPLY      1019
-#define MSG_GET_PROJ_PERMS           1020
-#define MSG_GET_PROJ_PERMS_REPLY     1021
-#define MSG_SET_PROJ_PERMS           1022
-#define MSG_SET_PROJ_PERMS_REPLY     1023
+#define MSG_CONTROL_FIRST            "control_first"
+#define MSG_INITIAL_CHALLENGE        "initial_challenge"
+#define MSG_AUTH_REQUEST             "auth_request"
+#define MSG_AUTH_REPLY               "auth_reply"
+#define AUTH_REPLY_SUCCESS           1
+#define AUTH_REPLY_FAIL              0
+#define MSG_PROJECT_LIST             "project_list"
+#define MSG_PROJECT_JOIN_REQUEST     "project_join_request"
+#define MSG_PROJECT_JOIN_REPLY       "project_join_reply"
+#define JOIN_REPLY_SUCCESS           1
+#define JOIN_REPLY_FAIL              0
+#define MSG_PROJECT_NEW_REQUEST      "project_new_request"
+#define MSG_SEND_UPDATES             "send_updates"
+#define MSG_PROJECT_REJOIN_REQUEST   "project_rejoin_request"
+#define MSG_ACK_UPDATEID             "ack_updateid"
+#define MSG_PROJECT_SNAPSHOT_REQUEST "project_snapshot_request"
+#define MSG_PROJECT_SNAPSHOT_REPLY   "project_snapshot_reply"
+#define PROJECT_SNAPSHOT_SUCCESS 1
+#define PROJECT_SNAPSHOT_FAIL    0
+#define MSG_PROJECT_FORK_REQUEST     "project_fork_request"
+#define MSG_PROJECT_SNAPFORK_REQUEST "project_snapfork_request"
+#define MSG_PROJECT_FORK_FOLLOW      "project_fork_follow"
+#define MSG_PROJECT_LEAVE            "project_leave"
+#define MSG_GET_REQ_PERMS            "get_req_perms"
+#define MSG_GET_REQ_PERMS_REPLY      "get_req_perms_reply"
+#define MSG_SET_REQ_PERMS            "set_req_perms"
+#define MSG_SET_REQ_PERMS_REPLY      "set_req_perms_reply"
+#define MSG_GET_PROJ_PERMS           "get_proj_perms"
+#define MSG_GET_PROJ_PERMS_REPLY     "get_proj_perms_reply"
+#define MSG_SET_PROJ_PERMS           "set_proj_perms"
+#define MSG_SET_PROJ_PERMS_REPLY     "set_proj_perms_reply"
 
-#define MSG_ERROR                    1100
-#define MSG_FATAL                    1101
+#define MSG_ERROR                    "collab_error"
+#define MSG_FATAL                    "collab_fatal"
 
 class netnode;
 extern netnode cnn;
-extern Buffer *msgHistory;
-extern Buffer *changeCache;
+extern qstring *msgHistory;
+extern qstring *changeCache;
 
 #define COLLABREATE_NETNODE "$ COLLABREATE NETNODE"
 
@@ -196,6 +201,9 @@ extern bool userPublish;
 extern bool subscribe;
 extern bool supress;
 
+extern bool authenticated;
+extern bool fork_pending;
+
 extern char **optLabels;
 
 extern char username[64];
@@ -215,6 +223,7 @@ extern Options tempOpts;
 extern Options *optMasks;
 
 extern uint64_t *snapUpdateIDs;
+extern char description[1024];
 
 extern int numProjectsGlobal;
 extern int isSnapShotGlobal;
@@ -227,14 +236,21 @@ bool getUserOpts(Options &user);
 
 bool is_connected();
 void cleanup(bool warn = false);
-int send_all(Buffer &b);
-int send_data(Buffer &b);
+int send_all(const qstring &s);
+int send_msg(const qstring &s);
 
 bool init_network();
 bool term_network();
 #define QT_NAMESPACE QT
 
-void hmac_md5(unsigned char *msg, int msg_len, 
+uint64_t getLastUpdate();
+void setLastUpdate(uint64_t uid);
+void writeUpdateValue(uint64_t uid);
+void hookAll();
+void unhookAll();
+int numCommands();
+
+void hmac_md5(unsigned char *msg, int msg_len,
               unsigned char *key, int key_len,
               unsigned char *digest);
 void saveAuthData(char *user, char *pass);
@@ -248,20 +264,44 @@ void do_project_rejoin();
 void sendProjectLeave();
 void do_project_leave();
 void sendProjectChoice(int project);
-void sendProjectSnapFork(int project, char *desc);
+void sendProjectSnapFork(int project, const char *desc);
 void sendProjectGetList();
-void sendNewProjectCreate(char *description);
+void sendNewProjectCreate(const char *description);
 void sendReqPermsChoice();
 void sendProjPermsChoice();
 void freeProjectFields();
 void selectProject(int index);
 void sendAuthData(unsigned char *challenge, int challenge_len);
-void do_get_req_perms(Buffer &b);
-void do_get_proj_perms(Buffer &b);
+void do_get_req_perms(json_object *json);
+void do_get_proj_perms(json_object *json);
 
-bool do_choose_perms(Buffer &b);
+bool do_choose_perms(json_object *json);
 
 void do_send_user_message(const char *msg);
+
+void send_json(json_object *obj);
+void send_json(const char *type, json_object *obj);
+void send_json(ea_t ea, const char *type, json_object *obj);
+
+const char *hex_encode(const void *bin, uint32_t len);
+uint8_t *hex_decode(const char *hex, uint32_t *len);
+
+void append_json_hex_val(json_object *obj, const char *key, const uint8_t *value, uint32_t len = 0);
+void append_json_string_val(json_object *obj, const char *key, const char *value);
+void append_json_string_val(json_object *obj, const char *key, const qstring &value);
+void append_json_bool_val(json_object *obj, const char *key, bool value);
+void append_json_uint64_val(json_object *obj, const char *key, uint64_t value);
+void append_json_uint32_val(json_object *obj, const char *key, uint32_t value);
+void append_json_int32_val(json_object *obj, const char *key, int32_t value);
+void append_json_ea_val(json_object *obj, const char *key, ea_t value);
+
+uint8_t *hex_from_json(json_object *json, const char *key, uint32_t *len); //qfree this result
+const char *string_from_json(json_object *json, const char *key);
+bool bool_from_json(json_object *json, const char *key, bool *val);
+bool uint64_from_json(json_object *json, const char *key, uint64_t *val);
+bool ea_from_json(json_object *json, const char *key, ea_t *val);
+bool uint32_from_json(json_object *json, const char *key, uint32_t *val);
+bool int32_from_json(json_object *json, const char *key, int32_t *val);
 
 //Ida's msg function doesn't handle the ll modifier
 //this one returns pointer to static buffer
@@ -273,5 +313,17 @@ char *formatOptVal(OptVal *v, char *buf);
 char *formatLongLong(uint64_t, char *buf);
 
 void postCollabMessage(const char *msg, time_t t = 0);
+
+//IDA HOOKS
+#if IDA_SDK_VERSION >= 510      //HT_IDB introduced in SDK 510
+int idaapi idb_hook(void * /*user_data*/, int notification_code, va_list va);
+#endif
+int idaapi idp_hook(void * /*user_data*/, int notification_code, va_list va);
+//int idaapi ui_hook(void *user_data, int notification_code, va_list va);
+
+//Collabreate messaging
+void build_handler_map();
+int handle_idp_msg(json_object *json, const char *msg_type);
+bool msg_dispatcher(const char *json_in);
 
 #endif

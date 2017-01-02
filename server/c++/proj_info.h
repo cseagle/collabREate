@@ -36,12 +36,13 @@ public:
    uint64_t snapupdateid;
    uint64_t pub;
    uint64_t sub;
-   uint32_t owner;
+   string owner;
    uint32_t proto;
    string hash;
    string gpid;
 
    ProjectInfo(uint32_t localpid, const string &description, uint32_t currentlyconnected = 0);
+   ProjectInfo(const ProjectInfo &pi);
    
 };
 

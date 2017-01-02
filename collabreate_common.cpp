@@ -29,6 +29,8 @@
 #include <nalt.hpp>
 #include <md5.h>
 
+#include <json.h>
+
 #include "sdk_versions.h"
 
 #if IDA_SDK_VERSION < 500
@@ -39,16 +41,13 @@ bool publish  = true;
 bool userPublish  = true;
 bool subscribe = true;
 
-char username[64];
-static unsigned char pwhash[16];
-
 //global pointer to the incoming project list buffer.  Used to fill
 //the project list dialog
 //static Buffer *projectBuffer;
 
 //global buffer that receives the description of the project selected
 //by the user.
-static char description[1024];
+char description[1024];
 //global array of integer project ids that map to the project 
 //descriptions sent by the server.
 int *projects;
@@ -137,19 +136,6 @@ void hmac_md5(unsigned char *msg, int msg_len,
    memset(opad, 0, sizeof(opad));
 }
 
-void saveAuthData(char *user, char *pass) {
-   ::qstrncpy(username, user, sizeof(username));
-
-   cnn.supset(LAST_USER_SUPVAL, user);
-
-   size_t pwlen = strlen(pass);
-
-   MD5Context ctx;
-   MD5Init(&ctx);
-   MD5Update(&ctx, (unsigned char*)pass, pwlen);
-   MD5Final(pwhash, &ctx);
-}
-
 int chooseProject(int index, char *desc) {
    if (index == 0) { // new project
       ::qstrncpy(description, desc, sizeof(description));
@@ -202,7 +188,7 @@ bool changeProject(int index) {
 }
 
 //the order of these is important, the callback returns the ordinal of the selected string
-const char *runCommands[] = {
+char *const runCommands[] = {
    "Fork project",
    "Set checkpoint",
    "Manage requested permissions",
@@ -215,6 +201,10 @@ const char *runCommands[] = {
    "Disconnect from server"
 #endif
 };
+
+int numCommands() {
+   return sizeof(runCommands) / sizeof(runCommands[0]);
+}
 
 const char *getRunCommand(int i) {
    int max = sizeof(runCommands) / sizeof(runCommands[0]);
@@ -268,185 +258,155 @@ bool getFileMd5(unsigned char *md5, int len) {
    return true;
 }
 
-void do_project_rejoin() { //(unsigned char * gpid) {
-   Buffer b;
-   b.writeInt(MSG_PROJECT_REJOIN_REQUEST);
-   unsigned char gpid[GPID_SIZE];
-   if (getGpid(gpid, sizeof(gpid)) && getUserOpts(userOpts)) {
-      b.write(gpid, sizeof(gpid));
-      b.writeLong(userOpts.pub.ll);
-      b.writeLong(userOpts.sub.ll);
-      send_data(b);
+const char *hex_encode(const void *bin, uint32_t len) {
+   char *res = (char*)qalloc(len * 2 + 1);
+   const uint8_t *_bin = (const uint8_t *)bin;
+   for (uint32_t i = 0; i < len; i++) {
+      qsnprintf(res + i * 2, 3, "%02x", _bin[i]);
    }
+   return res;
 }
 
-void sendProjectLeave() {
-   Buffer b;
-   b.writeInt(MSG_PROJECT_LEAVE);
-   send_data(b);
-}
-
-void do_project_leave() {
-   sendProjectLeave();
-}
-
-//void do_clean_netnode( void ) {
-//}
-
-void sendProjectChoice(int project) {
-   Buffer b;
-   b.writeInt(MSG_PROJECT_JOIN_REQUEST);
-   b.writeInt(project);
-   b.writeLong(userOpts.pub.ll);
-   b.writeLong(userOpts.sub.ll);
-   send_data(b);
-}
-
-void sendProjectSnapFork(int project, char *desc) {
-   Buffer b;
-   b.writeInt(MSG_PROJECT_SNAPFORK_REQUEST);
-   b.writeInt(project);
-   b.writeUTF8(desc);
-   b.writeLong(userOpts.pub.ll);
-   b.writeLong(userOpts.sub.ll);
-   send_data(b);
-}
-
-void sendProjectGetList() {
-   Buffer b;
-   b.writeInt(MSG_PROJECT_LIST);
-   unsigned char md5[MD5_LEN];
-   if (getFileMd5(md5, sizeof(md5))) {
-      b.write(md5, sizeof(md5));
-      send_data(b);
+uint8_t *hex_decode(const char *hex, uint32_t *len) {
+   *len = strlen(hex);
+   if (*len & 1) {
+      return NULL;
    }
-}
-
-void sendNewProjectCreate(char *description) {
-   Buffer b;
-   b.writeInt(MSG_PROJECT_NEW_REQUEST);
-   unsigned char md5[MD5_LEN];
-   if (getFileMd5(md5, sizeof(md5))) {
-      b.write(md5, sizeof(md5));
-      b.writeUTF8(description);
-      b.writeLong(userOpts.pub.ll);
-      b.writeLong(userOpts.sub.ll);
-      send_data(b);
+   *len /= 2;
+   uint8_t *res = (uint8_t*)qalloc(*len);
+   for (uint32_t i = 0; i < *len; i++) {
+      uint32_t bval;
+      if (sscanf(hex + i * 2, "%02x", &bval) != 1) {
+         qfree(res);
+         return NULL;
+      }
+      res[i] = (uint8_t)bval;
    }
+   return res;
 }
 
-void sendReqPermsChoice() {
-   Buffer b;
-   b.writeInt(MSG_SET_REQ_PERMS);
-   b.writeLong(tempOpts.pub.ll);
-   b.writeLong(tempOpts.sub.ll);
-   send_data(b);
-}
-
-void sendProjPermsChoice() {
-   Buffer b;
-   b.writeInt(MSG_SET_PROJ_PERMS);
-   b.writeLong(tempOpts.pub.ll);
-   b.writeLong(tempOpts.sub.ll);
-   send_data(b);
-}
-
-void freeProjectFields() {
-   qfree(snapUpdateIDs);
-   snapUpdateIDs = NULL;
-   qfree(projects);
-   projects = NULL;
-   qfree(optMasks);
-   optMasks = NULL;
-
-   for (int i = 0; i < numOptionsGlobal; i++) {
-      qfree(optLabels[i]);
+void append_json_hex_val(json_object *obj, const char *key, const uint8_t *value, uint32_t len) {
+   if (len == 0) {
+      len = strlen((const char*)value);
    }
-   qfree(optLabels);
-   optLabels = NULL;
+   const char *hex = hex_encode(value, len);
+   json_object_object_add_ex(obj, key, json_object_new_string(hex), JSON_NEW_CONST_KEY);
+   qfree((void*)hex);
 }
 
-void selectProject(int index) {
-   if (index == NEW_PROJECT_INDEX) {
-#ifdef DEBUG
-      msg(PLUGIN_NAME": new project selected: %s\n", description);
-#endif
-      sendNewProjectCreate(description);
-   }
-   //else if (snapUpdateIDs[index + 1] != 0) {
-   else if (isSnapShotGlobal == 1) {
-#ifdef DEBUG
-      msg(PLUGIN_NAME": snapshot %d selected\n", index);
-#endif
-      sendProjectSnapFork(index, description);
-   }
-   else {
-#ifdef DEBUG
-      msg(PLUGIN_NAME": project %d selected\n", index);
-#endif
-      sendProjectChoice(index);
-   }
+void append_json_string_val(json_object *obj, const char *key, const char *value) {
+   json_object_object_add_ex(obj, key, json_object_new_string(value), JSON_NEW_CONST_KEY);
 }
 
-//pwhash and username must be set previously
-void sendAuthData(unsigned char *challenge, int challenge_len) {
-   uchar hmac[16];
-#ifdef DEBUG
-   msg(PLUGIN_NAME": computing hmac\n");
-#endif   
-   hmac_md5(challenge, challenge_len, pwhash, sizeof(pwhash), hmac);
-   memset(pwhash, 0, sizeof(pwhash));
-   
-   //connection to server successful.
-   Buffer auth;
-   auth.writeInt(MSG_AUTH_REQUEST);
-   //send plugin protocol version
-   auth.writeInt(PROTOCOL_VERSION);
-   //send user name
-   auth.writeUTF8(username);
-   //send hmac
-   auth.write(hmac, sizeof(hmac));
-#ifdef DEBUG
-   msg(PLUGIN_NAME": sending auth data buffer\n");
-#endif   
-   send_data(auth);
+void append_json_string_val(json_object *obj, const char *key, const qstring &value) {
+   append_json_string_val(obj, key, value.c_str());
 }
 
-void do_get_req_perms(Buffer &b) {
-   //display permission selection UI
-   //tempOpts.pub = 0xAAAAAAAA;
-   //tempOpts.sub = 0x55555555;
-   if (do_choose_perms(b)) {
-      sendReqPermsChoice();
+void append_json_bool_val(json_object *obj, const char *key, bool value) {
+   json_object_object_add_ex(obj, key, json_object_new_boolean((json_bool)value), JSON_NEW_CONST_KEY);
+}
+
+void append_json_uint64_val(json_object *obj, const char *key, uint64_t value) {
+   json_object_object_add_ex(obj, key, json_object_new_int64(value), JSON_NEW_CONST_KEY);
+}
+
+void append_json_uint32_val(json_object *obj, const char *key, uint32_t value) {
+   append_json_uint64_val(obj, key, value);
+}
+
+void append_json_int32_val(json_object *obj, const char *key, int32_t value) {
+   json_object_object_add_ex(obj, key, json_object_new_int(value), JSON_NEW_CONST_KEY);
+}
+
+void append_json_ea_val(json_object *obj, const char *key, ea_t value) {
+   append_json_uint64_val(obj, key, (uint64_t)value);
+}
+
+void send_json(json_object *obj) {
+   json_object_object_add_ex(obj, "user", json_object_new_string(username), JSON_NEW_CONST_KEY);
+   size_t jlen;
+   qstring json = json_object_to_json_string_length(obj, JSON_C_TO_STRING_PLAIN, &jlen);
+   json += '\n';
+   send_msg(json);
+   json_object_put(obj);   //release the object
+}
+
+void send_json(const char *type, json_object *obj) {
+   json_object_object_add_ex(obj, "type", json_object_new_string(type), JSON_NEW_CONST_KEY);
+   send_json(obj);      
+}
+
+void send_json(ea_t ea, const char *type, json_object *obj) {
+   json_object_object_add_ex(obj, "addr", json_object_new_int64(ea), JSON_NEW_CONST_KEY);
+   send_json(type, obj);
+}
+
+uint8_t *hex_from_json(json_object *json, const char *key, uint32_t *len) {
+   const char *hexstr = string_from_json(json, key);
+   uint8_t *res = NULL;
+   if (hexstr != NULL) {
+      res = hex_decode(hexstr, len);
    }
+   return res;
 }
 
-void do_get_proj_perms(Buffer &b) {
-   //display permission selection UI
-   //tempOpts.pub = 0xAAAAAAAA;
-   //tempOpts.sub = 0x55555555;
-//   Options oldOpts = tempOpts;
-   if (do_choose_perms(b)) {
-      //only call this if perms actually changed
-      sendProjPermsChoice();
+const char *string_from_json(json_object *json, const char *key) {
+   json_object *value;
+
+   if (!json_object_object_get_ex (json, key, &value)) {
+      return NULL;
    }
+
+   return json_object_get_string(value);
 }
 
-void do_send_user_message(const char *msg) {
-   Buffer b;
-   uint32_t len = 80 + strlen(msg);
-   char *m = new char[len];
-   ::qsnprintf(m, len, "< %s> %s", username, msg);
-   char *cr = m + strlen(m) - 1;
-   while (*cr == '\n' || *cr == '\r') {
-      *cr-- = 0;
+bool bool_from_json(json_object *json, const char *key, bool *val) {
+   json_object *value;
+
+   if (!json_object_object_get_ex (json, key, &value)) {
+      return false;
    }
-   b.writeInt(COMMAND_USER_MESSAGE);
-   time_t t;
-   time(&t);
-   b.writeInt((int)t);
-   b.writeUTF8(m);
-   delete [] m;
-   send_data(b);
+
+   *val = (bool)json_object_get_boolean(value);
+   return true;
 }
 
+bool uint64_from_json(json_object *json, const char *key, uint64_t *val) {
+   json_object *value;
+
+   if (!json_object_object_get_ex (json, key, &value)) {
+      return false;
+   }
+
+   *val = (uint64_t)json_object_get_int64(value);
+   return true;
+}
+
+bool ea_from_json(json_object *json, const char *key, ea_t *val) {
+   uint64_t tmp;
+   if (uint64_from_json(json, key, &tmp)) {
+      *val = (ea_t)tmp;
+      return true;
+   }
+   return false;
+}
+
+bool uint32_from_json(json_object *json, const char *key, uint32_t *val) {
+   uint64_t tmp;
+   if (uint64_from_json(json, key, &tmp)) {
+      *val = (uint32_t)tmp;
+      return true;
+   }
+   return false;
+}
+
+bool int32_from_json(json_object *json, const char *key, int32_t *val) {
+   json_object *value;
+
+   if (!json_object_object_get_ex (json, key, &value)) {
+      return false;
+   }
+
+   *val = (int32_t)json_object_get_int(value);
+   return true;
+}

@@ -36,9 +36,11 @@
 #include <err.h>
 #include <errno.h>
 #include <pthread.h>
+#include <json.h>
 
 #include "utils.h"
-#include "db_support.h"
+#include "basic_mgr.h"
+#include "db_mgr.h"
 #include "mgr_helper.h"
 #include "client.h"
 
@@ -48,11 +50,7 @@
 #define ERROR_BAD_UID "setuid current uid: %d target uid: %d\n"   
 #define ERROR_SET_SIGCHLD "Unable to set SIGCHLD handler"
 
-//change the following to the unprivileged user this
-//service drops privs to
-const char *svc_user = "collab";
-
-map<string,string> *conf = NULL;
+json_object *conf = NULL;
 
 /*
  * This farms exit status from forked children to avoid
@@ -73,7 +71,35 @@ void sigchld(int sig) {
  * the client thread crashes, the entire server crashes.
  */
 void loop(NetworkService *svc) {
+   ConnectionManagerBase *mgr;
+   if (conf == NULL) {
+      mgr = new BasicConnectionManager(conf);
+   }
+   else {
+      const char *mode = string_from_json(conf, "SERVER_MODE");
+      if (mode == NULL || strcmp(mode, "database")) {
+         fprintf(stderr, "Creating basic mode manager\n");
+         mgr = new BasicConnectionManager(conf);
+      }
+      else {
+         fprintf(stderr, "Creating database mode manager\n");
+         mgr = new DatabaseConnectionManager(conf);
+      }
+   }
    //should choose between Basic and Database connection managers here
+   mgr->start();
+   //need to instantiate a ManagerHelper here as well
+   ManagerHelper helper(mgr, conf);
+   helper.start();
+   while (!helper.done) {
+      NetworkIO *nio = svc->accept();
+      fprintf(stderr, "Accepted new client\n");
+      if (nio) {
+         mgr->add(nio);
+      }
+   }
+
+/*
    DatabaseConnectionManager mgr(conf);
    mgr.start();
    //need to instantiate a ManagerHelper here as well
@@ -85,6 +111,7 @@ void loop(NetworkService *svc) {
          mgr.add(nio);
       }   
    }
+*/
 }
 
 /*
@@ -192,6 +219,9 @@ int main(int argc, char **argv, char **envp) {
       switch (opt) {
          case 'c':
             conf = parseConf(optarg);
+            if (conf == NULL) {
+               fprintf(stderr, "Failed to parse json config file: %s\n", optarg);
+            }
             break;
          default:
             break;
@@ -199,6 +229,7 @@ int main(int argc, char **argv, char **envp) {
    }
    short svc_port = getShortOption(conf, "SERVER_PORT", 5042);
    string svc_host = getStringOption(conf, "SERVER_HOST", "");
+   const char *svc_user = getCstringOption(conf, "RUN_AS", NULL);
    try {
       if (svc_host.length() == 0) {
          svc = new Tcp6Service(svc_port);
@@ -209,8 +240,10 @@ int main(int argc, char **argv, char **envp) {
    } catch (int e) {
       exit(e);
    }
-   drop_privs_user(svc_user);
-   daemon(1, 0);
+   if (svc_user != NULL) {
+      drop_privs_user(svc_user);
+   }
+//   daemon(1, 0);
    writePidFile();
    loop(svc);
    return 0;

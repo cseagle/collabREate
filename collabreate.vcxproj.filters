@@ -15,19 +15,13 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="buffer.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="collabreate.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="collabreate_ui.hpp">
+    <ClInclude Include="collabreate_ui.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="idanet.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="resource.h">
+    <ClInclude Include="idanet.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="sdk_versions.h">
@@ -35,27 +29,22 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="collabreate.rc">
-      <Filter>Resource Files</Filter>
-    </ResourceCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="buffer.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="collabreate.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="collabreate_common.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="collabreate_options_dlg.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="collabreate_ui.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="idanet.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ida_ui.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="collab_hooks.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="collab_msgs.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

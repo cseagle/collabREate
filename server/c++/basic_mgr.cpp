@@ -40,11 +40,20 @@ using namespace std;
  */
 
 
-BasicConnectionManager::BasicConnectionManager(map<string,string> *p) : ConnectionManagerBase(p, true) {
+BasicConnectionManager::BasicConnectionManager(json_object *conf) : ConnectionManagerBase(conf, true) {
    basicmodepid = 500;
    sem_init(&pidLock, 0, 1);
 }
 
+BasicConnectionManager::~BasicConnectionManager() {
+   for (map<string,vector<ProjectInfo*>*>::iterator mi = basicProjects.begin(); mi != basicProjects.end(); mi++) {
+      vector<ProjectInfo*>* v = mi->second;
+      for (vector<ProjectInfo*>::iterator vi = v->begin(); vi != v->end(); vi++) {
+         delete *vi;
+      }
+      delete v;
+   }
+}
 
 /**
  * authenticate authenticates a user (for use in database mode)
@@ -54,7 +63,7 @@ BasicConnectionManager::BasicConnectionManager(map<string,string> *p) : Connecti
  * @param response the calculated response from the plugin to check 
  * @return the user id of an authenticated user, or INVALID_USER
  */
-int BasicConnectionManager::authenticate(Client *c, string user, const uint8_t *challenge, int clen, const uint8_t *response, int rlen) {
+int BasicConnectionManager::authenticate(Client *c, const char *user, const uint8_t *challenge, uint32_t clen, const uint8_t *response, uint32_t rlen) {
    //always authenticate in basic mode
    c->setUserPub(FULL_PERMISSIONS);
    c->setUserSub(FULL_PERMISSIONS);
@@ -68,8 +77,10 @@ int BasicConnectionManager::authenticate(Client *c, string user, const uint8_t *
  * @param cmd the 'command' that was performed (comment, rename, etc)
  * @param data the 'data' portion of the command (the comment text, etc)
  */
-void BasicConnectionManager::post(Client *src, int cmd, uint8_t *data, int dlen) {
-   queue.push_back(new Packet(src, data, dlen, 0));   //add a new packet with the binary data to the queue
+void BasicConnectionManager::post(Client *src, const char * cmd, json_object *obj) {
+   sem_wait(&queueMutex);
+   queue.push_back(new Packet(src, cmd, obj, 0));   //add a new packet with the binary data to the queue
+   sem_post(&queueMutex);
    sem_post(&queueSem);  //notify is the compliment to wait
 }
 
@@ -97,7 +108,8 @@ ProjectInfo *BasicConnectionManager::getProjectInfo(int pid) {
       for (Info_it pi = vpi->begin(); pi != vpi->end(); pi++) {
          if ((*pi)->lpid == pid) {
             (*pi)->connected = projects.numClients(pid);
-            return *pi;
+            ProjectInfo *pret = new ProjectInfo(**pi);
+            return pret;
          }
       }
    }
@@ -262,7 +274,8 @@ int BasicConnectionManager::snapforkProject(Client *c, int spid, const string &d
  * @return the new project id on success, -1 on failure
  */
 
-int BasicConnectionManager::migrateProject(int owner, string gpid, const string &hash, const string &desc, uint64_t pub, uint64_t sub) {
+int BasicConnectionManager::migrateProject(const char *owner, const string &gpid, const string &hash, const string &desc, uint64_t pub, uint64_t sub) {
+
    ::logln("migrating in BASIC mode doesn't make sense!", LERROR);
    return -1;
 }

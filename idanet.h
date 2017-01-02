@@ -1,5 +1,5 @@
 /*
-    Collabreate GUI and communications layer
+    Asynchronous IDA communications handler
     Copyright (C) 2008 Chris Eagle <cseagle at gmail d0t com>
 
     This program is free software; you can redistribute it and/or modify it
@@ -15,21 +15,29 @@
     You should have received a copy of the GNU General Public License along with
     this program; if not, write to the Free Software Foundation, Inc., 59 Temple
     Place, Suite 330, Boston, MA 02111-1307 USA
+
 */
 
-#ifndef __COLLABREATE_GUI_H__
-#define __COLLABREATE_GUI_H__
+#ifndef __IDACONNECTOR_H__
+#define __IDACONNECTOR_H__
 
-#include "buffer.h"
-#include "idanet.hpp"
+#include "sdk_versions.h"
 
-int do_choose_command();
-bool do_project_select(Buffer &b);
-bool do_connect(Dispatcher d);
-int  do_auth(unsigned char *challenge, int challenge_len);
-void do_set_req_perms(void);
-void do_set_proj_perms(void);
+typedef bool (*Dispatcher)(const char *json_in);
 
-//void showOptionsDlg(HWND parent, Options *in, Options *out, Options *mask, char * title);
+#ifndef __NT__
+#define _SOCKET int
+#define closesocket close
+#else
+#define _SOCKET unsigned int
+#endif
+
+#if IDA_SDK_VERSION >= 550
+bool connect_to(const char *host, short port, Dispatcher d);
+#else
+_SOCKET connect_to(const char *host, short port);
+bool createSocketWindow(_SOCKET s, Dispatcher d);
+void killWindow();
+#endif
 
 #endif

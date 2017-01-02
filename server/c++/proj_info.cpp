@@ -28,8 +28,11 @@ ProjectInfo::ProjectInfo(uint32_t localpid, const string &description, uint32_t 
    pdesc = "";
    snapupdateid = 0;
    pub = sub = 0;
-   owner = 0;
    proto = 0;
    hash = "";
    gpid = "";
+}
+
+ProjectInfo::ProjectInfo(const ProjectInfo &pi) {
+   *this = pi;
 }

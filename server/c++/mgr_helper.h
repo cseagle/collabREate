@@ -23,15 +23,18 @@
 
 #include <map>
 #include <string>
+#include <json.h>
 
 #include "utils.h"
 #include "client.h"
-#include "buffer.h"
 #include "mgr_helper.h"
 
 using namespace std;
 
 class ConnectionManagerBase;
+class ManagerHelper;
+
+typedef void (*MsgHandler)(json_object *obj, ManagerHelper *mh);
 
 /**
  * ManagerHelper
@@ -46,25 +49,26 @@ class ManagerHelper {
 private:
    NetworkIO *nio;
    Tcp6Service *ss;
-   map<string,string> *props;
+   json_object *conf;
    ConnectionManagerBase *cm;
    int pidForUpdates;
+   static map<string,MsgHandler> *handlers;
 
 public:
    /**
     * very similary to the other constructor, execpt config paramters are attempted
     * to be read from a properties object p
-    * @param connm the connectionManager associated with this ManagerHelper
+    * @param conn the connectionManager associated with this ManagerHelper
     * @param p a propertied object (config file)
     */
-   ManagerHelper(ConnectionManagerBase *connm, map<string,string> *p);
+   ManagerHelper(ConnectionManagerBase *conn, json_object *conf);
 
    /**
     * instantiates a new ManagerHelper with default parameters, the ManagerHelper
     * facilitates getting server state information to the ServerManager
-    * @param connm the connectionManager associated with this ManagerHelper
+    * @param conn the connectionManager associated with this ManagerHelper
     */
-   ManagerHelper(ConnectionManagerBase *connm);
+   ManagerHelper(ConnectionManagerBase *conn);
 
 private:
    void initCommon();
@@ -72,9 +76,9 @@ private:
    /**
     * send_data constructs the packet and sends it to the ServerManager
     * @param command the server command to send
-    * @param data the data relevant to be sent with command
+    * @param obj the data relevant to be sent with command
     */
-   void send_data(int command, uint8_t *data, int dlen);
+   void send_data(const char *command, json_object *obj = NULL);
 
    /**
     * run kicks off a thread that perpetually waits for a single connection, if the connection is dropped
@@ -101,8 +105,18 @@ private:
     */
    void logln(const string &msg, int v = 0);
 
+   static void mng_get_connections(json_object *obj, ManagerHelper *mh);
+   static void mng_get_stats(json_object *obj, ManagerHelper *mh);
+   static void mng_shutdown(json_object *obj, ManagerHelper *mh);
+   static void mng_project_migrate(json_object *obj, ManagerHelper *mh);
+   static void mng_migrate_update(json_object *obj, ManagerHelper *mh);
+
+   void init_handlers();
+
 public:
    void start();
+
+   bool done;
 
 };
 

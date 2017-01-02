@@ -1,6 +1,0 @@
-#!/bin/sh
-
-qmake -o Makefile.g++ collab.pro -platform macx-g++
-make -f Makefile.g++ clean
-make -f Makefile.g++
-cp ../../../bin/plugins/libcollab_qt.1.0.0.dylib ../../../bin/plugins/collab_qt.pmc

@@ -21,12 +21,12 @@
 #ifndef __SERVER_MGR_H
 #define __SERVER_MGR_H
 
-#include <map>
 #include <string>
 #include <vector>
 #include <sys/stat.h>
 #include <ctype.h>
 #include <libpq-fe.h>
+#include <json.h>
 #include "client.h"
 #include "utils.h"
 
@@ -45,7 +45,7 @@ class ProjectInfo;
 class ServerManager {
 private:
    bool done;
-   map<string,string> *props;
+   json_object *config;
    PGconn *dbConn;
    int port;
    string host;
@@ -56,7 +56,7 @@ private:
    vector<ProjectInfo*> plist;
 
 public:
-   ServerManager(map<string,string> *p);
+   ServerManager(json_object *p);
 
 private:
 
@@ -107,7 +107,7 @@ private:
     * @param command the command to send
     * @param data the data associated with the command
     */
-   void send_data(int command, uint8_t *data, int dlen);
+   void send_data(const char *command, json_object *obj = NULL);
 
    /**
     * dumpStats dumps rx/tx stats for this server
@@ -144,13 +144,13 @@ private:
     * @param ifile the filename to import from
     * @param newowner the local uid to be the owner of the new project
     */
-   int importProject(FILE *ifile, int newowner);
+   int importProject(FILE *ifile, const char *newowner);
 
    /**
-    * getProps is an inspector that gets the current operation mode of the connection manager
+    * getconfig is an inspector that gets the current operation mode of the connection manager
     * @return a Properites object
     */
-   map<string,string> *getProps();
+   json_object *getConfig();
 
    /**
     * getMode is an inspector that gets the current operation mode of the connection manager

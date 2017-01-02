@@ -21,13 +21,18 @@
 #ifndef __CLIENT_H
 #define __CLIENT_H
 
+#include <map>
 #include <string>
 #include <stdint.h>
+#include <json.h>
 #include "utils.h"
 
 using namespace std;
 
 class ConnectionManagerBase;
+class Client;
+
+typedef bool (*ClientMsgHandler)(json_object *obj, Client *c);
 
 /**
  * Client
@@ -135,7 +140,7 @@ public:
     * post is the function that actually posts updates to clients (if subscribing)
     * @param data the bytearray containing the update to send
     */
-   void post(const uint8_t *data, int dlen);
+   void post(const char *msg, json_object *obj);
    
    /**
     * similar to post, but does not check subscription status, and takes command as a arg
@@ -144,7 +149,7 @@ public:
     * @param command the command to send
     * @param data the data associated with the command
     */
-   void send_data(int command, uint8_t *data, int dlen);
+   void send_data(const char *command, json_object *obj);
 
    /**
     * sendForkFollow sends a FORKFOLLOW message to the client, this occurs when another
@@ -157,7 +162,7 @@ public:
     */
    void sendForkFollow(string fuser, string gpid, uint64_t lastupdateid, string desc);
 
-   void send_error_msg(string theerror, int type);
+   void send_error_msg(string theerror, const char *type);
 
    /**
     * send_error sends an error string to the plugin 
@@ -308,8 +313,8 @@ private:
     * for example all the segment operations (add, del, start/end change, etc) are grouped into 
     * 'segment' permissions. 
     */ 
-   bool checkPermissions(uint32_t command, uint64_t permType);  
-   static int parseCommand(const uint8_t *data, int dlen);
+   bool checkPermissions(const char *command, uint64_t permType);  
+   static void init_handlers(); 
 
    NetworkIO *conn;
    string hash;
@@ -337,6 +342,25 @@ private:
    int stats[2][MAX_COMMAND];
    
    bool basicMode;
+
+   static map<string,ClientMsgHandler> *handlers;
+
+   static bool msg_project_new_request(json_object *obj, Client *c);
+   static bool msg_project_join_request(json_object *obj, Client *c);
+   static bool msg_project_rejoin_request(json_object *obj, Client *c);
+   static bool msg_project_snapshot_request(json_object *obj, Client *c);
+   static bool msg_project_fork_request(json_object *obj, Client *c);
+   static bool msg_project_snapfork_request(json_object *obj, Client *c);
+   static bool msg_project_leave(json_object *obj, Client *c);
+   static bool msg_project_join_reply(json_object *obj, Client *c);
+   static bool msg_auth_request(json_object *obj, Client *c);
+   static bool msg_project_list(json_object *obj, Client *c);
+   static bool msg_send_updates(json_object *obj, Client *c);
+   static bool msg_set_req_perms(json_object *obj, Client *c);
+   static bool msg_get_req_perms(json_object *obj, Client *c);
+   static bool msg_get_proj_perms(json_object *obj, Client *c);
+   static bool msg_set_proj_perms(json_object *obj, Client *c);
+
 };
 
 #endif
