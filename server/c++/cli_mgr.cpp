@@ -33,7 +33,7 @@ Packet::Packet(Client *src, const char *cmd, json_object *obj, uint64_t updateid
    c = src;
    this->cmd = cmd;
    this->obj = obj;
-   uid = htonll(updateid);
+   uid = updateid;
    append_json_uint64_val(obj, "updateid", updateid);   //is this really necessary?
 }
 
