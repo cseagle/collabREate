@@ -703,18 +703,16 @@ bool Client::msg_project_list(json_object *obj, Client *c) {
       append_json_int32_val(proj, "id", (*pi)->lpid);
       append_json_uint64_val(proj, "snap_id", (*pi)->snapupdateid);
       if ((*pi)->parent > 0) {
+         char buf[256];
          if ((*pi)->snapupdateid > 0) {
-            char buf[256];
             snprintf(buf, sizeof(buf), "[-] %s (SNAP of '%s'@%"PRIu64" updates])", (*pi)->desc.c_str(), (*pi)->pdesc.c_str(), (*pi)->snapupdateid);
-            append_json_string_val(proj, "description", buf);
 //                           log("[-] " + pi.desc + " (snapshot of (" + pi.parent + ")'" + pi.pdesc+"' ["+ pi.snapupdateid + " updates]) ", LDEBUG);
          }
          else {
-            char buf[256];
             snprintf(buf, sizeof(buf), "[%d] %s (FORK of '%s')", (*pi)->connected, (*pi)->desc.c_str(), (*pi)->pdesc.c_str());
-            append_json_string_val(proj, "description", buf);
 //                           log("[" + pi.connected + "] " + pi.desc + " (forked from (" + pi.parent + ") '" + pi.pdesc +"')", LDEBUG);
          }
+         append_json_string_val(proj, "description", buf);
       }
       else {
          char buf[128];
