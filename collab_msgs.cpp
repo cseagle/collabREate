@@ -611,7 +611,7 @@ int cmd_op_type_changed(json_object *json) {
 }
 
 int cmd_enum_created(json_object *json) {
-   const char *ename = string_from_json(json, "name");
+   const char *ename = string_from_json(json, "enum_name");
    if (ename != NULL) {
       add_enum((size_t)BADADDR, ename, (flags_t)0);
       //Perhaps should report tid to server in case it is renamed???
@@ -621,7 +621,7 @@ int cmd_enum_created(json_object *json) {
 }
 
 int cmd_enum_deleted(json_object *json) {
-   const char *ename = string_from_json(json, "name");
+   const char *ename = string_from_json(json, "enum_name");
    if (ename != NULL) {
       enum_t id = get_enum(ename);
       del_enum(id);
@@ -656,7 +656,7 @@ int cmd_enum_cmt_changed(json_object *json) {
    const char *name;
    bool rep;
    const char *cmt = string_from_json(json, "comment");
-   name = string_from_json(json, "name");
+   name = string_from_json(json, "enum_name");
    if (name == NULL || cmt == NULL || !bool_from_json(json, "rep", &rep)) {
       return -1;
    }
@@ -721,7 +721,7 @@ int cmd_struc_created(json_object *json) {
    //ignoring uint64_t "tid" field
 
    bool is_union;
-   const char *sname = string_from_json(json, "name");
+   const char *sname = string_from_json(json, "struc_name");
    if (sname == NULL || !bool_from_json(json, "union", &is_union)) {
       return -1;
    }
@@ -734,7 +734,7 @@ int cmd_struc_created(json_object *json) {
 }
 
 int cmd_struc_deleted(json_object *json) {
-   const char *name = string_from_json(json, "name");
+   const char *name = string_from_json(json, "struc_name");
    tid_t t = get_struc_id(name);
    struc_t *s = get_struc(t);
    del_struc(s);
@@ -762,7 +762,7 @@ int cmd_struc_renamed(json_object *json) {
 
 int cmd_struc_expanded(json_object *json) {
    //ignoring uint64_t "tid" field, need to try to map struct id to other instances ID
-   const char *sname = string_from_json(json, "name");
+   const char *sname = string_from_json(json, "struc_name");
 //         msg(PLUGIN_NAME": received COMMAND_STRUC_EXPANDED message for %s\n", sname);
    // ******
    return 0;
@@ -770,7 +770,7 @@ int cmd_struc_expanded(json_object *json) {
 
 int cmd_struc_cmt_changed(json_object *json) {
    bool rep;
-   const char *tname = string_from_json(json, "name");
+   const char *tname = string_from_json(json, "struc_name");
    const char *cmt = string_from_json(json, "comment");
    if (tname == NULL || cmt == NULL || !bool_from_json(json, "rep", &rep)) {
       return -1;
@@ -796,7 +796,7 @@ int cmd_struc_cmt_changed(json_object *json) {
 
 int cmd_create_struc_member_data(json_object *json) {
    const char *mbr = string_from_json(json, "member");
-   const char *name = string_from_json(json, "name");
+   const char *name = string_from_json(json, "struc_name");
 
    if (name == NULL || mbr == NULL) {
       return -1;
@@ -836,7 +836,7 @@ int cmd_create_struc_member_struct(json_object *json) {
    asize_t sz = (asize_t)tmp;
    //should send opinfo_t as well
    const char *mbr = string_from_json(json, "member");
-   const char *name = string_from_json(json, "name");
+   const char *name = string_from_json(json, "struc_name");
    tid_t t = get_struc_id(name);
    struc_t *s = get_struc(t);
    add_struc_member(s, mbr, soff, f, &ti, sz);
@@ -858,7 +858,7 @@ int cmd_crete_struc_member_str(json_object *json) {
    asize_t sz = (asize_t)tmp;
    //should send opinfo_t as well
    const char *mbr = string_from_json(json, "member");
-   const char *name = string_from_json(json, "name");
+   const char *name = string_from_json(json, "struc_name");
    tid_t t = get_struc_id(name);
    struc_t *s = get_struc(t);
    add_struc_member(s, mbr, soff, f, &ti, sz);
@@ -882,7 +882,7 @@ int cmd_create_struc_member_enum(json_object *json) {
    asize_t sz = (asize_t)tmp;
    //should send opinfo_t as well
    const char *mbr = string_from_json(json, "member");
-   const char *name = string_from_json(json, "name");
+   const char *name = string_from_json(json, "struc_name");
    tid_t t = get_struc_id(name);
    struc_t *s = get_struc(t);
    add_struc_member(s, mbr, soff, f, &ti, sz);
@@ -906,7 +906,7 @@ int cmd_create_struc_member_offset(json_object *json) {
    asize_t sz = (asize_t)tmp;
    //should send opinfo_t as well
    const char *mbr = string_from_json(json, "member");
-   const char *name = string_from_json(json, "name");
+   const char *name = string_from_json(json, "struc_name");
    tid_t t = get_struc_id(name);
    struc_t *s = get_struc(t);
    add_struc_member(s, mbr, soff, f, &ti, sz);
@@ -917,7 +917,7 @@ int cmd_create_struc_member_offset(json_object *json) {
 int cmd_struc_member_deleted(json_object *json) {
    ea_t off;
    ea_from_json(json, "offset", &off);
-   const char *name = string_from_json(json, "name");
+   const char *name = string_from_json(json, "struc_name");
    tid_t t = get_struc_id(name);
    struc_t *s = get_struc(t);
    del_struc_member(s, off);
@@ -957,7 +957,7 @@ int cmd_struc_member_changed_data(json_object *json) {
    ea_from_json(json, "eoff", &eoff);
    uint64_from_json(json, "flag", &tmp);
    flags_t flags = (flags_t)tmp;
-   const char *name = string_from_json(json, "name");
+   const char *name = string_from_json(json, "struc_name");
    if (name) {
       struc_t *s = get_struc(get_struc_id(name));
       set_member_type(s, soff, flags, NULL, eoff - soff);
@@ -1063,7 +1063,7 @@ int cmd_thunk_created(json_object *json) {
 
 int cmd_func_tail_appended(json_object *json) {
    ea_t startEA, tail_start, tail_end;
-   if (!ea_from_json(json, "startea", &startEA) || 
+   if (!ea_from_json(json, "funcea", &startEA) || 
        !ea_from_json(json, "tail_start", &tail_start) ||
        !ea_from_json(json, "tail_end", &tail_end)) {
       return -1;

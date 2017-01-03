@@ -322,6 +322,9 @@ void append_json_ea_val(json_object *obj, const char *key, ea_t value) {
    append_json_uint64_val(obj, key, (uint64_t)value);
 }
 
+/* This is the final use of the provided json object so
+   this function does the json_object_put to release
+   any associated resources */
 void send_json(json_object *obj) {
    json_object_object_add_ex(obj, "user", json_object_new_string(username), JSON_NEW_CONST_KEY);
    size_t jlen;

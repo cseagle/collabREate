@@ -311,6 +311,215 @@ func_t *func_from_frame(struc_t *frame) {
    return NULL;
 }
 
+void idp_undefine(ea_t ea) {
+   //send address to server
+   json_object *obj = json_object_new_object();
+   send_json(ea, COMMAND_UNDEFINE, obj);
+
+/*
+   if (send_data(b) == -1) {
+      msg(PLUGIN_NAME": send error on undefine %x\n", (uint32_t)ea);
+   }
+*/
+}
+
+void idp_make_code(ea_t ea, asize_t len) {
+   //send address and length to server
+   json_object *obj = json_object_new_object();
+   append_json_uint64_val(obj, "length", (uint64_t)len);
+   send_json(ea, COMMAND_MAKE_CODE, obj);
+
+/*
+   if (send_data(b) == -1) {
+      msg(PLUGIN_NAME": send error on make_code %x, %d\n", (uint32_t)ea, (int)len);
+   }
+*/
+}
+
+void idp_make_data(ea_t ea, flags_t f, tid_t t, asize_t len) {
+   //send all to server
+   json_object *obj = json_object_new_object();
+   append_json_uint64_val(obj, "length", (uint64_t)len);
+   append_json_uint64_val(obj, "flags", (uint64_t)f);
+
+   if (t != BADNODE) {
+#if IDA_SDK_VERSION < 680
+      char name[MAXNAMESIZE];
+      get_struc_name(t, name, sizeof(name));
+#else
+      qstring name;
+      get_struc_name(&name, t);
+#endif
+      append_json_string_val(obj, "struc", name);
+   }
+
+   send_json(ea, COMMAND_MAKE_DATA, obj);   
+
+/*
+   if (send_data(b) == -1) {
+      msg(PLUGIN_NAME": send error on make_data %x, %x, %x, %d\n", (uint32_t)ea, f, (uint32_t)t, (int)len);
+   }
+*/
+}
+
+void idp_move_segm(ea_t ea, segment_t *seg) {
+   json_object *obj = json_object_new_object();
+   append_json_ea_val(obj, "from", ea);
+   append_json_ea_val(obj, "to", seg->startEA);
+   send_json(COMMAND_MOVE_SEGM, obj);   
+/*
+   if (send_data(b) == -1) {
+      msg(PLUGIN_NAME": send error on move_segm %x, %x\n", (uint32_t)ea, (uint32_t)seg->startEA);
+   }
+*/
+}
+
+void idp_renamed(ea_t ea, const char *new_name, bool is_local) {
+   //send all to server
+   json_object *obj = json_object_new_object();
+   append_json_bool_val(obj, "local", (json_bool)is_local);
+   append_json_string_val(obj, "name", new_name);
+   send_json(ea, COMMAND_RENAMED, obj);   
+/*
+   if (send_data(b) == -1) {
+      msg(PLUGIN_NAME": send error on rename %x, %s, %d\n", (uint32_t)ea, new_name, is_local);
+   }
+*/
+}
+
+void idp_add_func(func_t *pfn) {
+   //send start, end address, name, flags (bp etc), purged, locals, delta, args
+   json_object *obj = json_object_new_object();
+   append_json_ea_val(obj, "startea", pfn->startEA);
+   append_json_ea_val(obj, "endea", pfn->endEA);
+   send_json(COMMAND_ADD_FUNC, obj);   
+/*
+   if (send_data(b) == -1) {
+      msg(PLUGIN_NAME": send error on add_func %x\n", (uint32_t)pfn->startEA);
+   }
+*/
+}
+
+void idp_del_func(func_t *pfn) {
+   //send start, end address, name, flags (bp etc), purged, locals, delta, args
+   json_object *obj = json_object_new_object();
+   send_json(pfn->startEA, COMMAND_DEL_FUNC, obj);   
+/*
+   if (send_data(b) == -1) {
+      msg(PLUGIN_NAME": send error on del_func %x\n", (uint32_t)pfn->startEA);
+   }
+*/
+}
+
+void idp_set_func_start(func_t *pfn, ea_t ea) {
+   //send pfn->startEA and ea to server
+   json_object *obj = json_object_new_object();
+   append_json_ea_val(obj, "old_start", pfn->startEA);
+   append_json_ea_val(obj, "new_start", ea);
+   send_json(COMMAND_SET_FUNC_START, obj);   
+/*
+   if (send_data(b) == -1) {
+      msg(PLUGIN_NAME": send error on set_func_start %x, %x\n", (uint32_t)pfn->startEA, (uint32_t)ea);
+   }
+*/
+}
+
+void idp_set_func_end(func_t *pfn, ea_t ea) {
+   //send pfn->startEA and ea to server
+   json_object *obj = json_object_new_object();
+   append_json_ea_val(obj, "startea", pfn->startEA);
+   append_json_ea_val(obj, "endea", ea);
+   send_json(COMMAND_SET_FUNC_END, obj);
+/*
+   if (send_data(b) == -1) {
+      msg(PLUGIN_NAME": send error on set_func_end %x, %x\n", (uint32_t)pfn->startEA, (uint32_t)ea);
+   }
+*/
+}
+
+void idp_validate_flirt(ea_t ea, const char *name) {
+   //send ea and name to server, apply name and set library func flag on remote side
+   json_object *obj = json_object_new_object();
+   append_json_string_val(obj, "name", name);
+   append_json_ea_val(obj, "startea", ea);
+
+   func_t *f = get_func(ea);
+   if (f) {
+      append_json_ea_val(obj, "endea", f->endEA);
+   }
+
+   send_json(COMMAND_VALIDATE_FLIRT_FUNC, obj);
+/*
+   if (send_data(b) == -1) {
+      msg(PLUGIN_NAME": send error on validate_flirt %x, %s\n", (uint32_t)ea, name);
+   }
+*/
+}
+
+void idp_add_cref(ea_t from, ea_t to, cref_t type) {
+   json_object *obj = json_object_new_object();
+   append_json_ea_val(obj, "from", from);
+   append_json_ea_val(obj, "to", to);
+   append_json_uint64_val(obj, "reftype", (uint64_t)type);
+   send_json(COMMAND_ADD_CREF, obj);
+/*
+   if (send_data(b) == -1) {
+      msg(PLUGIN_NAME": send error on add_cref %x, %x, %x\n", (uint32_t)from, (uint32_t)to, type);
+   }
+*/
+}
+
+void idp_add_dref(ea_t from, ea_t to, dref_t type) {
+   json_object *obj = json_object_new_object();
+   append_json_ea_val(obj, "from", from);
+   append_json_ea_val(obj, "to", to);
+   append_json_uint64_val(obj, "reftype", (uint64_t)type);
+   send_json(COMMAND_ADD_DREF, obj);
+/*
+   if (send_data(b) == -1) {
+      msg(PLUGIN_NAME": send error on add_dref %x, %x, %x\n", (uint32_t)from, (uint32_t)to, type);
+   }
+*/
+}
+
+void idp_del_cref(ea_t from, ea_t to, bool expand) {
+   json_object *obj = json_object_new_object();
+   append_json_ea_val(obj, "from", from);
+   append_json_ea_val(obj, "to", to);
+   append_json_bool_val(obj, "expand", (json_bool)expand);
+   send_json(COMMAND_DEL_CREF, obj);
+/*
+   if (send_data(b) == -1) {
+      msg(PLUGIN_NAME": send error on del_cref %x, %x, %x\n", (uint32_t)from, (uint32_t)to, expand);
+   }
+*/
+}
+
+void idp_del_dref(ea_t from, ea_t to) {
+   json_object *obj = json_object_new_object();
+   append_json_ea_val(obj, "from", from);
+   append_json_ea_val(obj, "to", to);
+   send_json(COMMAND_DEL_DREF, obj);
+/*
+   if (send_data(b) == -1) {
+      msg(PLUGIN_NAME": send error on del_dref 0x%08x, 0x%08x\n", (uint32_t)from, (uint32_t)to);
+   }
+*/
+}
+
+void byte_patched(ea_t ea) {
+   json_object *obj = json_object_new_object();
+   uint32_t val = (uint32_t)get_byte(ea);
+   //send value to server
+   append_json_uint32_val(obj, "value", val);
+   send_json(ea, COMMAND_BYTE_PATCHED, obj);
+/*
+   if (send_data(b) == -1) {
+      msg(PLUGIN_NAME": send error on byte_patched %x, %x\n", (uint32_t)ea, val);
+   }
+*/
+}
+
 void comment_changed(ea_t ea, bool rep) {
    ssize_t ssz = get_cmt(ea, rep, NULL, 0) + 1;
    if (ssz != -1) {
@@ -325,8 +534,8 @@ void comment_changed(ea_t ea, bool rep) {
          }
          //send comment to server
          json_object *obj = json_object_new_object();
-         json_object_object_add_ex(obj, "text", json_object_new_string(cmt), JSON_NEW_CONST_KEY);
-         json_object_object_add_ex(obj, "rep", json_object_new_boolean((json_bool)rep), JSON_NEW_CONST_KEY);
+         append_json_string_val(obj, "text", cmt);
+         append_json_bool_val(obj, "rep", (json_bool)rep);
          send_json(ea, COMMAND_CMT_CHANGED, obj);
 /*
          if (send_data(b) == -1) {
@@ -336,19 +545,6 @@ void comment_changed(ea_t ea, bool rep) {
          qfree(cmt);
       }
    }
-}
-
-void byte_patched(ea_t ea) {
-   json_object *obj = json_object_new_object();
-   uint32_t val = (uint32_t)get_byte(ea);
-   //send value to server
-   append_json_uint32_val(obj, "value", val);
-   send_json(ea, COMMAND_BYTE_PATCHED, obj);
-/*
-   if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on byte_patched %x, %x\n", (uint32_t)ea, val);
-   }
-*/
 }
 
 void change_ti(ea_t ea, const type_t *type, const p_list *fnames) {
@@ -367,7 +563,7 @@ void change_op_ti(ea_t ea, int n, const type_t *type, const p_list *fnames) {
    json_object *obj = json_object_new_object();
    append_json_hex_val(obj, "ti", (const uint8_t*)type);
    append_json_hex_val(obj, "fnames", (const uint8_t*)fnames);
-   json_object_object_add_ex(obj, "opnum", json_object_new_int(n), JSON_NEW_CONST_KEY);
+   append_json_int32_val(obj, "opnum", n);
    send_json(ea, COMMAND_OP_TI_CHANGED, obj);
 /*
    if (send_data(b) == -1) {
@@ -512,7 +708,7 @@ void create_enum(enum_t id) {
 
    if (sz > 0) {
       json_object *obj = json_object_new_object();
-      append_json_string_val(obj, "name", name);
+      append_json_string_val(obj, "enum_name", name);
       send_json(COMMAND_ENUM_CREATED, obj);
 #if IDA_SDK_VERSION < 680
 /*
@@ -544,7 +740,7 @@ void delete_enum(enum_t id) {
 
    if (sz > 0) {
       json_object *obj = json_object_new_object();
-      append_json_string_val(obj, "name", name);
+      append_json_string_val(obj, "enum_name", name);
       send_json(COMMAND_ENUM_DELETED, obj);
 #if IDA_SDK_VERSION < 680
 /*
@@ -578,7 +774,7 @@ void change_enum_bf(enum_t id) {
 #endif
 
    if (sz > 0) {
-      append_json_string_val(obj, "name", name);
+      append_json_string_val(obj, "enum_name", name);
       send_json(COMMAND_ENUM_BF_CHANGED, obj);
 /*
       if (send_data(b) == -1) {
@@ -602,7 +798,7 @@ void rename_enum(tid_t t) {
    ssize_t len = cnn.supstr(t, oldname, sizeof(oldname), COLLABREATE_ENUMS_TAG);
    if (sz > 0 && len > 0) {
       json_object *obj = json_object_new_object();
-      json_object_object_add_ex(obj, "oldname", json_object_new_string(oldname), JSON_NEW_CONST_KEY);
+      append_json_string_val(obj, "oldname", oldname);
       append_json_string_val(obj, "newname", newname);
       send_json(COMMAND_ENUM_RENAMED, obj);
 #if IDA_SDK_VERSION < 680
@@ -637,9 +833,9 @@ void change_enum_cmt(tid_t t, bool rep) {
    /*ssize_t csz =*/ get_enum_cmt(t, rep, cmt, sizeof(cmt));
    if (sz > 0) {
       json_object *obj = json_object_new_object();
-      append_json_string_val(obj, "name", name);
-      json_object_object_add_ex(obj, "comment", json_object_new_string(cmt), JSON_NEW_CONST_KEY);
-      json_object_object_add_ex(obj, "rep", json_object_new_boolean((json_bool)rep), JSON_NEW_CONST_KEY);
+      append_json_string_val(obj, "enum_name", name);
+      append_json_string_val(obj, "comment", cmt);
+      append_json_bool_val(obj, "rep", (json_bool)rep);
       send_json(COMMAND_ENUM_CMT_CHANGED, obj);
 /*
       if (send_data(b) == -1) {
@@ -684,7 +880,7 @@ void create_enum_member(enum_t id, const_t cid) {
 #endif
 
    append_json_string_val(obj, "mname", mname);
-   json_object_object_add_ex(obj, "value", json_object_new_int64((uint64_t)value), JSON_NEW_CONST_KEY);
+   append_json_uint64_val(obj, "value", (uint64_t)value);
    send_json(COMMAND_ENUM_CONST_CREATED, obj);
 }
 
@@ -701,9 +897,9 @@ void delete_enum_member(enum_t id, const_t cid) {
    uchar serial = get_const_serial(cid);
 #endif
 
-   json_object_object_add_ex(obj, "value", json_object_new_int((int)value), JSON_NEW_CONST_KEY);
-   json_object_object_add_ex(obj, "bmask", json_object_new_int((int)bmask), JSON_NEW_CONST_KEY);
-   json_object_object_add_ex(obj, "serial", json_object_new_int((int)serial), JSON_NEW_CONST_KEY);
+   append_json_int32_val(obj, "value", (int)value);
+   append_json_int32_val(obj, "bmask", (int)bmask);
+   append_json_int32_val(obj, "serial", (int)serial);
 
 #if IDA_SDK_VERSION < 680
    char ename[MAXNAMESIZE];
@@ -730,9 +926,9 @@ void create_struct(tid_t t) {
       struc_t *s = get_struc(t);
 
       json_object *obj = json_object_new_object();
-      append_json_string_val(obj, "name", name);
-      json_object_object_add_ex(obj, "tid", json_object_new_int64((uint64_t)t), JSON_NEW_CONST_KEY);
-      json_object_object_add_ex(obj, "union", json_object_new_boolean((json_bool)s->is_union()), JSON_NEW_CONST_KEY);
+      append_json_string_val(obj, "struc_name", name);
+      append_json_uint64_val(obj, "tid", (uint64_t)t);
+      append_json_bool_val(obj, "union", (json_bool)s->is_union());
       send_json(COMMAND_STRUC_CREATED, obj);
 
 #if IDA_SDK_VERSION < 680
@@ -766,7 +962,7 @@ void delete_struct(tid_t s) {
 #endif
    if (sz > 0) {
       json_object *obj = json_object_new_object();
-      append_json_string_val(obj, "name", name);
+      append_json_string_val(obj, "struc_name", name);
       send_json(COMMAND_STRUC_DELETED, obj);
 /*
 #if IDA_SDK_VERSION < 680
@@ -796,11 +992,11 @@ void rename_struct(struc_t *s) {
    ssize_t len = cnn.supstr(s->id, oldname, sizeof(oldname), COLLABREATE_STRUCTS_TAG);
    if (sz > 0 && len > 0) {
       json_object *obj = json_object_new_object();
-      json_object_object_add_ex(obj, "oldname", json_object_new_string(oldname), JSON_NEW_CONST_KEY);
+      append_json_string_val(obj, "oldname", oldname);
       append_json_string_val(obj, "newname", newname);
       //tids are never guaranteed to map beween any two IDBs
       //need to try to map struct id to other instances ID
-      json_object_object_add_ex(obj, "tid", json_object_new_int64((uint64_t)s->id), JSON_NEW_CONST_KEY);
+      append_json_uint64_val(obj, "tid", (uint64_t)s->id);
       send_json(COMMAND_STRUC_RENAMED, obj);
 
 #if IDA_SDK_VERSION < 680
@@ -835,10 +1031,10 @@ void expand_struct(struc_t *s) {
 #ifdef DEBUG
       msg(PLUGIN_NAME": struct %s has been expanded\n", name);
 #endif
-      append_json_string_val(obj, "name", name);
+      append_json_string_val(obj, "struc_name", name);
       //tids are never guaranteed to map beween any two IDBs
       //need to try to map struct id to other instances ID
-      json_object_object_add_ex(obj, "tid", json_object_new_int64((uint64_t)s->id), JSON_NEW_CONST_KEY);
+      append_json_uint64_val(obj, "tid", (uint64_t)s->id);
       send_json(COMMAND_STRUC_EXPANDED, obj);
 /*
 #if IDA_SDK_VERSION < 680
@@ -867,9 +1063,9 @@ void change_struc_cmt(tid_t t, bool rep) {
    /*ssize_t csz =*/ get_struc_cmt(t, rep, cmt, sizeof(cmt));
 
    json_object *obj = json_object_new_object();
-   append_json_string_val(obj, "name", name);
-   json_object_object_add_ex(obj, "comment", json_object_new_string(cmt), JSON_NEW_CONST_KEY);
-   json_object_object_add_ex(obj, "rep", json_object_new_boolean((json_bool)rep), JSON_NEW_CONST_KEY);
+   append_json_string_val(obj, "struc_name", name);
+   append_json_string_val(obj, "comment", cmt);
+   append_json_bool_val(obj, "rep", (json_bool)rep);
    send_json(COMMAND_STRUC_CMT_CHANGED, obj);
 
 /*
@@ -961,7 +1157,7 @@ void create_struct_member(struc_t *s, member_t *m) {
    /*ssize_t msz =*/ get_member_name2(&mbr, m->id);
 #endif
 
-   append_json_string_val(obj, "name", name);
+   append_json_string_val(obj, "struc_name", name);
    append_json_string_val(obj, "member", mbr);
    
    send_json(obj);
@@ -990,7 +1186,7 @@ void delete_struct_member(struc_t *s, tid_t /*m*/, ea_t offset) {
    /*ssize_t ssz =*/ get_struc_name(&name, s->id);
 #endif
 
-   append_json_string_val(obj, "name", name);
+   append_json_string_val(obj, "struc_name", name);
    append_json_ea_val(obj, "offset", offset);
 
    send_json(COMMAND_STRUC_MEMBER_DELETED, obj);
@@ -1310,202 +1506,6 @@ void change_area_comment(areacb_t *cb, const area_t *a, const char *cmt, bool re
 /*
    if (send_data(b) == -1) {
       msg(PLUGIN_NAME": send error on change_area_comment %x, %s\n", (uint32_t)a->startEA, cmt);
-   }
-*/
-}
-
-void idp_undefine(ea_t ea) {
-   //send address to server
-   json_object *obj = json_object_new_object();
-   send_json(COMMAND_MAKE_CODE, obj);
-
-/*
-   if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on undefine %x\n", (uint32_t)ea);
-   }
-*/
-}
-
-void idp_make_code(ea_t ea, asize_t len) {
-   //send address and length to server
-   json_object *obj = json_object_new_object();
-   json_object_object_add_ex(obj, "length", json_object_new_int64(len), JSON_NEW_CONST_KEY);
-   send_json(ea, COMMAND_MAKE_CODE, obj);
-
-/*
-   if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on make_code %x, %d\n", (uint32_t)ea, (int)len);
-   }
-*/
-}
-
-void idp_make_data(ea_t ea, flags_t f, tid_t t, asize_t len) {
-   //send all to server
-   json_object *obj = json_object_new_object();
-   json_object_object_add_ex(obj, "length", json_object_new_int64(len), JSON_NEW_CONST_KEY);
-   json_object_object_add_ex(obj, "flags", json_object_new_int64(f), JSON_NEW_CONST_KEY);
-
-   if (t != BADNODE) {
-#if IDA_SDK_VERSION < 680
-      char name[MAXNAMESIZE];
-      get_struc_name(t, name, sizeof(name));
-#else
-      qstring name;
-      get_struc_name(&name, t);
-#endif
-      append_json_string_val(obj, "struc", name);
-   }
-
-   send_json(ea, COMMAND_MAKE_DATA, obj);   
-
-/*
-   if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on make_data %x, %x, %x, %d\n", (uint32_t)ea, f, (uint32_t)t, (int)len);
-   }
-*/
-}
-
-void idp_move_segm(ea_t ea, segment_t *seg) {
-   json_object *obj = json_object_new_object();
-   json_object_object_add_ex(obj, "from", json_object_new_int64(ea), JSON_NEW_CONST_KEY);
-   json_object_object_add_ex(obj, "to", json_object_new_int64(seg->startEA), JSON_NEW_CONST_KEY);
-   send_json(COMMAND_MOVE_SEGM, obj);   
-/*
-   if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on move_segm %x, %x\n", (uint32_t)ea, (uint32_t)seg->startEA);
-   }
-*/
-}
-
-void idp_renamed(ea_t ea, const char *new_name, bool is_local) {
-   //send all to server
-   json_object *obj = json_object_new_object();
-   json_object_object_add_ex(obj, "local", json_object_new_boolean((json_bool)is_local), JSON_NEW_CONST_KEY);
-   json_object_object_add_ex(obj, "name", json_object_new_string(new_name), JSON_NEW_CONST_KEY);
-   send_json(ea, COMMAND_RENAMED, obj);   
-/*
-   if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on rename %x, %s, %d\n", (uint32_t)ea, new_name, is_local);
-   }
-*/
-}
-
-void idp_add_func(func_t *pfn) {
-   //send start, end address, name, flags (bp etc), purged, locals, delta, args
-   json_object *obj = json_object_new_object();
-   json_object_object_add_ex(obj, "startea", json_object_new_int64((uint64_t)pfn->startEA), JSON_NEW_CONST_KEY);
-   json_object_object_add_ex(obj, "endea", json_object_new_int64((uint64_t)pfn->endEA), JSON_NEW_CONST_KEY);
-   send_json(COMMAND_ADD_FUNC, obj);   
-/*
-   if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on add_func %x\n", (uint32_t)pfn->startEA);
-   }
-*/
-}
-
-void idp_del_func(func_t *pfn) {
-   //send start, end address, name, flags (bp etc), purged, locals, delta, args
-   json_object *obj = json_object_new_object();
-   send_json(pfn->startEA, COMMAND_DEL_FUNC, obj);   
-/*
-   if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on del_func %x\n", (uint32_t)pfn->startEA);
-   }
-*/
-}
-
-void idp_set_func_start(func_t *pfn, ea_t ea) {
-   //send pfn->startEA and ea to server
-   json_object *obj = json_object_new_object();
-   json_object_object_add_ex(obj, "old_start", json_object_new_int64((uint64_t)pfn->startEA), JSON_NEW_CONST_KEY);
-   json_object_object_add_ex(obj, "new_start", json_object_new_int64((uint64_t)ea), JSON_NEW_CONST_KEY);
-   send_json(COMMAND_SET_FUNC_START, obj);   
-/*
-   if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on set_func_start %x, %x\n", (uint32_t)pfn->startEA, (uint32_t)ea);
-   }
-*/
-}
-
-void idp_set_func_end(func_t *pfn, ea_t ea) {
-   //send pfn->startEA and ea to server
-   json_object *obj = json_object_new_object();
-   json_object_object_add_ex(obj, "startea", json_object_new_int64((uint64_t)pfn->startEA), JSON_NEW_CONST_KEY);
-   json_object_object_add_ex(obj, "endea", json_object_new_int64((uint64_t)ea), JSON_NEW_CONST_KEY);
-   send_json(COMMAND_SET_FUNC_END, obj);
-/*
-   if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on set_func_end %x, %x\n", (uint32_t)pfn->startEA, (uint32_t)ea);
-   }
-*/
-}
-
-void idp_validate_flirt(ea_t ea, const char *name) {
-   //send ea and name to server, apply name and set library func flag on remote side
-   json_object *obj = json_object_new_object();
-   json_object_object_add_ex(obj, "name", json_object_new_string(name), JSON_NEW_CONST_KEY);
-   json_object_object_add_ex(obj, "startea", json_object_new_int64((uint64_t)ea), JSON_NEW_CONST_KEY);
-
-   func_t *f = get_func(ea);
-   if (f) {
-      json_object_object_add_ex(obj, "endea", json_object_new_int64((uint64_t)f->endEA), JSON_NEW_CONST_KEY);
-   }
-
-   send_json(COMMAND_VALIDATE_FLIRT_FUNC, obj);
-/*
-   if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on validate_flirt %x, %s\n", (uint32_t)ea, name);
-   }
-*/
-}
-
-void idp_add_cref(ea_t from, ea_t to, cref_t type) {
-   json_object *obj = json_object_new_object();
-   json_object_object_add_ex(obj, "from", json_object_new_int64((uint64_t)from), JSON_NEW_CONST_KEY);
-   json_object_object_add_ex(obj, "to", json_object_new_int64((uint64_t)to), JSON_NEW_CONST_KEY);
-   json_object_object_add_ex(obj, "reftype", json_object_new_int64((uint64_t)type), JSON_NEW_CONST_KEY);
-   send_json(COMMAND_ADD_CREF, obj);
-/*
-   if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on add_cref %x, %x, %x\n", (uint32_t)from, (uint32_t)to, type);
-   }
-*/
-}
-
-void idp_add_dref(ea_t from, ea_t to, dref_t type) {
-   json_object *obj = json_object_new_object();
-   json_object_object_add_ex(obj, "from", json_object_new_int64((uint64_t)from), JSON_NEW_CONST_KEY);
-   json_object_object_add_ex(obj, "to", json_object_new_int64((uint64_t)to), JSON_NEW_CONST_KEY);
-   json_object_object_add_ex(obj, "reftype", json_object_new_int64((uint64_t)type), JSON_NEW_CONST_KEY);
-   send_json(COMMAND_ADD_DREF, obj);
-/*
-   if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on add_dref %x, %x, %x\n", (uint32_t)from, (uint32_t)to, type);
-   }
-*/
-}
-
-void idp_del_cref(ea_t from, ea_t to, bool expand) {
-   json_object *obj = json_object_new_object();
-   json_object_object_add_ex(obj, "from", json_object_new_int64((uint64_t)from), JSON_NEW_CONST_KEY);
-   json_object_object_add_ex(obj, "to", json_object_new_int64((uint64_t)to), JSON_NEW_CONST_KEY);
-   json_object_object_add_ex(obj, "expand", json_object_new_boolean((uint64_t)expand), JSON_NEW_CONST_KEY);
-   send_json(COMMAND_DEL_CREF, obj);
-/*
-   if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on del_cref %x, %x, %x\n", (uint32_t)from, (uint32_t)to, expand);
-   }
-*/
-}
-
-void idp_del_dref(ea_t from, ea_t to) {
-   json_object *obj = json_object_new_object();
-   json_object_object_add_ex(obj, "from", json_object_new_int64((uint64_t)from), JSON_NEW_CONST_KEY);
-   json_object_object_add_ex(obj, "to", json_object_new_int64((uint64_t)to), JSON_NEW_CONST_KEY);
-   send_json(COMMAND_DEL_DREF, obj);
-/*
-   if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on del_dref 0x%08x, 0x%08x\n", (uint32_t)from, (uint32_t)to);
    }
 */
 }
