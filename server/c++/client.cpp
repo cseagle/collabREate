@@ -438,7 +438,7 @@ bool Client::msg_project_new_request(json_object *obj, Client *c) {
    uint64_t pub, sub;
    uint64_from_json(obj, "pub", &pub);
    pub &= 0x7FFFFFFF;
-   uint64_from_json(obj, "pub", &sub);
+   uint64_from_json(obj, "sub", &sub);
    sub &= 0x7FFFFFFF;
 
 //                  ::logln("desired new project pub " + pub + ", and sub " + sub);
@@ -508,7 +508,7 @@ bool Client::msg_project_rejoin_request(json_object *obj, Client *c) {
    uint64_t tpub, tsub;
    uint64_from_json(obj, "pub", &tpub);
    tpub &= 0x7FFFFFFF;
-   uint64_from_json(obj, "pub", &tsub);
+   uint64_from_json(obj, "sub", &tsub);
    tsub &= 0x7FFFFFFF;
 
    if (!c->authenticated) {
@@ -589,7 +589,7 @@ bool Client::msg_project_snapfork_request(json_object *obj, Client *c) {
    uint64_t pub, sub;
    uint64_from_json(obj, "pub", &pub);
    pub &= 0x7FFFFFFF;
-   uint64_from_json(obj, "pub", &sub);
+   uint64_from_json(obj, "sub", &sub);
    sub &= 0x7FFFFFFF;
    int response = JOIN_REPLY_FAIL;
 //                  ::logln("in FORK REQUEST", LDEBUG);
