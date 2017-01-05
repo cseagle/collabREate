@@ -27,7 +27,7 @@ import java.security.*;
  * This class offers various utility functions used by the server
  * @author Tim Vidas
  * @author Chris Eagle
- * @version 0.1.0, August 2008
+ * @version 0.2.0, January 2017
  */
 
 public class Utils {

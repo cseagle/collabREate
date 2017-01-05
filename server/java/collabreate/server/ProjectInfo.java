@@ -25,7 +25,7 @@ package collabreate.server;
  * to a single project
  * @author Tim Vidas
  * @author Chris Eagle
- * @version 0.1.0, August 2008
+ * @version 0.2.0, January 2017
  */
 public class ProjectInfo {
    public int lpid;
@@ -36,7 +36,7 @@ public class ProjectInfo {
    public long snapupdateid;
    public long pub;
    public long sub;
-   public int owner;
+   public String owner;
    public String hash;
    public String gpid;
    public int proto;

@@ -26,13 +26,15 @@ import java.io.*;
 import java.net.*;
 import java.sql.*;
 import java.util.*;
+import com.google.gson.*;
+
 
 /**
  * ServerManager
  * This class is responsible for routine server related operations
  * @author Tim Vidas
  * @author Chris Eagle
- * @version 0.1.0, August 2008
+ * @version 0.2.0, January 2017
  */
 
 
@@ -40,7 +42,7 @@ public class ServerManager implements CollabreateConstants {
 
    private boolean done = false;
 
-   private Properties props;
+   private JsonObject config;
 
    private Connection con   = null;
 
@@ -55,22 +57,22 @@ public class ServerManager implements CollabreateConstants {
    private PreparedStatement deleteUpdatesByPIDQuery;
    private PreparedStatement deleteProjectByPIDQuery;
 
-   private static final String DEFAULT_PORT = "5043";
+   private static final int DEFAULT_PORT = 5043;
    private static final String DEFAULT_HOST = "localhost";
-   private int port;
-   private String host;
+   private int port = DEFAULT_PORT;
+   private String host = DEFAULT_HOST;
 
-   private DataInputStream dis;
-   private DataOutputStream dos;
+   private JsonStreamParser parser;
+   private PrintStream ps;
    private Socket s;
    private byte[] emptyPayload = new byte[0];
    private static int mode = MODE_DB;
 
    private Vector<ProjectInfo> plist;
 
-   public ServerManager(Properties p) {
-      props = p;
-      mode  = props.getProperty("SERVER_MODE", "database").equals("database") ? MODE_DB : MODE_BASIC;
+   public ServerManager(JsonObject conf) {
+      config = conf;
+      mode  = getConfigString("SERVER_MODE", "basic").equals("database") ? MODE_DB : MODE_BASIC;
       if (mode == MODE_DB) {
          con = getJDBCConnection(this);
          if (con != null) {
@@ -89,6 +91,20 @@ public class ServerManager implements CollabreateConstants {
       connectToHelper();
    }
 
+   public String getConfigString(String key, String default_value) {
+      if (config.has(key)) {
+         return config.getAsJsonPrimitive(key).getAsString();
+      }
+      return default_value;
+   }
+
+   public int getConfigInt(String key, int default_value) {
+      if (config.has(key)) {
+         return config.getAsJsonPrimitive(key).getAsInt();
+      }
+      return default_value;
+   }
+
    protected void setuseMysql(boolean val) {
       useMysql = val;
    }
@@ -96,7 +112,7 @@ public class ServerManager implements CollabreateConstants {
    private Connection getJDBCConnection(ServerManager sm) {
       Connection c = null;
       if (mode == MODE_DB) {
-	 c = dbUtils.getJDBCConnection(sm);
+         c = dbUtils.getJDBCConnection(sm);
       }
       else {
          System.err.println("it appears that the server is configured for BASIC mode");
@@ -257,8 +273,8 @@ public class ServerManager implements CollabreateConstants {
     * by default this must be a local connection.
     */
    protected void connectToHelper() {
-      port  = Integer.parseInt(props.getProperty("MANAGE_PORT", DEFAULT_PORT));
-      host = props.getProperty("MANAGE_HOST", DEFAULT_HOST);
+      port = getConfigInt("MANAGE_PORT", DEFAULT_PORT);
+      host = getConfigString("MANAGE_HOST", DEFAULT_HOST);
       if (s != null) {
          try {
             s.close();
@@ -268,16 +284,15 @@ public class ServerManager implements CollabreateConstants {
       try {
          //s = new Socket("127.0.0.1",port);
          //s = new Socket("localhost",port);
-         s = new Socket(host,port);
-         dis = new DataInputStream(new BufferedInputStream(s.getInputStream()));
-         dos = new DataOutputStream(s.getOutputStream());
+         s = new Socket(host, port);
+         parser = new JsonStreamParser(new InputStreamReader(s.getInputStream()));
+         ps = new PrintStream(s.getOutputStream(), true);
          System.out.println("Connection to ManagerHelper established. Ready to process commands");
       //} catch (UnknownHostException e) {
       } catch (Exception e) {
          System.err.println("Couldn't connect to ManagerHelper on " + host + ":" + port + ", is the server running?");
       }
    }
-
 
    /**
     * initQueries sets up all the prepared statements for later use
@@ -288,7 +303,7 @@ public class ServerManager implements CollabreateConstants {
             listUsersQuery = con.prepareStatement("select userid,username,pub,sub from users order by userid asc;");
             listProjectsQuery = con.prepareStatement("select p.pid,p.gpid,p.hash,p.pub,p.sub,f.parent,p.description,q.description,p.snapupdateid from projects p left join (forklist f left join projects q on f.parent=q.pid) on p.pid = f.child order by p.pid asc;");
             findUserByUIDQuery = con.prepareStatement("select username,pwhash,pub,sub from users where userid=?");
-            getAllUpdatesQuery = con.prepareStatement("select updateid,userid,pid,cmd,data,created from updates where pid=? order by updateid asc");
+            getAllUpdatesQuery = con.prepareStatement("select updateid,username,pid,json,created from updates where pid=? order by updateid asc");
             deleteUpdatesByPIDQuery = con.prepareStatement("delete from updates where pid=?");
             deleteProjectByPIDQuery = con.prepareStatement("delete from projects where pid=?");
 
@@ -307,8 +322,6 @@ public class ServerManager implements CollabreateConstants {
       }
    }
 
-
-
    /**
     * similar to post in Client, but does not check subscription status, and takes command as a arg
     * This function should ONLY be called for message id >= MNG_CONTROL_FIRST
@@ -316,8 +329,11 @@ public class ServerManager implements CollabreateConstants {
     * @param command the command to send
     * @param data the data associated with the command
     */
-   protected void send_data(int command, byte[] data) {
+   protected void send_data(String command, JsonObject json) {
       try {
+         json.addProperty("type", command);
+         ps.println(json.toString());
+/*
          if (command >= MNG_CONTROL_FIRST) {
             dos.writeInt(8 + data.length);
             dos.writeInt(command);
@@ -328,6 +344,7 @@ public class ServerManager implements CollabreateConstants {
          else {
             System.err.println("post should be used for command " + command + ", not send_data.  Data not sent.");
          }
+*/
       } catch (Exception ex) {
       }
    }
@@ -342,19 +359,20 @@ public class ServerManager implements CollabreateConstants {
       while (tries > 0) {
          try {
             tries--;
-            send_data(MNG_GET_STATS, emptyPayload);
+            JsonObject resp = new JsonObject();
+            send_data(MNG_GET_STATS, resp);
 
             //This requires that the server immediately replies !!!
             //otherwise we might get stuck here and have to kill the app
-            int len = dis.readInt();
-            int cmd = dis.readInt();
-            String thelist = dis.readUTF();
-            System.out.println("\nCollabREate Stats");
-            System.out.println(thelist);
-            break;
+            JsonElement json_e = parser.next();
+            if (json_e.isJsonObject()) {
+               JsonObject json = (JsonObject)json_e;
+               String thelist = json.getAsJsonPrimitive("stats").getAsString();
+               System.out.println("\nCollabREate Stats");
+               System.out.println(thelist);
+               break;
+            }
          } catch (NullPointerException e) {
-            connectToHelper();
-         } catch (EOFException e) {
             connectToHelper();
          } catch (Exception ex) {
             System.err.println("Error Dumping Stats" + ex.getMessage());
@@ -374,8 +392,8 @@ public class ServerManager implements CollabreateConstants {
          try {
             tries--;
             //sending shutdown request, there is no expected reply
-            send_data(MNG_SHUTDOWN, emptyPayload);
-
+            JsonObject resp = new JsonObject();
+            send_data(MNG_SHUTDOWN, resp);
             break;
          } catch (NullPointerException e) {
             connectToHelper();
@@ -437,46 +455,38 @@ public class ServerManager implements CollabreateConstants {
                if (pi.parent > 0) {
                   System.err.println("This project was forked.  Note: lineage is not preserved with export.");
                }
-               FileOutputStream fos = new FileOutputStream(efile);
-               CollabreateOutputStream os = new CollabreateOutputStream();
+               PrintStream fps = new PrintStream(new FileOutputStream(efile));
+               fps.println(FILE_SIG);
 
-               os.writeBytes(FILE_SIG);
-               os.writeInt(FILE_VER);
-               os.write(Utils.toByteArray(pi.gpid)); //should probably garuntee GPID_SIZE write
-               os.write(Utils.toByteArray(pi.hash)); //should probably garuntee MD5_SIZE write
-               os.writeLong(pi.sub);
-               os.writeLong(pi.pub);
-               os.writeUTF(pi.desc);  // at this point data is no longer at pre-known offsetsS
-
+               JsonObject json = new JsonObject();
+               json.addProperty("version", FILE_VER);
+               json.addProperty("gpid", pi.gpid); //should probably guarantee GPID_SIZE write
+               json.addProperty("hash", pi.hash); //should probably guarantee MD5_SIZE write
+               json.addProperty("subscribe", pi.sub);
+               json.addProperty("publish", pi.pub);
+               json.addProperty("description", pi.desc);  // at this point data is no longer at pre-known offsetsS
+               fps.println(json.toString());
+               
                //append all updates
                getAllUpdatesQuery.setInt(1, lpid);
                ResultSet rs = getAllUpdatesQuery.executeQuery();
                int numupdates = 0;
                System.out.println("processing updates");
+               JsonParser p = new JsonParser();
                while (rs.next()) {
                   ++numupdates;
                   //System.out.println("processing update " + numupdates + "...");
                   System.out.print(".");
-                  long updateid = rs.getLong(1);
-                  int uid = rs.getInt(2);
-                  int pid = rs.getInt(3);
-                  int cmd = rs.getInt(4);
-                  byte[] data = rs.getBytes(5); //varies based on particular update
-                  Timestamp created = rs.getTimestamp(6);
-
-                  os.writeInt(TAG);
-                  os.writeLong(updateid);
-                  os.writeInt(uid);
-                  os.writeInt(pid);
-                  os.writeInt(cmd);
-                  os.writeInt(data.length);
-                  os.write(data);
-                  //write timestamp?
+                  String jdata = rs.getString(4);
+                  json = (JsonObject)p.parse(jdata);
+                  json.addProperty("updateid", rs.getLong(1));
+                  json.addProperty("uid", rs.getString(2));
+                  json.addProperty("pid", rs.getInt(3));
+//                  json.addProperty("timestamp", rs.getTimestamp(5).toString());
+                  fps.println(json.toString());
                }
-               os.writeInt(ENDTAG);
-               fos.write(os.toByteArray());
-               fos.flush();
-               fos.close();
+               fps.flush();
+               fps.close();
                if (numupdates == 0) {
                   System.out.println("NO UPDATES FOUND FOR EXPORTING");
                }
@@ -504,65 +514,49 @@ public class ServerManager implements CollabreateConstants {
     * @param ifile the filename to import from
     * @param newowner the local uid to be the owner of the new project
     */
-   protected int importProject(File ifile, int newowner) {
+   protected int importProject(File ifile, String newowner) {
       int rval = -1;
       if (mode == MODE_DB) {
          try {
+            JsonParser p = new JsonParser();
             ProjectInfo pi = new ProjectInfo(1,"none");
-            FileInputStream fis = new FileInputStream(ifile);
+            BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(ifile)));
 
-            DataInputStream fdis;
-            fdis = new DataInputStream(new BufferedInputStream(fis));
-
-            byte[] sig = new byte[8];
-            fdis.readFully(sig);
-            if (FILE_SIG.equals(new String(sig))) {
+            if (FILE_SIG.equals(br.readLine())) {
                System.out.println("Magic matched");
             }
             else {
                System.out.println("This doesn't appear to be a collabREate binary file");
                return -1;
             }
-            int ver = fdis.readInt();
+            JsonObject meta = (JsonObject)p.parse(br.readLine());
+            int ver = meta.getAsJsonPrimitive("version").getAsInt();
             System.out.println("File format version " + ver);
-            byte[] gpid = new byte[GPID_SIZE];
-            fdis.readFully(gpid);
-            System.out.println("importing " + Utils.toHexString(gpid));
-            byte[] hash = new byte[MD5_SIZE];
-            fdis.readFully(hash);
-            System.out.println("(" + Utils.toHexString(hash) + ")");
-            long sub = fdis.readLong();
-            long pub = fdis.readLong();
+            String gpid = meta.getAsJsonPrimitive("gpid").getAsString();
+            String hash = meta.getAsJsonPrimitive("hash").getAsString();
+            System.out.println("importing " + gpid);
+            System.out.println("(" + hash + ")");
+            long sub = meta.getAsJsonPrimitive("subscribe").getAsLong();
+            long pub = meta.getAsJsonPrimitive("publish").getAsLong();
             System.out.println("s " + sub + " p " + pub);
-            String desc = fdis.readUTF();
+            String desc = meta.getAsJsonPrimitive("description").getAsString();
             System.out.println("desc: " + desc);
 
             //addproject
-            CollabreateOutputStream os = new CollabreateOutputStream();
-            os.writeInt(newowner);
-            os.write(gpid);
-            os.write(hash);
-            os.writeUTF(desc);
-            os.writeLong(pub);
-            os.writeLong(sub);
-            send_data(MNG_PROJECT_MIGRATE, os.toByteArray());
+            meta.addProperty("newowner", newowner);
+            send_data(MNG_PROJECT_MIGRATE, meta);
 
             //slightly dangerous to assume the next message, but hey, it's the managment app...
             //(this could wait for this message forever)
 
-            // this is really a throwaway, since we are expecting a specific message here
-            int messagesize = dis.readInt();
-            if (messagesize != 12) {
-               System.err.println("protocol dictates 12 byte PROJECT_MIGRATE_REPLY, but recieved: " + messagesize);
+            JsonObject msg = (JsonObject)parser.next(); //
+            String cmd = msg.getAsJsonPrimitive("type").getAsString();
+            if (!cmd.equals(MNG_PROJECT_MIGRATE_REPLY)) {
+               System.err.println("protocol dictates PROJECT_MIGRATE_REPLY, but recieved: " + cmd);
                return rval;
             }
 
-            int testcmd = dis.readInt();
-            if (testcmd != MNG_PROJECT_MIGRATE_REPLY) {
-               System.err.println("protocol dictates PROJECT_MIGRATE_REPLY, but recieved: " + testcmd);
-               return rval;
-            }
-            int status = dis.readInt();
+            int status = msg.getAsJsonPrimitive("status").getAsInt();
             if (status != MNG_MIGRATE_REPLY_SUCCESS) {
                System.err.println("Project migrate did not succeed on server, check server logs for more info");
                return rval;
@@ -571,41 +565,22 @@ public class ServerManager implements CollabreateConstants {
                System.out.println("Project creation succeeded on server");
             }
 
-            int tag = fdis.readInt();
-            while (tag == TAG) {
-               long updateid = fdis.readLong();
-               int uid = fdis.readInt();
-               int pid = fdis.readInt();
-               int cmd = fdis.readInt();
-               int datalen = fdis.readInt();
-               byte[] data = new byte[datalen];
-               fdis.readFully(data);
-               //read timestamp?
-
+            while (true) {
+               String jline = br.readLine();
+               if (jline == null) {
+                  break;
+               }
+               JsonObject update = (JsonObject)p.parse(jline);
                //System.out.println("update:" + updateid + " orig uid " + uid + " oldpid " + pid + " cmd " + cmd + " datalen " + datalen);
                System.out.print(".");
-
                //insertUpdate
-               CollabreateOutputStream cos = new CollabreateOutputStream();
-               cos.writeInt(newowner);  //this is required becuase the original uid may
-               //os.writeInt(uid);      //not be present on the new server (users aren't migrated yet)
-               //cos.writeInt(newpid);  //similary, we could specify the newly created project
-               cos.writeInt(pid);       //instead the Helper ignores pid and uses the last successfully migrated project from this session
-               cos.writeInt(cmd);
-               cos.writeInt(data.length);
-               cos.write(data);
-               send_data(MNG_MIGRATE_UPDATE, cos.toByteArray());
-
-               tag = fdis.readInt();
+               JsonObject obj = new JsonObject();
+               obj.addProperty("newowner", newowner);
+               obj.addProperty("update", update.toString());
+               send_data(MNG_MIGRATE_UPDATE, obj);
             }
-            if (tag != ENDTAG) {
-               System.err.println("Error: didn't end update processing loop with ENDTAG");
-            }
-            else {
-               rval = 0;
-            }
-            fdis.close();
-            fis.close();
+            rval = 0;
+            br.close();
          } catch (Exception ex) {
             System.err.println("Error importing project from " + ifile.getAbsolutePath() + ": " + ex.getMessage());
             ex.printStackTrace();
@@ -618,11 +593,11 @@ public class ServerManager implements CollabreateConstants {
       return rval;
    }
    /**
-    * getProps is an inspector that gets the current operation mode of the connection manager
-    * @return a Properites object
+    * getConfig is an inspector that gets the current operation mode of the connection manager
+    * @return a JsonObject object
     */
-   protected Properties getProps() {
-      return props;
+   protected JsonObject getConfig() {
+      return config;
    }
 
    /**
@@ -643,20 +618,17 @@ public class ServerManager implements CollabreateConstants {
          try {
             tries--;
             System.out.println("\npre");
-            send_data(MNG_GET_CONNECTIONS, emptyPayload);
+            JsonObject json = new JsonObject();
+            send_data(MNG_GET_CONNECTIONS, json);
             System.out.println("\npost");
 
             //This requires that the server immediately replies !!!
             //otherwise we might get stuck here and have to kill the app
-            int len = dis.readInt();
-            int cmd = dis.readInt();
-            String thelist = dis.readUTF();
+            JsonObject reply = (JsonObject)parser.next();
             System.out.println("\nCollabREate Connections");
-            System.out.println(thelist);
+            System.out.println(reply.getAsJsonPrimitive("connections").getAsString());
             break;
          } catch (NullPointerException e) {
-            connectToHelper();
-         } catch (EOFException e) {
             connectToHelper();
          } catch (Exception ex) {
             System.err.println("Error Listing Connections " + ex.getMessage());
@@ -668,7 +640,8 @@ public class ServerManager implements CollabreateConstants {
    /**
     * listUsers lists the users on this server
     */
-   protected void listUsers() {
+   protected Hashtable<Integer,String> listUsers() {
+      Hashtable<Integer,String> result = new Hashtable<Integer,String>();
       if (mode == MODE_DB) {
          try {
             System.out.println("\nCollabREate Users");
@@ -676,7 +649,10 @@ public class ServerManager implements CollabreateConstants {
 
             ResultSet rs = listUsersQuery.executeQuery();
             while (rs.next()) {
-               System.out.println(String.format("%-4d%-10s%-10x%-10x %s", rs.getInt(1), rs.getString(2), rs.getLong(3), rs.getLong(4), getPermRowString(rs.getLong(3),rs.getLong(4),8)));
+               int uid = rs.getInt(1);
+               String username = rs.getString(2);
+               System.out.println(String.format("%-4d%-10s%-10x%-10x %s", uid, username, rs.getLong(3), rs.getLong(4), getPermRowString(rs.getLong(3),rs.getLong(4),8)));
+               result.put(uid, username);
             }
             rs.close();
          } catch (Exception ex) {
@@ -687,6 +663,7 @@ public class ServerManager implements CollabreateConstants {
       else {
          System.err.println("it appears that the server is configured for BASIC mode");
       }
+      return result;
    }
 
    /**
@@ -716,7 +693,7 @@ public class ServerManager implements CollabreateConstants {
                temppi.snapupdateid = rs.getLong(9);
                temppi.pub = rs.getInt(4);
                temppi.sub = rs.getInt(5);
-               temppi.owner = 0;
+               temppi.owner = "";
                temppi.hash = rs.getString(3);
                temppi.gpid = rs.getString(2);
                plist.add(temppi);
@@ -831,9 +808,11 @@ public class ServerManager implements CollabreateConstants {
       System.out.println("Got " + args.length + " args");
       if (args.length >= 1) {
          //user specified a config file
-         Properties p = new Properties();
-         p.load(new FileInputStream(args[0]));
-         sm = new ServerManager(p);
+         JsonParser p = new JsonParser();
+         FileReader fr = new FileReader(args[0]);
+         JsonObject conf = (JsonObject)p.parse(fr);
+         fr.close();
+         sm = new ServerManager(conf);
       }
       else {
          System.err.println("Could not read config file!");
@@ -929,7 +908,7 @@ public class ServerManager implements CollabreateConstants {
             String opassword;
             long opub;
             long osub;
-            sm.listUsers();
+            Hashtable<Integer,String> users = sm.listUsers();
             System.out.print("Which user (uid) would you like to edit? ");
             try {
                uid = Integer.parseInt(br.readLine());  //obviously doesn't check for valid uid
@@ -1074,16 +1053,20 @@ public class ServerManager implements CollabreateConstants {
             userdata = br.readLine();
             File ifile = new File(userdata);
             if (ifile.exists()) {
-               sm.listUsers();
+               Hashtable<Integer,String> users = sm.listUsers();
                int uid;
                System.out.print("Which user (uid) should be the new owner? ");
                try {
                   uid = Integer.parseInt(br.readLine());  //obviously doesn't check for valid uid
+                  if (!users.containsKey(uid)) {
+                     System.err.println("You must select a valid user id");
+                     continue;
+                  }
                } catch (NumberFormatException e) {
                   System.err.println("You must select a valid number");
                   continue;
                }
-               if (sm.importProject(ifile,uid) != 0) {
+               if (sm.importProject(ifile, users.get(uid)) != 0) {
                   System.err.println("import did not fully comply successfully");
                }
             }
