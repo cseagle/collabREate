@@ -40,7 +40,7 @@
 #include <netnode.hpp>
 #include <typeinf.hpp>
 #include <struct.hpp>
-#include <area.hpp>
+#include <range.hpp>
 #include <frame.hpp>
 #include <segment.hpp>
 #include <enum.hpp>
@@ -246,15 +246,15 @@ void do_get_proj_perms(json_object *json) {
 }
 
 void do_send_user_message(const char *msg) {
-   uint32_t len = 80 + strlen(msg);
+   uint32_t len = 80 + (uint32_t)strlen(msg);
    char *m = new char[len];
-   ::qsnprintf(m, len, "< %s> %s", username, msg);
+   ::qsnprintf(m, len, "<%s> %s", username, msg);
    char *cr = m + strlen(m) - 1;
    while (*cr == '\n' || *cr == '\r') {
       *cr-- = 0;
    }
 
-   time_t t = time(NULL);
+   time_t t = time(NULL);    //*** change so that server timestamps messages
 
    json_object *obj = json_object_new_object();
    append_json_string_val(obj, "message", m);
@@ -269,10 +269,19 @@ void do_send_user_message(const char *msg) {
 int cmd_undefine(json_object *json) {
    ea_t ea;
    ea_from_json(json, "addr", &ea);
+#if 0
 #if IDA_SDK_VERSION >= 510
    do_unknown(ea, DOUNK_SIMPLE);
 #else
    do_unknown(ea, false);
+#endif
+#else
+   qstring a1;
+   format_llx(ea, a1);
+   const char *user = string_from_json(json, "user");
+   char tmsg[128];
+   ::qsnprintf(tmsg, sizeof(tmsg), "<%s> UNDEFINED at 0x%s", user, a1.c_str());
+   postCollabMessage(tmsg);
 #endif
    return 0;
 }
@@ -283,10 +292,19 @@ int cmd_make_code(json_object *json) {
    ea_from_json(json, "addr", &ea);
    uint64_from_json(json, "length", &tmp);
    asize_t sz = (asize_t)tmp;
+#if 0
 #if IDA_SDK_VERSION >= 540
    create_insn(ea);
 #else
    ua_code(ea);
+#endif
+#else
+   qstring a1;
+   format_llx(ea, a1);
+   const char *user = string_from_json(json, "user");
+   char tmsg[128];
+   ::qsnprintf(tmsg, sizeof(tmsg), "<%s> MAKE CODE at 0x%s", user, a1.c_str());
+   postCollabMessage(tmsg);
 #endif
    return 0;
 }
@@ -301,7 +319,17 @@ int cmd_make_data(json_object *json) {
    asize_t a = (asize_t)tmp;
    const char *name = string_from_json(json, "struc");  //name only exists if we are creating a struct
    tid_t t = (name && *name) ? get_struc_id(name) : BADNODE;
+#if 0
    do_data_ex(ea, f, a, t);
+#else
+   qstring a1;
+   format_llx(ea, a1);
+   const char *user = string_from_json(json, "user");
+   char tmsg[128];
+   ::qsnprintf(tmsg, sizeof(tmsg), "<%s> MAKE DATA at 0x%s, length: %d%s%s", user, a1.c_str(), (uint32_t)a,
+               t == BADNODE ? "" : ", struct type: ", t == BADNODE ? "" : name);
+   postCollabMessage(tmsg);
+#endif
    return 0;
 }
 
@@ -349,7 +377,7 @@ int cmd_set_func_start(json_object *json) {
    ea_t newstart, ea;
    ea_from_json(json, "old_start", &ea);
    ea_from_json(json, "new_start", &newstart);
-   func_setstart(ea, newstart);
+   set_func_start(ea, newstart);
    return 0;
 }
 
@@ -357,7 +385,7 @@ int cmd_set_func_end(json_object *json) {
    ea_t endea, ea;
    ea_from_json(json, "startea", &ea);
    ea_from_json(json, "endea", &endea);
-   func_setend(ea, endea);
+   set_func_end(ea, endea);
    return 0;
 }
 
@@ -408,7 +436,17 @@ int cmd_add_cref(json_object *json) {
    ea_from_json(json, "to", &to);
    uint32_from_json(json, "reftype", &reftype);
    cref_t type = (cref_t)reftype;
+#if 0
    add_cref(from, to, type);
+#else
+   qstring a1, a2;
+   format_llx(from, a1);
+   format_llx(to, a2);
+   const char *user = string_from_json(json, "user");
+   char tmsg[128];
+   ::qsnprintf(tmsg, sizeof(tmsg), "<%s> add_cref from 0x%s to 0x%s, type %d", user, a1.c_str(), a2.c_str(), (int32_t)type);
+   postCollabMessage(tmsg);
+#endif
    return 0;
 }
 
@@ -491,9 +529,18 @@ int cmd_ti_changed(json_object *json) {
    const p_list *fnames1 = fnames;  //for free because deserialize changes fnames
 #if IDA_SDK_VERSION >= 650
    tinfo_t tinf;
-   //*** what is appropriate value for til here? Using NULL for now
-   tinf.deserialize(idati, &ti, &fnames);
+   const til_t *base_til;
+#if IDA_SDK_VERSION < 700
+   base_til = idati;
+#else
+   base_til = get_idati();
+#endif
+   tinf.deserialize(base_til, &ti, &fnames);
+#if IDA_SDK_VERSION < 700
    set_tinfo2(ea, &tinf);
+#else
+   set_tinfo(ea, &tinf);
+#endif
 #elif IDA_SDK_VERSION >= 520
    set_tinfo(ea, ti, fnames);
 #else
@@ -525,8 +572,18 @@ int cmd_op_ti_changed(json_object *json) {
 #if IDA_SDK_VERSION >= 650
    tinfo_t tinf;
    //*** what is appropriate value for til here? Using NULL for now
-   tinf.deserialize(idati, &ti, &fnames);
+   const til_t *base_til;
+#if IDA_SDK_VERSION < 700
+   base_til = idati;
+#else
+   base_til = get_idati();
+#endif
+   tinf.deserialize(base_til, &ti, &fnames);
+#if IDA_SDK_VERSION < 700
    set_op_tinfo2(ea, opnum, &tinf);
+#else
+   set_op_tinfo(ea, opnum, &tinf);
+#endif
 #elif IDA_SDK_VERSION >= 520
    set_op_tinfo(ea, opnum, ti, fnames);
 #else
@@ -600,7 +657,13 @@ int cmd_op_type_changed(json_object *json) {
             const char *sname = json_object_get_string(p);
             opath[i] = get_struc_id(sname);
          }
+#if IDA_SDK_VERSION < 700
          op_stroff(ea, opnum, opath, path_len, delta);
+#else
+         insn_t ins;
+         decode_insn(&ins, ea);
+         op_stroff(ins, opnum, opath, (int)path_len, delta);
+#endif
          qfree(opath);
       }
    }
@@ -1062,14 +1125,14 @@ int cmd_thunk_created(json_object *json) {
 }
 
 int cmd_func_tail_appended(json_object *json) {
-   ea_t startEA, tail_start, tail_end;
-   if (!ea_from_json(json, "funcea", &startEA) || 
+   ea_t start_ea, tail_start, tail_end;
+   if (!ea_from_json(json, "funcea", &start_ea) || 
        !ea_from_json(json, "tail_start", &tail_start) ||
        !ea_from_json(json, "tail_end", &tail_end)) {
       return -1;
    }
    
-   func_t *f = get_func(startEA);
+   func_t *f = get_func(start_ea);
    if (f) {
       append_func_tail(f, tail_start, tail_end);
    }
@@ -1077,12 +1140,12 @@ int cmd_func_tail_appended(json_object *json) {
 }
 
 int cmd_func_tail_removed(json_object *json) {
-   ea_t startEA, tail;
-   if (!ea_from_json(json, "funcea", &startEA) || 
+   ea_t start_ea, tail;
+   if (!ea_from_json(json, "funcea", &start_ea) || 
        !ea_from_json(json, "tailea", &tail)) {
       return -1;
    }
-   func_t *f = get_func(startEA);
+   func_t *f = get_func(start_ea);
    if (f) {
       remove_func_tail(f, tail);
    }
@@ -1120,8 +1183,8 @@ int cmd_segm_added(json_object *json) {
    segment_t s;
    bool valid = true;
    memset(&s, 0, sizeof(segment_t));
-   valid &= ea_from_json(json, "startea", &s.startEA);
-   valid &= ea_from_json(json, "endea", &s.endEA);
+   valid &= ea_from_json(json, "startea", &s.start_ea);
+   valid &= ea_from_json(json, "endea", &s.end_ea);
    valid &= int32_from_json(json, "orgbase", &tmp);
    s.orgbase = (uval_t)tmp;
    valid &= int32_from_json(json, "align", (int32_t*)&tmp);
@@ -1188,6 +1251,7 @@ int cmd_segm_moved(json_object *json) {
    return 0;
 }
 
+#if IDA_SDK_VERSION < 700
 int cmd_area_cmt_changed(json_object *json) {
    ea_t ea;   //ea_t can be either 32 or 64 bits
    bool rep;
@@ -1216,6 +1280,45 @@ int cmd_area_cmt_changed(json_object *json) {
    }
    return 0;
 }
+#else
+int cmd_range_cmt_changed(json_object *json) {
+   ea_t ea;   //ea_t can be either 32 or 64 bits
+   bool rep;
+   range_kind_t rk = RANGE_KIND_UNKNOWN;
+   const char *range = string_from_json(json, "range");
+   if (range == NULL) {
+      return -1;
+   }
+   if (strcmp(range, RANGE_FUNCS) == 0) {
+      rk = RANGE_KIND_FUNC;
+   }
+   else if (strcmp(range, RANGE_SEGS) == 0) {
+      rk = RANGE_KIND_SEGMENT;
+   }
+   if (rk != RANGE_KIND_UNKNOWN) {
+      const char *cmt = string_from_json(json, "comment");
+      if (cmt == NULL) {
+         return 0;
+      }
+      if (!ea_from_json(json, "startea", &ea) || !bool_from_json(json, "rep", &rep)) {
+         return -1;
+      }
+      if (rk == RANGE_KIND_FUNC) {
+         func_t *pfn = get_func(ea);
+         if (pfn) {
+            set_func_cmt(pfn, cmt, rep);
+         }
+      }
+      else {  //must be RANGE_KIND_SEGMENT
+         segment_t *seg = getseg(ea);
+         if (seg) {
+            set_segment_cmt(seg, cmt, rep);
+         }
+      }
+   }
+   return 0;
+}
+#endif
 
 int do_auth(unsigned char *challenge, int challenge_len) {
    int rval = 0;
@@ -1254,7 +1357,12 @@ int initial_challenge(json_object *json) {
 
 int user_message(json_object *json) {
    time_t t;
-   int32_from_json(json, "time", (int*)&t);
+   if (sizeof(time_t) == sizeof(int64)) {
+      uint64_from_json(json, "time", (uint64_t*)&t);
+   }
+   else {
+      uint32_from_json(json, "time", (uint32_t*)&t);
+   }
    const char *msg = string_from_json(json, "message");
    postCollabMessage(msg, t);
    return 0;
@@ -1595,7 +1703,6 @@ bool msg_dispatcher(const char *json_in) {
 }
 
 void build_handler_map() {
-   ctrl_handlers[COMMAND_USER_MESSAGE] = user_message;
    ctrl_handlers[MSG_INITIAL_CHALLENGE] = initial_challenge;
    ctrl_handlers[MSG_AUTH_REPLY] = auth_reply;
    ctrl_handlers[MSG_PROJECT_LIST] = project_list;
@@ -1665,6 +1772,11 @@ void build_handler_map() {
    ida_handlers[COMMAND_SEGM_START_CHANGED] = cmd_segm_start_changed;
    ida_handlers[COMMAND_SEGM_END_CHANGED] = cmd_segm_end_changed;
    ida_handlers[COMMAND_SEGM_MOVED] = cmd_segm_moved;
-   ida_handlers[COMMAND_AREA_CMT_CHANGED] = cmd_area_cmt_changed;
+#if IDA_SDK_VERSION < 700
+   ida_handlers[COMMAND_RANGE_CMT_CHANGED] = cmd_area_cmt_changed;
+#else
+   ida_handlers[COMMAND_RANGE_CMT_CHANGED] = cmd_range_cmt_changed;
+#endif
+   ida_handlers[COMMAND_USER_MESSAGE] = user_message;
 }
 

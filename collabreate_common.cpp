@@ -24,6 +24,7 @@
 #include <pro.h>
 #include <kernwin.hpp>
 
+#include <stdio.h>
 #include <string.h>
 #include <netnode.hpp>
 #include <nalt.hpp>
@@ -268,7 +269,7 @@ const char *hex_encode(const void *bin, uint32_t len) {
 }
 
 uint8_t *hex_decode(const char *hex, uint32_t *len) {
-   *len = strlen(hex);
+   *len = (uint32_t)strlen(hex);
    if (*len & 1) {
       return NULL;
    }
@@ -285,9 +286,24 @@ uint8_t *hex_decode(const char *hex, uint32_t *len) {
    return res;
 }
 
+#ifdef _WIN32
+#define snprintf _snprintf
+#endif
+
+void format_llx(uint64_t val, qstring &s) {
+   char buf[32];
+   snprintf(buf, sizeof(buf), "%llx", (uint64_t)val);
+   s = buf;
+}
+
+#ifdef _WIN32
+#undef snprintf
+#endif
+
+
 void append_json_hex_val(json_object *obj, const char *key, const uint8_t *value, uint32_t len) {
    if (len == 0) {
-      len = strlen((const char*)value);
+      len = (uint32_t)strlen((const char*)value);
    }
    const char *hex = hex_encode(value, len);
    json_object_object_add_ex(obj, key, json_object_new_string(hex), JSON_NEW_CONST_KEY);
@@ -325,23 +341,24 @@ void append_json_ea_val(json_object *obj, const char *key, ea_t value) {
 /* This is the final use of the provided json object so
    this function does the json_object_put to release
    any associated resources */
-void send_json(json_object *obj) {
+int send_json(json_object *obj) {
    json_object_object_add_ex(obj, "user", json_object_new_string(username), JSON_NEW_CONST_KEY);
    size_t jlen;
    qstring json = json_object_to_json_string_length(obj, JSON_C_TO_STRING_PLAIN, &jlen);
    json += '\n';
-   send_msg(json);
+   int res = send_msg(json);
    json_object_put(obj);   //release the object
+   return res;
 }
 
-void send_json(const char *type, json_object *obj) {
+int send_json(const char *type, json_object *obj) {
    json_object_object_add_ex(obj, "type", json_object_new_string(type), JSON_NEW_CONST_KEY);
-   send_json(obj);      
+   return send_json(obj);      
 }
 
-void send_json(ea_t ea, const char *type, json_object *obj) {
+int send_json(ea_t ea, const char *type, json_object *obj) {
    json_object_object_add_ex(obj, "addr", json_object_new_int64(ea), JSON_NEW_CONST_KEY);
-   send_json(type, obj);
+   return send_json(type, obj);
 }
 
 uint8_t *hex_from_json(json_object *json, const char *key, uint32_t *len) {
@@ -370,7 +387,7 @@ bool bool_from_json(json_object *json, const char *key, bool *val) {
       return false;
    }
 
-   *val = (bool)json_object_get_boolean(value);
+   *val = json_object_get_boolean(value) != 0;
    return true;
 }
 

@@ -435,7 +435,7 @@ int idaapi disp_request_t::execute(void) {
       qstring *s = *i;
       lines.erase(i);
       qmutex_unlock(mtx);
-      msg("dequeued: %s\n", s->c_str());
+//      msg("dequeued: %s\n", s->c_str());
       bool res = (*d)(s->c_str());
       delete s;
       if (!res) {  //not sure we really care what is returned here

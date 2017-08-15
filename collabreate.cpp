@@ -31,12 +31,10 @@
 
 #include "collabreate.h"
 
-#ifndef __QT__
 #ifdef _WIN32
 #include <windows.h>
 extern HWND mainWindow;
 extern HMODULE hModule;
-#endif
 #endif
 
 #include <pro.h>
@@ -48,7 +46,13 @@ extern HMODULE hModule;
 #include <netnode.hpp>
 #include <typeinf.hpp>
 #include <struct.hpp>
+#if IDA_SDK_VERSION < 700
 #include <area.hpp>
+#define start_ea startEA
+#define endEA end_ea
+#else
+#include <range.hpp>
+#endif
 #include <frame.hpp>
 #include <segment.hpp>
 #include <enum.hpp>
@@ -79,7 +83,7 @@ void unhookAll();
 
 //where we stash collab specific infoze
 netnode cnn(COLLABREATE_NETNODE, 0, true);
-qstring *msgHistory = NULL;
+qvector<qstring> msgHistory;
 qstring *changeCache = NULL;
 
 #ifndef DEBUG
@@ -98,7 +102,7 @@ bool getUserOpts(Options &user) {
 
 //Load the last update id from our netnode
 uint64_t getLastUpdate() {
-   uint64_t val;
+   uint64_t val = 0;
    cnn.supval(LASTUPDATE_SUPVAL, &val, sizeof(val));
 #ifdef DEBUG
    msg(PLUGIN_NAME": lastupdate supval is 0x%s\n", formatLongLong(val));
@@ -197,6 +201,20 @@ int idaapi init(void) {
          hookAll();
       }
    }
+   if (msgHistory.size() == 0) {
+      ssize_t sz = cnn.supstr(1, NULL, 0, COLLABREATE_MSGHISTORY_TAG);
+      if (sz > 0) {
+         char *tmp = new char[sz + 2];
+         char *sptr, *endp;
+         sptr = tmp;
+         cnn.supstr(1, tmp, sz + 2, COLLABREATE_MSGHISTORY_TAG);
+         while ((endp = strchr(sptr, '\n')) != NULL) {
+            msgHistory.push_back(qstring(sptr, endp - sptr));
+            sptr = endp + 1;
+         }
+         delete [] tmp;
+      }
+   }
    build_handler_map();
    if (init_network()) {
 #if IDA_SDK_VERSION < 600
@@ -225,10 +243,14 @@ void idaapi term(void) {
    if (is_connected()) {
       cleanup();
    }
-   if (msgHistory != NULL) {
-      cnn.supset(1, msgHistory->c_str(), 0, COLLABREATE_MSGHISTORY_TAG);
-      delete msgHistory;
-      msgHistory = NULL;
+   if (msgHistory.size() > 0) {
+      qstring temp;
+      for (unsigned int i = 0; i < msgHistory.size(); i++) {
+         temp += msgHistory[i];
+         temp += '\n';
+      }
+      cnn.supset(1, temp.c_str(), 0, COLLABREATE_MSGHISTORY_TAG);
+      msgHistory.clear();
    }
    if (changeCache != NULL && changeCache->length() > 0) {
       cnn.supset(1, changeCache->c_str(), 0, COLLABREATE_CACHE_TAG);
@@ -250,7 +272,12 @@ void idaapi term(void) {
 //              arg - the input argument, it can be specified in
 //                    plugins.cfg file. The default is zero.
 
+#if IDA_SDK_VERSION < 700
 void idaapi run(int /*arg*/) {
+#else
+bool idaapi run(size_t /*arg*/) {
+#endif
+   bool result = true;
    if (is_connected()) {
       char *desc;
       switch (do_choose_command()) {
@@ -349,8 +376,12 @@ void idaapi run(int /*arg*/) {
       }
       else {
          warning("collabREate failed to connect to server\n");
+         result = false;
       }
    }
+#if IDA_SDK_VERSION >= 700
+   return result;
+#endif
 }
 
 //--------------------------------------------------------------------------

@@ -9,9 +9,67 @@
 #include "collabreate.h"
 #include "collabreate_ui.h"
 
+#if IDA_SDK_VERSION < 700
+static TForm *collab_tform;
 static TForm *cform;
-static qstring cmsg;
-static textctrl_info_t chistory;
+#else
+static TWidget *collab_tform;
+static TWidget *cform;
+#endif
+
+static form_actions_t *dangerous;
+static qvector<qstring> messages;
+static qstring msg_text;
+
+// Form actions for editor window
+enum collab_form_actions
+{
+  TEXT_CHANGED  = 2,
+  SEND = 3
+};
+
+#if IDA_SDK_VERSION < 700
+static int idaapi send_cb(TView *[], int) {
+#else
+static int idaapi send_cb(TWidget *[], int) {
+#endif
+   return 0;
+}
+
+//--------------------------------------------------------------------------
+// this callback is called when something happens in our non-modal editor form
+static int idaapi collab_cb(int fid, form_actions_t &fa) {
+   switch (fid) {
+      case CB_INIT:
+//         msg("init collab form\n");
+         break;
+      case CB_CLOSE:
+//         msg("closing collab form\n");
+         // mark the form as closed
+         collab_tform = NULL;
+         break;
+      case TEXT_CHANGED:
+//         msg("text has been changed\n");
+         break;
+      case SEND: {  // Send button pressed
+         qstring val;
+         if (fa.get_string_value(2, &val)) {
+            msg("Sending: %s\n", val.c_str());
+
+            //*** are next two lines necessary or should we wait
+            //for message to get send back from the server following timestamping
+            msgHistory.push_back(val.c_str());
+            refresh_chooser("Collab form:1");
+
+            do_send_user_message(val.c_str());
+         }
+         break;
+      }
+      default:
+         break;
+   }
+   return 1;
+}
 
 bool do_connect(Dispatcher disp) {
    const char *format = "BUTTON YES* Ok\nBUTTON CANCEL Cancel\nConnect to collabREate server\n\n\n<Server:A:64:64::>\n<Port:D:16:16::>\n";
@@ -76,7 +134,7 @@ int choose_project(json_object *json) {
       return -1;
    }
 
-   uint32_t numProjects = json_object_array_length(jprojects);
+   uint32_t numProjects = (uint32_t)json_object_array_length(jprojects);
    numProjectsGlobal = numProjects;
    
    ::qstrvec_t projectList;
@@ -137,7 +195,7 @@ int choose_project(json_object *json) {
       return -1;
    }
 
-   int numOptions = json_object_array_length(options);
+   int numOptions = (int)json_object_array_length(options);
    numOptionsGlobal = numOptions;
    optLabels = (char**)qalloc(sizeof(char*) * numOptions);
 
@@ -148,7 +206,7 @@ int choose_project(json_object *json) {
 
    int res = AskUsingForm_c(format, description, &projectList, &sel);
    if (res == ASKBTN_YES) {
-      return sel;
+      return sel ? projects[sel - 1] : 0;  //map selection index to associated project number
    }
    return -1;
 }
@@ -171,120 +229,72 @@ bool do_project_select(json_object *json) {
    return result;
 }
 
-int idaapi ui_collab(void *user_data, int notification_code, va_list va) {
-   if (notification_code == ui_tform_visible) {
-      TForm *form = va_arg(va, TForm *);
-      if (form == user_data) {
-         //tc.flags = TXTF_READONLY | TXTF_FIXEDFONT;
-         //tc.text = ??;
-/*
-         QWidget *w = (QWidget *)form;
-         cform = new CollabLayout();
-         w->setLayout(cform);
-*/
-         msg("CollabREate form is visible\n");
-         switchto_tform(cform, true);
-/*
-         if (msgHistory == NULL) {
-            uint32_t sz = cnn.blobsize(1, COLLABREATE_MSGHISTORY_TAG);
-            if (sz > 0) {
-               msgHistory = new Buffer(cnn.getblob(NULL, (size_t*)&sz, 1, COLLABREATE_MSGHISTORY_TAG), sz, false);
-               char *str;
-               while ((str = msgHistory->readUTF8()) != NULL) {
-                  cform->append(str);
-                  qfree(str);
-               }
-               msgHistory->reset_error();
-            }
-            else {
-               msgHistory = new Buffer();
-            }
-         }
-*/
-         if (msgHistory == NULL) {
-            ssize_t sz = cnn.supstr(1, NULL, 0, COLLABREATE_MSGHISTORY_TAG);
-            if (sz > 0) {
-               char *tmp = new char[sz + 2];
-               cnn.supstr(1, tmp, sz + 2, COLLABREATE_MSGHISTORY_TAG);
-               msgHistory = new qstring(tmp);
-               delete [] tmp;
-               chistory.text += *msgHistory;
-//               cform->append(msgHistory->c_str());
-            }
-            else {
-               msgHistory = new qstring();
-            }
-         }
-         else {
-//            cform->append(msgHistory->c_str());
-         }
-      }
-   }
-   else if (notification_code == ui_tform_invisible) {
-      TForm *form = va_arg(va, TForm *);
-      if (form == user_data) {
-         // user defined form is closed, destroy its controls
-         // (to be implemented)
-         msg("CollabREate form is closed\n");
-         unhook_from_notification_point(HT_UI, ui_collab);
-         cform = NULL;
-         if (msgHistory != NULL) {
-            cnn.supset(1, msgHistory->c_str(), 0, COLLABREATE_MSGHISTORY_TAG);
-            delete msgHistory;
-            msgHistory = NULL;
-         }
-      }
-   }
-   return 0;
+#if IDA_SDK_VERSION < 700
+static void idaapi collab_getl(void *, uint32 n, char *const *arrptr) {
+   qstrncpy(arrptr[0], n == 0 ? "Messages" : msgHistory[n-1].c_str(), MAXSTR);
 }
 
-#ifndef FORM_MDI
-#define FORM_MDI 0
+static uint32 idaapi collab_sizer(void *) {
+   return msgHistory.size();
+}
+
+void createCollabStatus() {
+  static const char format[] =
+    "BUTTON NO NONE\nBUTTON YES NONE\nBUTTON CANCEL NONE\n"
+    "Collab form\n\n"
+    "%/\n"        // placeholder for the form's callback
+    "<Messages:E1:::::>\n<Send:B3:20:::>< :q2::100:::>\n";
+   chooser_info_t ci;
+   ci.columns = 1;
+   ci.getl = collab_getl;
+   ci.sizer = collab_sizer;
+   static const int widths[] = { 128 };
+   ci.widths = widths;
+   // selection for chooser list view
+   intvec_t ivec;
+   collab_tform = OpenForm_c(format, FORM_QWIDGET | FORM_TAB, collab_cb, &ci, &ivec, send_cb, &msg_text);
+}
+#else
+struct collab_msg_chooser : public chooser_t {
+   static const int widths[];
+   static const char* header[];
+   collab_msg_chooser() : chooser_t(0, 1, widths, header, "Collab form") {};
+   void idaapi get_row(qstrvec_t * cols, int * /*icon_*/, chooser_item_attrs_t * /*attrs*/, size_t n) const {
+      cols->push_back(msgHistory[n]);
+   };
+
+   size_t idaapi get_count() const {
+      return msgHistory.size();
+   };
+};
+
+const int collab_msg_chooser::widths[] = { 128 };
+const char* collab_msg_chooser::header[] = { "Messages" };
+
+void createCollabStatus() {
+   static const char format[] =
+      "BUTTON NO NONE\nBUTTON YES NONE\nBUTTON CANCEL NONE\n"
+      "Collab form\n\n"
+      "%/\n"        // placeholder for the form's callback
+      "<Messages:E1:::::>\n<Send:B3:20:::>< :q2::100:::>\n";
+   collab_msg_chooser ci;
+   // selection for chooser list view
+   intvec_t ivec;
+   collab_tform = OpenForm_c(format, WOPN_TAB, collab_cb, &ci, &ivec, send_cb, &msg_text);
+}
 #endif
 
-int idaapi collab_cb(int field_id, form_actions_t &fa) {
-   msg("collab_ui called for %d\n", field_id);
-   return -1;
-}
-
-void createCollabStatus() {   
-   chistory.flags = TXTF_READONLY | TXTF_FIXEDFONT;
-   if (msgHistory == NULL) {
-      ssize_t sz = cnn.supstr(1, NULL, 0, COLLABREATE_MSGHISTORY_TAG);
-      if (sz > 0) {
-         char *tmp = new char[sz + 2];
-         cnn.supstr(1, tmp, sz + 2, COLLABREATE_MSGHISTORY_TAG);
-         msgHistory = new qstring(tmp);
-         delete [] tmp;
-         chistory.text += *msgHistory;
-      }
-      else {
-         msgHistory = new qstring();
-      }
-   }
-
-/*
-   cform = OpenForm_c("BUTTON YES NONE\nBUTTON NO NONE\nBUTTON CANCEL NONE\nCollabREate Status\n\n\n%/<:t1::::><:q2::::>",
-                      FORM_MDI|FORM_TAB|FORM_MENU|FORM_RESTORE, collab_cb, &chistory, &cmsg);
-   hook_to_notification_point(HT_UI, ui_collab, cform);
-*/
-
-/*
-   HWND hwnd = NULL;
-   TForm *form = create_tform("CollabREate", &hwnd);
-   if (hwnd != NULL) {
-      hook_to_notification_point(HT_UI, ui_collab, form);
-      open_tform(form, FORM_MDI|FORM_TAB|FORM_MENU|FORM_RESTORE|FORM_QWIDGET);
-   }
-   else {
-      close_tform(form, FORM_SAVE);
-   }
-*/
-}
-
 bool sameDay(time_t t1, time_t t2) {
-   tm tm1 = *localtime(&t1);
-   tm tm2 = *localtime(&t2);
+   tm *p_tm1 = localtime(&t1);
+   if (p_tm1 == NULL) {
+      return false;  //date error
+   }
+   tm tm1 = *p_tm1;
+   tm *p_tm2 = localtime(&t2);
+   if (p_tm2 == NULL) {
+      return false;  //date error
+   }
+   tm tm2 = *p_tm2;
    return tm1.tm_yday == tm2.tm_yday && tm1.tm_year == tm2.tm_year;
 }
 
@@ -303,34 +313,56 @@ void postCollabMessage(const char *message, time_t t) {
    tm *lt = localtime(&t);
    char change[80];
    if (!same) {
-      ::qsnprintf(change, sizeof(change), "Day changed to %02d %s %4d\n", lt->tm_mday, months[lt->tm_mon], lt->tm_year + 1900); 
-      if (msgHistory != NULL) {
-         *msgHistory += change;
-      }
+      ::qsnprintf(change, sizeof(change), "Day changed to %02d %s %4d", lt->tm_mday, months[lt->tm_mon], lt->tm_year + 1900); 
+      msgHistory.push_back(change);
    }
-   uint32_t len = 16 + strlen(message);
+   uint32_t len = 16 + (uint32_t)strlen(message);
    char *m = new char[len];
-   ::qsnprintf(m, len, "%02d:%02d %s\n", lt->tm_hour, lt->tm_min, message);
-   if (msgHistory != NULL) {
-      *msgHistory += m;
-   }
-/*   
-   if (cform) {
-      if (!same) {
-         cform->append(change);
-      }
-      cform->append(m);
-   }
-   else {
-      if (!same) {
-         msg("%s\n", change);
-      }
-      msg("%s\n", m);
-   }
-*/
+   ::qsnprintf(m, len, "%02d:%02d %s", lt->tm_hour, lt->tm_min, message);
+   msgHistory.push_back(m);
+   refresh_chooser("Collab form:1");
    delete [] m;
 }
 
+#if IDA_SDK_VERSION >= 700
+
+struct cmd_chooser : public chooser_t {
+   static const int widths[];
+   static const char *header[];
+
+   cmd_chooser() : chooser_t(CH_MODAL, 1, widths, header, "Select Command") {
+      icon = -1;
+//      deflt = 5;
+   };
+
+   virtual void idaapi get_row(qstrvec_t *cols, int * /*icon_*/, chooser_item_attrs_t * /*attrs*/, size_t n) const {
+      cols->push_back(getRunCommand((int)n));
+   };
+
+   virtual size_t idaapi get_count() const {
+      return numCommands();
+   };
+};
+
+const int cmd_chooser::widths[] = { 32 };
+const char *cmd_chooser::header[] = { "Command" };
+
+int do_choose_command() {
+   const char *format = "BUTTON YES* Ok\nBUTTON CANCEL Cancel\nSelect Command\n\n\n<Command:E:32:32::>\n";
+//   const char *format = "BUTTON YES* Ok\nBUTTON CANCEL Cancel\nSelect Command\n\n\n<:E:32:32::>\n";
+   intvec_t choices;
+   cmd_chooser info;
+  
+   int res = AskUsingForm_c(format, &info, &choices);
+   if (res == ASKBTN_YES) {
+      if (choices.size() == 1) {
+//      ::saveAuthData(user, password);
+         return choices[0] - 1;
+      }
+   }
+   return -1;
+}
+#else
 void idaapi get_command(void *obj, uint32 n, char *const *arrptr) {
    if (n) {
       qstrncpy(arrptr[0], getRunCommand(n - 1), MAXSTR);
@@ -346,12 +378,12 @@ uint32 idaapi sizer(void *obj) {
 
 int do_choose_command() {
    const char *format = "BUTTON YES* Ok\nBUTTON CANCEL Cancel\nSelect Command\n\n\n<Command:E:32:32::>\n";
-//   const char *format = "BUTTON YES* Ok\nBUTTON CANCEL Cancel\nSelect Command\n\n\n<:E:32:32::>\n";
+   //   const char *format = "BUTTON YES* Ok\nBUTTON CANCEL Cancel\nSelect Command\n\n\n<:E:32:32::>\n";
    intvec_t choices;
    chooser_info_t info;
    memset(&info, 0, sizeof(info));
-   int widths[] = {32};
-   char *popups[] = {NULL};
+   int widths[] = { 32 };
+   char *popups[] = { NULL };
    info.cb = sizeof(info);
    info.flags = CH_MODAL;
    info.width = 0;
@@ -360,19 +392,20 @@ int do_choose_command() {
    info.widths = widths;
    info.icon = -1;
    info.deflt = 5;
-//   info.popup_names = popups;
+   //   info.popup_names = popups;
    info.sizer = sizer;
    info.getl = get_command;
-  
+
    int res = AskUsingForm_c(format, &info, &choices);
    if (res == ASKBTN_YES) {
       if (choices.size() == 1) {
-//      ::saveAuthData(user, password);
+         //      ::saveAuthData(user, password);
          return choices[0] - 1;
       }
    }
    return -1;
 }
+#endif
 
 bool do_choose_perms(json_object *json) {  //"pub" "sub", "pub_mask", "sub_mask", also "perms" list
    bool result = false;

@@ -39,7 +39,7 @@
 #include <netnode.hpp>
 #include <typeinf.hpp>
 #include <struct.hpp>
-#include <area.hpp>
+#include <range.hpp>
 #include <frame.hpp>
 #include <segment.hpp>
 #include <enum.hpp>
@@ -65,7 +65,6 @@ using std::string;
 //#define DEBUG 1
 #endif
 
-/*
 const char *idp_messages[] = {
    //enum idp_notify
    "init",  //0
@@ -150,7 +149,11 @@ const char *idp_messages[] = {
    "custom_refinfo",//79
    "set_proc_options",//80
    "adjust_libfunc_ea",//81
-   "last_cb_before_debugger",//82
+   "extlang_changed",//82
+   "delay_slot_insn",//83
+   "adjust_refinfo",//84
+
+   "last_cb_before_debugger",//85
    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
    #ifdef NO_OBSOLETE_FUNCS
@@ -176,7 +179,7 @@ const char *idp_messages[] = {
    "calc_next_eas",//108
    "clean_tbit",//109
    "get_reg_info2"//110
-/ *
+/*
    "decorate_name",//500
    "setup_til",//501
    "based_ptr",//502
@@ -217,11 +220,9 @@ const char *idp_messages[] = {
    "get_fastcall_regs3",//537
    "get_thiscall_regs3",//538
    "loader=1000",//1000
-* /
-};
 */
+};
 
-/*
 const char *idb_messages[] = {
    //enum event_code_t
    "byte_patched",   //0
@@ -298,7 +299,6 @@ const char *idb_messages[] = {
    "local_types_changed", //62
    "segm_attrs_changed"   //63
 };
-*/
 
 //Given a frame pointer, determine which if any function owns it.
 //This is a reverse lookup on stack frame structures
@@ -314,26 +314,22 @@ func_t *func_from_frame(struc_t *frame) {
 void idp_undefine(ea_t ea) {
    //send address to server
    json_object *obj = json_object_new_object();
-   send_json(ea, COMMAND_UNDEFINE, obj);
-
-/*
-   if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on undefine %x\n", (uint32_t)ea);
+   if (send_json(ea, COMMAND_UNDEFINE, obj) == 0) {
+      qstring s;
+      format_llx(ea, s);
+      msg(PLUGIN_NAME": send error on undefine 0x%s\n", s.c_str());
    }
-*/
 }
 
 void idp_make_code(ea_t ea, asize_t len) {
    //send address and length to server
    json_object *obj = json_object_new_object();
    append_json_uint64_val(obj, "length", (uint64_t)len);
-   send_json(ea, COMMAND_MAKE_CODE, obj);
-
-/*
-   if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on make_code %x, %d\n", (uint32_t)ea, (int)len);
+   if (send_json(ea, COMMAND_MAKE_CODE, obj) == 0) {
+      qstring s;
+      format_llx(ea, s);
+      msg(PLUGIN_NAME": send error on make_code 0x%s, %d\n", s.c_str(), (int)len);
    }
-*/
 }
 
 void idp_make_data(ea_t ea, flags_t f, tid_t t, asize_t len) {
@@ -353,25 +349,23 @@ void idp_make_data(ea_t ea, flags_t f, tid_t t, asize_t len) {
       append_json_string_val(obj, "struc", name);
    }
 
-   send_json(ea, COMMAND_MAKE_DATA, obj);   
-
-/*
-   if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on make_data %x, %x, %x, %d\n", (uint32_t)ea, f, (uint32_t)t, (int)len);
+   if (send_json(ea, COMMAND_MAKE_DATA, obj) == 0) {
+      qstring s;
+      format_llx(ea, s);
+      msg(PLUGIN_NAME": send error on make_data 0x%s, %x, %x, %d\n", s.c_str(), f, (uint32_t)t, (int)len);
    }
-*/
 }
 
 void idp_move_segm(ea_t ea, segment_t *seg) {
    json_object *obj = json_object_new_object();
    append_json_ea_val(obj, "from", ea);
-   append_json_ea_val(obj, "to", seg->startEA);
-   send_json(COMMAND_MOVE_SEGM, obj);   
-/*
-   if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on move_segm %x, %x\n", (uint32_t)ea, (uint32_t)seg->startEA);
+   append_json_ea_val(obj, "to", seg->start_ea);
+   if (send_json(COMMAND_MOVE_SEGM, obj) == 0) {
+      qstring a1, a2;
+      format_llx(ea, a1);
+      format_llx(seg->start_ea, a2);
+      msg(PLUGIN_NAME": send error on move_segm 0x%s, 0x%s\n", a1.c_str(), a2.c_str());
    }
-*/
 }
 
 void idp_renamed(ea_t ea, const char *new_name, bool is_local) {
@@ -379,23 +373,24 @@ void idp_renamed(ea_t ea, const char *new_name, bool is_local) {
    json_object *obj = json_object_new_object();
    append_json_bool_val(obj, "local", (json_bool)is_local);
    append_json_string_val(obj, "name", new_name);
-   send_json(ea, COMMAND_RENAMED, obj);   
-/*
-   if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on rename %x, %s, %d\n", (uint32_t)ea, new_name, is_local);
+   if (send_json(ea, COMMAND_RENAMED, obj) == 0) {
+      qstring a1;
+      format_llx(ea, a1);
+      msg(PLUGIN_NAME": send error on rename 0x%s, %s, %d\n", a1.c_str(), new_name, is_local);
    }
-*/
 }
 
 void idp_add_func(func_t *pfn) {
    //send start, end address, name, flags (bp etc), purged, locals, delta, args
    json_object *obj = json_object_new_object();
-   append_json_ea_val(obj, "startea", pfn->startEA);
-   append_json_ea_val(obj, "endea", pfn->endEA);
-   send_json(COMMAND_ADD_FUNC, obj);   
+   append_json_ea_val(obj, "startea", pfn->start_ea);
+   append_json_ea_val(obj, "endea", pfn->end_ea);
+   send_json(COMMAND_ADD_FUNC, obj);
 /*
    if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on add_func %x\n", (uint32_t)pfn->startEA);
+      qstring a1;
+      format_llx(pfn->start_ea, a1);
+      msg(PLUGIN_NAME": send error on add_func 0x%s\n", a1.c_str());
    }
 */
 }
@@ -403,36 +398,44 @@ void idp_add_func(func_t *pfn) {
 void idp_del_func(func_t *pfn) {
    //send start, end address, name, flags (bp etc), purged, locals, delta, args
    json_object *obj = json_object_new_object();
-   send_json(pfn->startEA, COMMAND_DEL_FUNC, obj);   
+   send_json(pfn->start_ea, COMMAND_DEL_FUNC, obj);
 /*
    if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on del_func %x\n", (uint32_t)pfn->startEA);
+      qstring a1;
+      format_llx(pfn->start_ea, a1);
+      msg(PLUGIN_NAME": send error on del_func 0x%s\n", a1.c_str());
    }
 */
 }
 
 void idp_set_func_start(func_t *pfn, ea_t ea) {
-   //send pfn->startEA and ea to server
+   //send pfn->start_ea and ea to server
    json_object *obj = json_object_new_object();
-   append_json_ea_val(obj, "old_start", pfn->startEA);
+   append_json_ea_val(obj, "old_start", pfn->start_ea);
    append_json_ea_val(obj, "new_start", ea);
-   send_json(COMMAND_SET_FUNC_START, obj);   
+   send_json(COMMAND_SET_FUNC_START, obj);
 /*
    if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on set_func_start %x, %x\n", (uint32_t)pfn->startEA, (uint32_t)ea);
+      qstring a1, a2;
+      format_llx(pfn->start_ea, a1);
+      format_llx(ea, a2);
+      msg(PLUGIN_NAME": send error on set_func_start 0x%s, 0x%s\n", a1.c_str(), a2.c_str());
    }
 */
 }
 
 void idp_set_func_end(func_t *pfn, ea_t ea) {
-   //send pfn->startEA and ea to server
+   //send pfn->start_ea and ea to server
    json_object *obj = json_object_new_object();
-   append_json_ea_val(obj, "startea", pfn->startEA);
+   append_json_ea_val(obj, "startea", pfn->start_ea);
    append_json_ea_val(obj, "endea", ea);
    send_json(COMMAND_SET_FUNC_END, obj);
 /*
    if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on set_func_end %x, %x\n", (uint32_t)pfn->startEA, (uint32_t)ea);
+      qstring a1, a2;
+      format_llx(pfn->start_ea, a1);
+      format_llx(ea, a2);
+      msg(PLUGIN_NAME": send error on set_func_end 0x%s, 0x%s\n", a1.c_str(), a2.c_str());
    }
 */
 }
@@ -445,13 +448,15 @@ void idp_validate_flirt(ea_t ea, const char *name) {
 
    func_t *f = get_func(ea);
    if (f) {
-      append_json_ea_val(obj, "endea", f->endEA);
+      append_json_ea_val(obj, "endea", f->end_ea);
    }
 
    send_json(COMMAND_VALIDATE_FLIRT_FUNC, obj);
 /*
    if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on validate_flirt %x, %s\n", (uint32_t)ea, name);
+      qstring a1;
+      format_llx(ea, a1);
+      msg(PLUGIN_NAME": send error on validate_flirt 0x%s, %s\n", a1.c_str(), name);
    }
 */
 }
@@ -464,7 +469,10 @@ void idp_add_cref(ea_t from, ea_t to, cref_t type) {
    send_json(COMMAND_ADD_CREF, obj);
 /*
    if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on add_cref %x, %x, %x\n", (uint32_t)from, (uint32_t)to, type);
+      qstring a1, a2;
+      format_llx(from, a1);
+      format_llx(to, a2);
+      msg(PLUGIN_NAME": send error on add_cref 0x%s, 0x%s, %x\n", a1.c_str(), a2.c_str(), type);
    }
 */
 }
@@ -477,7 +485,10 @@ void idp_add_dref(ea_t from, ea_t to, dref_t type) {
    send_json(COMMAND_ADD_DREF, obj);
 /*
    if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on add_dref %x, %x, %x\n", (uint32_t)from, (uint32_t)to, type);
+      qstring a1, a2;
+      format_llx(from, a1);
+      format_llx(to, a2);
+      msg(PLUGIN_NAME": send error on add_dref 0x%s, 0x%s, %x\n", a1.c_str(), a2.c_str(), type);
    }
 */
 }
@@ -490,7 +501,10 @@ void idp_del_cref(ea_t from, ea_t to, bool expand) {
    send_json(COMMAND_DEL_CREF, obj);
 /*
    if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on del_cref %x, %x, %x\n", (uint32_t)from, (uint32_t)to, expand);
+      qstring a1, a2;
+      format_llx(from, a1);
+      format_llx(to, a2);
+      msg(PLUGIN_NAME": send error on del_cref 0x%s, 0x%s, %x\n", a1.c_str(), a2.c_str(), expand);
    }
 */
 }
@@ -502,7 +516,10 @@ void idp_del_dref(ea_t from, ea_t to) {
    send_json(COMMAND_DEL_DREF, obj);
 /*
    if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on del_dref 0x%08x, 0x%08x\n", (uint32_t)from, (uint32_t)to);
+      qstring a1, a2;
+      format_llx(from, a1);
+      format_llx(to, a2);
+      msg(PLUGIN_NAME": send error on del_dref 0x%s, 0x%s\n", a1.c_str(), a2.c_str());
    }
 */
 }
@@ -515,12 +532,15 @@ void byte_patched(ea_t ea) {
    send_json(ea, COMMAND_BYTE_PATCHED, obj);
 /*
    if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on byte_patched %x, %x\n", (uint32_t)ea, val);
+      qstring a1;
+      format_llx(ea, a1);
+      msg(PLUGIN_NAME": send error on byte_patched 0x%s, %x\n", a1.c_str(), val);
    }
 */
 }
 
 void comment_changed(ea_t ea, bool rep) {
+#if IDA_SDK_VERSION < 700
    ssize_t ssz = get_cmt(ea, rep, NULL, 0) + 1;
    if (ssz != -1) {
       size_t sz = (size_t)ssz;
@@ -539,12 +559,25 @@ void comment_changed(ea_t ea, bool rep) {
          send_json(ea, COMMAND_CMT_CHANGED, obj);
 /*
          if (send_data(b) == -1) {
-            msg(PLUGIN_NAME": send error on comment_changed %x, %s\n", (uint32_t)ea, cmt);
+            qstring a1;
+            format_llx(ea, a1);
+            msg(PLUGIN_NAME": send error on comment_changed 0x%s, %s\n", a1.c_str(), cmt);
          }
 */
          qfree(cmt);
       }
    }
+#else
+   qstring cmt;
+   ssize_t ssz = get_cmt(&cmt, ea, rep);
+   if (ssz != -1) {
+      //send comment to server
+      json_object *obj = json_object_new_object();
+      append_json_string_val(obj, "text", cmt);
+      append_json_bool_val(obj, "rep", (json_bool)rep);
+      send_json(ea, COMMAND_CMT_CHANGED, obj);
+   }
+#endif
 }
 
 void change_ti(ea_t ea, const type_t *type, const p_list *fnames) {
@@ -554,7 +587,9 @@ void change_ti(ea_t ea, const type_t *type, const p_list *fnames) {
    send_json(ea, COMMAND_TI_CHANGED, obj);
 /*
    if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on change_ti %x\n", (uint32_t)ea);
+      qstring a1;
+      format_llx(ea, a1);
+      msg(PLUGIN_NAME": send error on change_ti 0x%s\n", a1.c_str());
    }
 */
 }
@@ -567,7 +602,9 @@ void change_op_ti(ea_t ea, int n, const type_t *type, const p_list *fnames) {
    send_json(ea, COMMAND_OP_TI_CHANGED, obj);
 /*
    if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on change_op_ti %x\n", (uint32_t)ea);
+      qstring a1;
+      format_llx(ea, a1);
+      msg(PLUGIN_NAME": send error on change_op_ti 0x%s\n", a1.c_str());
    }
 */
 }
@@ -684,14 +721,16 @@ void change_op_type(ea_t ea, int opnum) {
          }
       }
    }
-   
+
    append_json_uint32_val(obj, "opnum", opnum);
    append_json_uint32_val(obj, "flags", f);
-   
+
    send_json(ea, COMMAND_OP_TYPE_CHANGED, obj);
 /*
    if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on change_op_type %x, %x, %x\n", (uint32_t)ea, opnum, f);
+      qstring a1;
+      format_llx(ea, a1);
+      msg(PLUGIN_NAME": send error on change_op_type 0x%s, %x, %x\n", a1.c_str(), opnum, f);
    }
 */
 }
@@ -820,8 +859,6 @@ void rename_enum(tid_t t) {
 }
 
 void change_enum_cmt(tid_t t, bool rep) {
-   char cmt[MAXNAMESIZE];
-
 #if IDA_SDK_VERSION < 680
    char name[MAXNAMESIZE];
    ssize_t sz = get_enum_name(t, name, sizeof(name));
@@ -829,7 +866,18 @@ void change_enum_cmt(tid_t t, bool rep) {
    qstring name;
    ssize_t sz = get_enum_name(&name, t);
 #endif
-
+#if IDA_SDK_VERSION >= 700
+   qstring cmt;
+   /*ssize_t csz =*/ get_enum_cmt(&cmt, t, rep);
+   if (sz > 0) {
+      json_object *obj = json_object_new_object();
+      append_json_string_val(obj, "enum_name", name);
+      append_json_string_val(obj, "comment", cmt);
+      append_json_bool_val(obj, "rep", (json_bool)rep);
+      send_json(COMMAND_ENUM_CMT_CHANGED, obj);
+   }
+#else
+   char cmt[MAXNAMESIZE];
    /*ssize_t csz =*/ get_enum_cmt(t, rep, cmt, sizeof(cmt));
    if (sz > 0) {
       json_object *obj = json_object_new_object();
@@ -847,6 +895,7 @@ void change_enum_cmt(tid_t t, bool rep) {
       }
 */
    }
+#endif
 }
 
 void create_enum_member(enum_t id, const_t cid) {
@@ -1051,7 +1100,6 @@ void expand_struct(struc_t *s) {
 }
 
 void change_struc_cmt(tid_t t, bool rep) {
-   char cmt[MAXNAMESIZE];
 #if IDA_SDK_VERSION < 680
    char name[MAXNAMESIZE];
    /*ssize_t sz =*/ get_struc_name(t, name, sizeof(name));
@@ -1060,6 +1108,17 @@ void change_struc_cmt(tid_t t, bool rep) {
    /*ssize_t ssz =*/ get_struc_name(&name, t);
 #endif
 
+#if IDA_SDK_VERSION >= 700
+   qstring cmt;
+   /*ssize_t csz =*/ get_struc_cmt(&cmt, t, rep);
+
+   json_object *obj = json_object_new_object();
+   append_json_string_val(obj, "struc_name", name);
+   append_json_string_val(obj, "comment", cmt);
+   append_json_bool_val(obj, "rep", (json_bool)rep);
+   send_json(COMMAND_STRUC_CMT_CHANGED, obj);
+#else
+   char cmt[MAXNAMESIZE];
    /*ssize_t csz =*/ get_struc_cmt(t, rep, cmt, sizeof(cmt));
 
    json_object *obj = json_object_new_object();
@@ -1077,12 +1136,13 @@ void change_struc_cmt(tid_t t, bool rep) {
 #endif
    }
 */
+#endif
 }
 
 void create_struct_member(struc_t *s, member_t *m) {
    //get struct name and member name/offs and send to server
    json_object *obj = json_object_new_object();
-   
+
    opinfo_t ti, *pti;
 
 #if IDA_SDK_VERSION < 680
@@ -1159,7 +1219,7 @@ void create_struct_member(struc_t *s, member_t *m) {
 
    append_json_string_val(obj, "struc_name", name);
    append_json_string_val(obj, "member", mbr);
-   
+
    send_json(obj);
 
 /*
@@ -1211,14 +1271,14 @@ void rename_struct_member(struc_t *s, member_t *m) {
 //   if (s->props & SF_FRAME) {   //SF_FRAME is only available in SDK520 and later
 //      func_t *pfn = func_from_frame(s);
       //send func ea, member offset, name
-      append_json_ea_val(obj, "func_addr", pfn->startEA); //lookup function on remote side
+      append_json_ea_val(obj, "func_addr", pfn->start_ea); //lookup function on remote side
       append_json_int32_val(obj, "offset", (int32_t)m->soff);
 #if IDA_SDK_VERSION < 680
       char name[MAXNAMESIZE];
       get_member_name(m->id, name, MAXNAMESIZE);
 /*
       if (send_data(b) == -1) {
-         msg(PLUGIN_NAME": send error on rename_stack_member %x, %x, %s\n", (uint32_t)pfn->startEA, (uint32_t)m->soff, name);
+         msg(PLUGIN_NAME": send error on rename_stack_member %x, %x, %s\n", (uint32_t)pfn->start_ea, (uint32_t)m->soff, name);
       }
 */
 #else
@@ -1226,7 +1286,7 @@ void rename_struct_member(struc_t *s, member_t *m) {
       get_member_name2(&name, m->id);
 /*
       if (send_data(b) == -1) {
-         msg(PLUGIN_NAME": send error on rename_stack_member %x, %x, %s\n", (uint32_t)pfn->startEA, (uint32_t)m->soff, name.c_str());
+         msg(PLUGIN_NAME": send error on rename_stack_member %x, %x, %s\n", (uint32_t)pfn->start_ea, (uint32_t)m->soff, name.c_str());
       }
 */
 #endif
@@ -1269,7 +1329,7 @@ void change_struct_member(struc_t *s, member_t *m) {
    //what exactly constitutes a change? what info to send?
    //get struct name and member name/offs and send to server
    json_object *obj = json_object_new_object();
-   
+
    opinfo_t ti, *pti;
 #if IDA_SDK_VERSION < 680
    char name[MAXNAMESIZE];
@@ -1352,37 +1412,45 @@ void change_struct_member(struc_t *s, member_t *m) {
 
 void create_thunk(func_t *pfn) {
    json_object *obj = json_object_new_object();
-   send_json(pfn->startEA, COMMAND_THUNK_CREATED, obj);
+   send_json(pfn->start_ea, COMMAND_THUNK_CREATED, obj);
 /*
    if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on create_thunk %x\n", (uint32_t)pfn->startEA);
+      qstring a1;
+      format_llx(pfn->start_ea, a1);
+      msg(PLUGIN_NAME": send error on create_thunk 0x%s\n", a1.c_str());
    }
 */
 }
 
 void append_func_tail(func_t *pfn, func_t *tail) {
    json_object *obj = json_object_new_object();
-   append_json_ea_val(obj, "funcea", pfn->startEA);
-   append_json_ea_val(obj, "tail_start", tail->startEA);
-   append_json_ea_val(obj, "tail_end", tail->endEA);
-   
+   append_json_ea_val(obj, "funcea", pfn->start_ea);
+   append_json_ea_val(obj, "tail_start", tail->start_ea);
+   append_json_ea_val(obj, "tail_end", tail->end_ea);
+
    send_json(COMMAND_FUNC_TAIL_APPENDED, obj);
 /*
    if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on append_func_tail %x, %x\n", (uint32_t)pfn->startEA, (uint32_t)tail->startEA);
+      qstring a1, a2;
+      format_llx(pfn->start_ea, a1);
+      format_llx(tail->start_ea, a2);
+      msg(PLUGIN_NAME": send error on append_func_tail 0x%s, 0x%s\n", a1.c_str(), a2.c_str());
    }
 */
 }
 
 void remove_function_tail(func_t *pfn, ea_t ea) {
    json_object *obj = json_object_new_object();
-   append_json_ea_val(obj, "funcea", pfn->startEA);
+   append_json_ea_val(obj, "funcea", pfn->start_ea);
    append_json_ea_val(obj, "tailea", ea);
-   
+
    send_json(COMMAND_FUNC_TAIL_REMOVED, obj);
 /*
    if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on remove_function_tail %x, %x\n", (uint32_t)pfn->startEA, (uint32_t)ea);
+      qstring a1, a2;
+      format_llx(pfn->start_ea, a1);
+      format_llx(ea, a2);
+      msg(PLUGIN_NAME": send error on remove_function_tail 0x%s, 0x%s\n", a1.c_str(), a2.c_str());
    }
 */
 }
@@ -1390,32 +1458,35 @@ void remove_function_tail(func_t *pfn, ea_t ea) {
 void change_tail_owner(func_t *tail, ea_t ea) {
    json_object *obj = json_object_new_object();
    append_json_ea_val(obj, "ownerea", ea);
-   append_json_ea_val(obj, "tailea", tail->startEA);
-   
+   append_json_ea_val(obj, "tailea", tail->start_ea);
+
    send_json(COMMAND_TAIL_OWNER_CHANGED, obj);
 /*
    if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on change_tail_owner %x, %x\n", (uint32_t)tail->startEA, (uint32_t)ea);
+      qstring a1, a2;
+      format_llx(tail->start_ea, a1);
+      format_llx(ea, a2);
+      msg(PLUGIN_NAME": send error on change_tail_owner 0x%s, 0x%s\n", a1.c_str(), a2.c_str());
    }
 */
 }
 
 void change_func_noret(func_t *pfn) {
    json_object *obj = json_object_new_object();
-   send_json(pfn->startEA, COMMAND_FUNC_NORET_CHANGED, obj);
+   send_json(pfn->start_ea, COMMAND_FUNC_NORET_CHANGED, obj);
 /*
    if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on change_func_noret %d\n", (uint32_t)pfn->startEA);
+      qstring a1;
+      format_llx(pfn->start_ea, a1);
+      msg(PLUGIN_NAME": send error on change_func_noret 0x%s\n", a1.c_str());
    }
 */
 }
 
 void add_segment(segment_t *seg) {
    json_object *obj = json_object_new_object();
-   char name[MAXNAMESIZE];
-   char clazz[MAXNAMESIZE];
-   append_json_ea_val(obj, "startea", seg->startEA);
-   append_json_ea_val(obj, "endea", seg->endEA);
+   append_json_ea_val(obj, "startea", seg->start_ea);
+   append_json_ea_val(obj, "endea", seg->end_ea);
    append_json_int32_val(obj, "orgbase", (int32_t)seg->orgbase);
 
    append_json_int32_val(obj, "align", (int32_t)seg->align);
@@ -1424,15 +1495,26 @@ void add_segment(segment_t *seg) {
    append_json_int32_val(obj, "bitness", (int32_t)seg->bitness);
    append_json_int32_val(obj, "flags", (int32_t)seg->flags);
 
+#if IDA_SDK_VERSION < 700
+   char name[MAXNAMESIZE];
+   char clazz[MAXNAMESIZE];
    get_segm_name(seg, name, sizeof(name));
-   append_json_string_val(obj, "name", name);
    get_segm_class(seg, clazz, sizeof(clazz));
+#else
+   qstring name;
+   qstring clazz;
+   get_segm_name(&name, seg);
+   get_segm_class(&clazz, seg);
+#endif
+   append_json_string_val(obj, "name", name);
    append_json_string_val(obj, "class", clazz);
-   
+
    send_json(COMMAND_SEGM_ADDED, obj);
-/*   
+/*
    if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on add_segment %d\n", (uint32_t)seg->startEA);
+      qstring a1;
+      format_llx(seg->start_ea, a1);
+      msg(PLUGIN_NAME": send error on add_segment 0x%s\n", a1.c_str());
    }
 */
 }
@@ -1442,31 +1524,37 @@ void del_segment(ea_t ea) {
    send_json(ea, COMMAND_SEGM_DELETED, obj);
 /*
    if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on del_segment %d\n", (uint32_t)ea);
+      qstring a1;
+      format_llx(ea, a1);
+      msg(PLUGIN_NAME": send error on del_segment 0x%s\n", a1.c_str());
    }
 */
 }
 
 void change_seg_start(segment_t *seg) {
    json_object *obj = json_object_new_object();
-   append_json_ea_val(obj, "startea", seg->startEA);
-   append_json_ea_val(obj, "endea", seg->endEA);   
+   append_json_ea_val(obj, "startea", seg->start_ea);
+   append_json_ea_val(obj, "endea", seg->end_ea);
    send_json(COMMAND_SEGM_START_CHANGED, obj);
 /*
    if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on change_seg_start\n");
+      qstring a1;
+      format_llx(seg->start_ea, a1);
+      msg(PLUGIN_NAME": send error on change_seg_start: 0x%s\n", a1.c_str());
    }
 */
 }
 
 void change_seg_end(segment_t *seg) {
    json_object *obj = json_object_new_object();
-   append_json_ea_val(obj, "startea", seg->startEA);
-   append_json_ea_val(obj, "endea", seg->endEA);   
+   append_json_ea_val(obj, "startea", seg->start_ea);
+   append_json_ea_val(obj, "endea", seg->end_ea);
    send_json(COMMAND_SEGM_END_CHANGED, obj);
 /*
    if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on change_seg_end\n");
+      qstring a1;
+      format_llx(seg->start_ea, a1);
+      msg(PLUGIN_NAME": send error on change_seg_end: 0x%s\n", a1.c_str());
    }
 */
 }
@@ -1474,45 +1562,79 @@ void change_seg_end(segment_t *seg) {
 void move_segment(ea_t from, ea_t to, asize_t sz) {
    json_object *obj = json_object_new_object();
    append_json_ea_val(obj, "from", from);
-   append_json_ea_val(obj, "to", to);   
-   append_json_uint64_val(obj, "size", (uint64_t)sz);   
+   append_json_ea_val(obj, "to", to);
+   append_json_uint64_val(obj, "size", (uint64_t)sz);
    send_json(COMMAND_SEGM_MOVED, obj);
 /*
    if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on move_segment\n");
+      qstring a1, a2;
+      format_llx(from, a1);
+      format_llx(to, a2);
+      msg(PLUGIN_NAME": send error on move_segment: 0x%s -> 0x%s\n", a1.c_str(), a2.c_str());
    }
 */
 }
 
+#if IDA_SDK_VERSION < 700
 void change_area_comment(areacb_t *cb, const area_t *a, const char *cmt, bool rep) {
    json_object *obj = json_object_new_object();
    int cbType = 0;
    if (cb == &funcs) {
-      append_json_string_val(obj, "area", "funcs");
+      append_json_string_val(obj, "range", "funcs");
    }
    else if (cb == &segs) {
-      append_json_string_val(obj, "area", "segs");
+      append_json_string_val(obj, "range", "segs");
    }
    else {
       msg(PLUGIN_NAME": unknown areacb_t in change_area_comment\n");
       return;
    }
 
-   append_json_ea_val(obj, "startea", a->startEA);
+   append_json_ea_val(obj, "startea", a->start_ea);
    append_json_bool_val(obj, "rep", rep);
    append_json_string_val(obj, "comment", cmt);
 
-   send_json(COMMAND_AREA_CMT_CHANGED, obj);
+   send_json(COMMAND_RANGE_CMT_CHANGED, obj);
 /*
    if (send_data(b) == -1) {
-      msg(PLUGIN_NAME": send error on change_area_comment %x, %s\n", (uint32_t)a->startEA, cmt);
+      qstring a1;
+      format_llx(a->start_ea, a1);
+      msg(PLUGIN_NAME": send error on change_area_comment 0x%s, %s\n", a1.c_str(), cmt);
    }
 */
 }
+#endif
+
+#if IDA_SDK_VERSION >= 700
+void change_range_comment(range_kind_t rk, const range_t *r, const char *cmt, bool rep) {
+   json_object *obj = json_object_new_object();
+   int cbType = 0;
+   if (rk == RANGE_KIND_FUNC) {
+      append_json_string_val(obj, "range", "funcs");
+}
+   else if (rk == RANGE_KIND_SEGMENT) {
+      append_json_string_val(obj, "range", "segs");
+   }
+   else {
+      msg(PLUGIN_NAME": unknown range_kind_t in change_range_comment\n");
+      return;
+   }
+
+   append_json_ea_val(obj, "startea", r->start_ea);
+   append_json_bool_val(obj, "rep", rep);
+   append_json_string_val(obj, "comment", cmt);
+
+   send_json(COMMAND_RANGE_CMT_CHANGED, obj);
+}
+#endif
 
 //notification hook function for idb notifications
 #if IDA_SDK_VERSION >= 510      //HT_IDB introduced in SDK 510
+#if IDA_SDK_VERSION < 700
 int idaapi idb_hook(void * /*user_data*/, int notification_code, va_list va) {
+#else
+ssize_t idaapi idb_hook(void * /*user_data*/, int notification_code, va_list va) {
+#endif
    if (!userPublish) {
       //should only be called if we are publishing
       return 0;
@@ -1534,7 +1656,7 @@ int idaapi idb_hook(void * /*user_data*/, int notification_code, va_list va) {
       return 0;
    }
 */
-//   msg("entering idb::%d (%s)\n", notification_code, notification_code < 60 ? idb_messages[notification_code] : "?");
+   msg("entering idb::%d (%s)\n", notification_code, notification_code < 60 ? idb_messages[notification_code] : "?");
 //   publish = false;
    switch (notification_code) {
       case idb_event::byte_patched: {          // A byte has been patched
@@ -1710,8 +1832,12 @@ int idaapi idb_hook(void * /*user_data*/, int notification_code, va_list va) {
          append_func_tail(pfn, tail);
          break;
       }
+#if IDA_SDK_VERSION >= 700
+      case idb_event::func_tail_deleted: {     // A function tail chunk has been removed
+#else
       case idb_event::func_tail_removed: {     // A function tail chunk has been removed
-                                               // in: func_t *pfn, ea_t tail_ea
+#endif
+         // in: func_t *pfn, ea_t tail_ea
          func_t *pfn = va_arg(va, func_t*);
          ea_t ea = va_arg(va, ea_t);
          remove_function_tail(pfn, ea);
@@ -1737,7 +1863,7 @@ int idaapi idb_hook(void * /*user_data*/, int notification_code, va_list va) {
          break;
       }
       case idb_event::segm_deleted: {          // A segment has been deleted
-                                               // in: ea_t startEA
+                                               // in: ea_t start_ea
          ea_t ea = va_arg(va, ea_t);
          del_segment(ea);
          break;
@@ -1762,6 +1888,73 @@ int idaapi idb_hook(void * /*user_data*/, int notification_code, va_list va) {
          move_segment(ea, to, sz);
          break;
       }
+
+#if IDA_SDK_VERSION >= 700
+      case idb_event::make_code: {
+         insn_t *ins = va_arg(va, insn_t*);
+         /*
+         qstring a1;
+         format_llx(ea, a1);
+         msg(PLUGIN_NAME": 0x%s make_code\n", a1.c_str());
+         */
+         idp_make_code(ins->ea, ins->size);
+         break;
+      }
+      case idb_event::make_data: {
+         ea_t ea = va_arg(va, ea_t);
+         flags_t f = va_arg(va, flags_t);
+         tid_t t = va_arg(va, tid_t);
+         asize_t len = va_arg(va, asize_t);
+         /*
+         qstring a1;re
+         format_llx(ea, a1);
+         msg(PLUGIN_NAME": 0x%s make_data\n", a1.c_str());
+         */
+         idp_make_data(ea, f, t, len);
+         break;
+      }
+      case idb_event::renamed: {
+         //this receives notifications for stack variables as well
+         ea_t ea = va_arg(va, ea_t);
+         const char *name = va_arg(va, const char *);
+         bool local = va_arg(va, int) != 0;
+         idp_renamed(ea, name, local);
+         break;
+      }
+      case idb_event::func_added: {
+         func_t *pfn = va_arg(va, func_t*);
+         idp_add_func(pfn);
+         break;
+      }
+      case idb_event::set_func_start: {
+         func_t *pfn = va_arg(va, func_t*);
+         ea_t ea = va_arg(va, ea_t);
+         idp_set_func_start(pfn, ea);
+         break;
+      }
+      case idb_event::set_func_end: {
+         func_t *pfn = va_arg(va, func_t*);
+         ea_t ea = va_arg(va, ea_t);
+         idp_set_func_end(pfn, ea);
+         break;
+      }
+      case idb_event::deleting_func: {
+         func_t *pfn = va_arg(va, func_t*);
+         idp_del_func(pfn);
+         break;
+      }
+      case idb_event::auto_empty: {
+         //         msg("auto_empty\n");
+         break;
+         //         return 0;
+      }
+      case idb_event::auto_empty_finally: {
+         //         msg("auto_empty_finally\n");
+         //         return 0;
+         break;
+      }
+#endif
+
 #if 0
 #if IDA_SDK_VERSION >= 530
       case idb_event::area_cmt_changed: {
@@ -1892,8 +2085,8 @@ int idaapi idb_hook(void * /*user_data*/, int notification_code, va_list va) {
          break;
       }
       case idb_event::deleting_segm: {        // A segment is to be deleted
-                                    // in: ea_t startEA
-//         ea_t startEA = va_arg(va, ea_t);
+                                    // in: ea_t start_ea
+//         ea_t start_ea = va_arg(va, ea_t);
          break;
       }
       case idb_event::changing_segm_start: {  // Segment start address is to be changed
@@ -1968,7 +2161,12 @@ int idaapi idb_hook(void * /*user_data*/, int notification_code, va_list va) {
 #endif  //IDA_SDK_VERSION >= 510
 
 //notification hook function for idp notifications
+#if IDA_SDK_VERSION < 700
 int idaapi idp_hook(void * /*user_data*/, int notification_code, va_list va) {
+//int idaapi ui_hook(void *user_data, int notification_code, va_list va);
+#else
+ssize_t idaapi idp_hook(void * /*user_data*/, int notification_code, va_list va) {
+#endif
    if (!userPublish) {
       //should only be called if we are publishing
       return 0;
@@ -1991,42 +2189,55 @@ int idaapi idp_hook(void * /*user_data*/, int notification_code, va_list va) {
       return 0;
    }
 */
-//   msg("entering idp::%d (%s)\n", notification_code, notification_code < 110 ? (idp_messages[notification_code] ? idp_messages[notification_code] : "wtf") : "?");
+   msg("entering idp::%d (%s)\n", notification_code, notification_code < 110 ? (idp_messages[notification_code] ? idp_messages[notification_code] : "wtf") : "?");
 //   publish = false;
    switch (notification_code) {
-/* this causes nothing but heartache
-      case processor_t::undefine: {
+      case processor_t::ev_undefine: {
          ea_t ea = va_arg(va, ea_t);
-         msg(PLUGIN_NAME": %x undefined\n", (uint32_t)ea);
+/*
+         qstring a1;
+         format_llx(ea, a1);
+         msg(PLUGIN_NAME": 0x%s undefined\n", a1.c_str());
+*/
          idp_undefine(ea);
          break;
       }
-*/
-/* this causes nothing but heartache
+#if IDA_SDK_VERSION < 700
       case processor_t::make_code: {
          ea_t ea = va_arg(va, ea_t);
          asize_t len = va_arg(va, asize_t);
+/*
+         qstring a1;
+         format_llx(ea, a1);
+         msg(PLUGIN_NAME": 0x%s make_code\n", a1.c_str());
+*/
          idp_make_code(ea, len);
          break;
       }
-*/
-/* this causes nothing but heartache
       case processor_t::make_data: {
          ea_t ea = va_arg(va, ea_t);
          flags_t f = va_arg(va, flags_t);
          tid_t t = va_arg(va, tid_t);
          asize_t len = va_arg(va, asize_t);
+/*
+         qstring a1;
+         format_llx(ea, a1);
+         msg(PLUGIN_NAME": 0x%s make_data\n", a1.c_str());
+*/
          idp_make_data(ea, f, t, len);
          break;
       }
-*/
+#endif
+#if IDA_SDK_VERSION < 700
       case processor_t::move_segm: {
          ea_t ea = va_arg(va, ea_t);
          segment_t *seg = va_arg(va, segment_t*);
          idp_move_segm(ea, seg);
          break;
       }
+#endif
 #if IDA_SDK_VERSION >= 510
+#if IDA_SDK_VERSION < 700
       case processor_t::renamed: {
          //this receives notifications for stack variables as well
          ea_t ea = va_arg(va, ea_t);
@@ -2058,6 +2269,7 @@ int idaapi idp_hook(void * /*user_data*/, int notification_code, va_list va) {
          break;
       }
 #endif
+#endif
 #if IDA_SDK_VERSION >= 520
 #if 0
       case processor_t::validate_flirt_func: {
@@ -2071,7 +2283,7 @@ int idaapi idp_hook(void * /*user_data*/, int notification_code, va_list va) {
 #endif
 #endif
 #if IDA_SDK_VERSION >= 530
-      case processor_t::add_cref: {
+      case processor_t::ev_add_cref: {
          // args: ea_t from, ea_t to, cref_t type
          ea_t from = va_arg(va, ea_t);
          ea_t to = va_arg(va, ea_t);
@@ -2079,7 +2291,7 @@ int idaapi idp_hook(void * /*user_data*/, int notification_code, va_list va) {
          idp_add_cref(from, to, type);
          break;
       }
-      case processor_t::add_dref: {
+      case processor_t::ev_add_dref: {
          // args: ea_t from, ea_t to, dref_t type
          ea_t from = va_arg(va, ea_t);
          ea_t to = va_arg(va, ea_t);
@@ -2087,7 +2299,7 @@ int idaapi idp_hook(void * /*user_data*/, int notification_code, va_list va) {
          idp_add_dref(from, to, type);
          break;
       }
-      case processor_t::del_cref: {
+      case processor_t::ev_del_cref: {
          // args: ea_t from, ea_t to, bool expand
          ea_t from = va_arg(va, ea_t);
          ea_t to = va_arg(va, ea_t);
@@ -2095,7 +2307,7 @@ int idaapi idp_hook(void * /*user_data*/, int notification_code, va_list va) {
          idp_del_cref(from, to, expand);
          break;
       }
-      case processor_t::del_dref: {
+      case processor_t::ev_del_dref: {
          // args: ea_t from, ea_t to
          ea_t from = va_arg(va, ea_t);
          ea_t to = va_arg(va, ea_t);
@@ -2103,22 +2315,24 @@ int idaapi idp_hook(void * /*user_data*/, int notification_code, va_list va) {
          break;
       }
 #endif
-      case processor_t::auto_empty : {
-//         msg("auto_empty\n");
-         break;
-//         return 0;
-      }
-      case processor_t::auto_queue_empty : {
+      case processor_t::ev_auto_queue_empty : {
 //         msg("auto_queue_empty\n");
          break;
 //         return 0;
       }
 #if IDA_SDK_VERSION >= 500
-      case processor_t::auto_empty_finally : {
+#if IDA_SDK_VERSION < 700
+      case processor_t::auto_empty: {
+         //         msg("auto_empty\n");
+         break;
+         //         return 0;
+      }
+      case processor_t::auto_empty_finally: {
 //         msg("auto_empty_finally\n");
 //         return 0;
          break;
       }
+#endif
 #endif
       default:
 //         autoWait();

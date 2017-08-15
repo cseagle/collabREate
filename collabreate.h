@@ -93,13 +93,16 @@
 #define COMMAND_SEGM_START_CHANGED   "segm_start_chg"
 #define COMMAND_SEGM_END_CHANGED     "segm_end_chg"
 #define COMMAND_SEGM_MOVED           "segm_moved"
-#define COMMAND_AREA_CMT_CHANGED     "area_cmt_chg"
+//#define COMMAND_AREA_CMT_CHANGED     "area_cmt_chg"
+#define COMMAND_RANGE_CMT_CHANGED     "range_cmt_chg"
 #define COMMAND_STRUC_MEMBER_CHANGED_OFFSET "struc_mbr_chg_offset"
 #define COMMAND_STRUC_MEMBER_CHANGED_ENUM   "struc_mbr_chg_enum"
 #define COMMAND_CREATE_STRUC_MEMBER_OFFSET  "create_struc_mbr_offset"
 
 #define AREACB_FUNCS                  "funcs"
 #define AREACB_SEGS                   "segs"
+#define RANGE_FUNCS     AREACB_FUNCS
+#define RANGE_SEGS      AREACB_SEGS
 
 #define COMMAND_IDP                 128
 #define COMMAND_UNDEFINE            "undefine"
@@ -161,7 +164,7 @@
 
 class netnode;
 extern netnode cnn;
-extern qstring *msgHistory;
+extern qvector<qstring> msgHistory;
 extern qstring *changeCache;
 
 #define COLLABREATE_NETNODE "$ COLLABREATE NETNODE"
@@ -279,12 +282,13 @@ bool do_choose_perms(json_object *json);
 
 void do_send_user_message(const char *msg);
 
-void send_json(json_object *obj);
-void send_json(const char *type, json_object *obj);
-void send_json(ea_t ea, const char *type, json_object *obj);
+int send_json(json_object *obj);
+int send_json(const char *type, json_object *obj);
+int send_json(ea_t ea, const char *type, json_object *obj);
 
 const char *hex_encode(const void *bin, uint32_t len);
 uint8_t *hex_decode(const char *hex, uint32_t *len);
+void format_llx(uint64_t val, qstring &s);
 
 void append_json_hex_val(json_object *obj, const char *key, const uint8_t *value, uint32_t len = 0);
 void append_json_string_val(json_object *obj, const char *key, const char *value);
@@ -316,14 +320,50 @@ void postCollabMessage(const char *msg, time_t t = 0);
 
 //IDA HOOKS
 #if IDA_SDK_VERSION >= 510      //HT_IDB introduced in SDK 510
+#if IDA_SDK_VERSION < 700
 int idaapi idb_hook(void * /*user_data*/, int notification_code, va_list va);
+#else
+ssize_t idaapi idb_hook(void * /*user_data*/, int notification_code, va_list va);
 #endif
+#endif
+#if IDA_SDK_VERSION < 700
 int idaapi idp_hook(void * /*user_data*/, int notification_code, va_list va);
 //int idaapi ui_hook(void *user_data, int notification_code, va_list va);
+#else
+ssize_t idaapi idp_hook(void * /*user_data*/, int notification_code, va_list va);
+#endif
 
 //Collabreate messaging
 void build_handler_map();
 int handle_idp_msg(json_object *json, const char *msg_type);
 bool msg_dispatcher(const char *json_in);
+
+//help with the transition to IDA 7.0
+
+#if IDA_SDK_VERSION >= 700
+#define get_flags_novalue(ea) get_flags(ea)
+#define isEnum0(f) is_enum0(f)
+#define isEnum1(f) is_enum1(f)
+#define isStroff0(f) is_stroff0(f)
+#define isStroff1(f) is_stroff1(f)
+#define isOff0(f) is_off0(f)
+#define isOff1(f) is_off1(f)
+#define isOff(f, n) is_off(f, n)
+#define isEnum(f, n) is_enum(f, n)
+#define isStroff(f, n) is_stroff(f, n)
+
+#define isStruct(f) is_struct(f)
+#define isASCII(f) is_strlit(f)
+
+#define get_member_name2 get_member_name
+#else
+#define ev_add_cref add_cref
+#define ev_add_dref add_dref
+#define ev_del_cref del_cref
+#define ev_del_dref del_dref
+#define ev_auto_queue_empty auto_queue_empty
+#define set_func_start func_setstart 
+#define set_func_end func_setend
+#endif
 
 #endif
