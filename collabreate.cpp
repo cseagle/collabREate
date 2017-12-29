@@ -62,7 +62,7 @@ extern HMODULE hModule;
 #include <auto.hpp>
 
 #include <cstdio>
-#include <json.h>
+#include <json-c/json.h>
 
 #include <map>
 #include <string>
@@ -279,11 +279,19 @@ bool idaapi run(size_t /*arg*/) {
 #endif
    bool result = true;
    if (is_connected()) {
+#if IDA_SDK_VERSION < 700
       char *desc;
+#else
+      qstring desc;
+#endif
       switch (do_choose_command()) {
          case USER_FORK:
+#if IDA_SDK_VERSION < 700
             desc = askstr(HIST_CMT, "", "Please enter a forked project description");
             if (desc) {
+#else
+            if (ask_str(&desc, HIST_CMT, "Please enter a forked project description")) {
+#endif
                json_object *obj = json_object_new_object();
                append_json_uint64_val(obj, "last_update", getLastUpdate());
                append_json_string_val(obj, "description", desc);
@@ -294,8 +302,12 @@ bool idaapi run(size_t /*arg*/) {
             msg(PLUGIN_NAME": Fork request sent.\n");
             break;
          case USER_CHECKPOINT:
+#if IDA_SDK_VERSION < 700
             desc = askstr(HIST_CMT, "", "Please enter a checkpoint description");
             if (desc) {
+#else
+            if (ask_str(&desc, HIST_CMT, "Please enter a checkpoint description")) {
+#endif
                json_object *obj = json_object_new_object();
                append_json_uint64_val(obj, "last_update", getLastUpdate());
                append_json_string_val(obj, "description", desc);

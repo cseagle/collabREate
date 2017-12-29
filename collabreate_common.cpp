@@ -30,7 +30,7 @@
 #include <nalt.hpp>
 #include <md5.h>
 
-#include <json.h>
+#include <json-c/json.h>
 
 #include "sdk_versions.h"
 

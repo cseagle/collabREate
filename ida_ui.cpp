@@ -4,7 +4,7 @@
 #include <netnode.hpp>
 #include <loader.hpp>
 
-#include <json.h>
+#include <json-c/json.h>
 
 #include "collabreate.h"
 #include "collabreate_ui.h"

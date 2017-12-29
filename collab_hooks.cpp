@@ -48,7 +48,7 @@
 #include <offset.hpp>
 #include <auto.hpp>
 
-#include <json.h>
+#include <json-c/json.h>
 
 #include <map>
 #include <string>
@@ -615,7 +615,11 @@ void gatherStructOffsetInfo(json_object *obj, ea_t ea, int n) {
    json_object *jpath = json_object_new_array();
    tid_t path[MAXSTRUCPATH];
    adiff_t delta;
+#if IDA_SDK_VERSION >= 700
+   int path_len = get_stroff_path(path, &delta, ea, n);
+#else
    int path_len = get_stroff_path(ea, n, path, &delta);
+#endif
    append_json_uint64_val(obj, "delta", (uint64_t)delta);
    //iterate over the structure path, adding the name of each struct
    //the the provided path.  We pass names here rather than tid
@@ -641,7 +645,11 @@ void gatherStructOffsetInfo(json_object *obj, ea_t ea, int n) {
 //add the information into the provided buffer
 void gatherEnumInfo(json_object *obj, ea_t ea, int n) {
    uchar serial;
+#if IDA_SDK_VERSION >= 700
+   enum_t id = get_enum_id(&serial, ea, n);
+#else
    enum_t id = get_enum_id(ea, n, &serial);
+#endif
 
 #if IDA_SDK_VERSION < 680
    char name[MAXNAMESIZE];
@@ -689,7 +697,11 @@ void change_op_type(ea_t ea, int opnum) {
       }
       else if (isOff1(f)) {
          refinfo_t ri;
+#if IDA_SDK_VERSION >= 700
+         if (!get_refinfo(&ri, ea, opnum)) {
+#else
          if (!get_refinfo(ea, opnum, &ri)) {
+#endif
             msg(PLUGIN_NAME": missing refinfo on offset in change_op_type %x, %x", (uint32_t)ea, opnum);
             return;
          }
@@ -711,7 +723,11 @@ void change_op_type(ea_t ea, int opnum) {
       }
       else if (isOff0(f)) {
          refinfo_t ri;
+#if IDA_SDK_VERSION >= 700
+         if (!get_refinfo(&ri, ea, opnum)) {
+#else
          if (!get_refinfo(ea, opnum, &ri)) {
+#endif
             msg(PLUGIN_NAME": missing refinfo on offset in change_op_type %x, %x", (uint32_t)ea, opnum);
             return;
          }
@@ -1151,7 +1167,12 @@ void create_struct_member(struc_t *s, member_t *m) {
    qstring name;
 #endif
 
+#if IDA_SDK_VERSION >= 700
+   pti = retrieve_member_info(&ti, m);
+#else
    pti = retrieve_member_info(m, &ti);
+#endif
+
 /*
    msg(PLUGIN_NAME": create_struct_member, tid %x\n", m->id);
    netnode mn(m->id);
@@ -1337,7 +1358,11 @@ void change_struct_member(struc_t *s, member_t *m) {
    qstring name;
 #endif
 
+#if IDA_SDK_VERSION >= 700
+   pti = retrieve_member_info(&ti, m);
+#else
    pti = retrieve_member_info(m, &ti);
+#endif
 
    if (pti) {
       //in this case, we need to send the ti info in some manner

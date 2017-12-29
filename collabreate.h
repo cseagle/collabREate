@@ -34,7 +34,7 @@
 
 #include <stdarg.h>
 #include <time.h>
-#include <json.h>
+#include <json-c/json.h>
 
 #define NO_OBSOLETE_FUNCS
 #define USE_DANGEROUS_FUNCTIONS
@@ -341,6 +341,16 @@ bool msg_dispatcher(const char *json_in);
 //help with the transition to IDA 7.0
 
 #if IDA_SDK_VERSION >= 700
+
+#define askbuttons_c ask_buttons
+#define AskUsingForm_c ask_form
+#define OpenForm_c open_form
+#define FORM_TAB WOPN_TAB
+#define FORM_QWIDGET 0
+
+#define sup1st(n) supfirst(n)
+#define supnxt(n, t) supnext(n, t)
+
 #define get_flags_novalue(ea) get_flags(ea)
 #define isEnum0(f) is_enum0(f)
 #define isEnum1(f) is_enum1(f)
@@ -356,7 +366,18 @@ bool msg_dispatcher(const char *json_in);
 #define isASCII(f) is_strlit(f)
 
 #define get_member_name2 get_member_name
+
 #else
+// IDASDK_VERSION < 700
+
+#define ask_buttons askbuttons_c
+#define ask_form AskUsingForm_c
+#define open_form OpenForm_c
+#define WOPN_TAB FORM_TAB
+
+#define supfirst(n) sup1st(n)
+#define supnext(n, t) supnxt(n, t)
+
 #define ev_add_cref add_cref
 #define ev_add_dref add_dref
 #define ev_del_cref del_cref
@@ -364,6 +385,7 @@ bool msg_dispatcher(const char *json_in);
 #define ev_auto_queue_empty auto_queue_empty
 #define set_func_start func_setstart 
 #define set_func_end func_setend
+
 #endif
 
 #endif

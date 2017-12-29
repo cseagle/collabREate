@@ -24,6 +24,7 @@
 #include <windows.h>
 #endif
 #include <winsock2.h>
+#include <ws2tcpip.h>
 #endif
 #include <pro.h>
 
@@ -81,7 +82,7 @@ static Dispatcher dispatch;
 #include <errno.h>
 
 #define closesocket close
-#define INVALID_SOCKET -1
+#define INVALID_SOCKET ((_SOCKET)-1)
 #define SOCKET_ERROR -1
 #endif
 
@@ -158,28 +159,28 @@ bool init_network() {
 //host may be either an ip address or a host name
 _SOCKET connect_to(const char *host, short port) {
    _SOCKET sock;
-   sockaddr_in server;
-   memset(&server, 0, sizeof(server));
-   server.sin_family = AF_INET;
-   server.sin_addr.s_addr = inet_addr(host);
-   server.sin_port = qhtons(port);
 
-   //If a domain name was specified, we may not have an IP.
-   if (server.sin_addr.s_addr == INADDR_NONE) {
-      hostent *he = gethostbyname(host);
-      if (he == NULL) {
-         msg(PLUGIN_NAME": Unable to resolve name: %s\n", host);
-         return INVALID_SOCKET;
-      }
-      server.sin_addr = *(in_addr*) he->h_addr;
+   addrinfo hints;
+   addrinfo *result;
+   sockaddr_in *server;
+   
+   memset(&hints, 0, sizeof(addrinfo));
+   hints.ai_family = AF_INET;
+   hints.ai_socktype = SOCK_STREAM;
+
+   if (getaddrinfo(host, NULL, &hints, &result) != 0) {
+      return (_SOCKET)INVALID_SOCKET;
    }
 
+   server = (sockaddr_in*)result->ai_addr;
+   server->sin_port = qhtons(port);
+
    //create a socket.
-   if ((sock = socket(AF_INET, SOCK_STREAM, 0)) != INVALID_SOCKET) {
-      if (connect(sock, (sockaddr *) &server, sizeof(server)) == SOCKET_ERROR) {
+   if ((sock = (_SOCKET)socket(AF_INET, SOCK_STREAM, 0)) != INVALID_SOCKET) {
+      if (connect(sock, result->ai_addr, (int)result->ai_addrlen) == SOCKET_ERROR) {
          msg(PLUGIN_NAME": Failed to connect to server.\n");
          closesocket(sock);
-         sock = INVALID_SOCKET;
+         sock = (_SOCKET)INVALID_SOCKET;
       }
       else {
 #ifdef _WIN32
@@ -506,7 +507,7 @@ void AsyncSocket::cleanup(bool warn) {
    msg(PLUGIN_NAME": cleanup called.\n");
    if (conn != INVALID_SOCKET) {
       ::closesocket(conn);
-      conn = INVALID_SOCKET;
+      conn = (_SOCKET)INVALID_SOCKET;
 #ifdef _WIN32
       if (thread) {
          msg("attempting to sync on thread exit\n");
@@ -571,7 +572,7 @@ bool AsyncSocket::sendAll(const qstring &s) {
    qstring buf = s;
    while (true) {
 //      msg("sending new buffer\n");
-      int len = ::send(conn, buf.c_str(), buf.length(), 0);
+      int len = ::send(conn, buf.c_str(), (int)buf.length(), 0);
       if (len == buf.length()) {
          break;
       }
@@ -598,7 +599,7 @@ AsyncSocket::AsyncSocket(Dispatcher disp) {
    d = disp;
    thread = 0;
    init_network();
-   conn = INVALID_SOCKET;
+   conn = (_SOCKET)INVALID_SOCKET;
    drt = new disp_request_t(d);
 }
 
@@ -670,7 +671,7 @@ int send_msg(const qstring &s) {
       if (changeCache != NULL) {
 //         msg("writing to change cache\n");
          *changeCache += s;
-         return s.length();
+         return (int)s.length();
       }
    }
    return 0;

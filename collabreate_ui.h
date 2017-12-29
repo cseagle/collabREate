@@ -20,7 +20,7 @@
 #ifndef __COLLABREATE_GUI_H__
 #define __COLLABREATE_GUI_H__
 
-#include <json.h>
+#include <json-c/json.h>
 
 #include "idanet.h"
 

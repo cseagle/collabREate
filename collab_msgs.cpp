@@ -50,7 +50,7 @@
 #include <auto.hpp>
 #include <md5.h>
 
-#include <json.h>
+#include <json-c/json.h>
 
 #include <map>
 #include <string>
