@@ -108,7 +108,7 @@ $(OBJDIR32):
 
 CC=g++
 #CC=clang
-INC=-I$(IDA_SDK)include/
+INC=-I$(IDA_SDK)include/ -I/usr/local/include
 
 LD=g++
 #LD=clang
