@@ -1,7 +1,7 @@
 /*
     Collabreate common user interface functions
-    Copyright (C) 2008 Chris Eagle <cseagle at gmail d0t com>
-    Copyright (C) 2008 Tim Vidas <tvidas at gmail d0t com>
+    Copyright (C) 2018 Chris Eagle <cseagle at gmail d0t com>
+    Copyright (C) 2018 Tim Vidas <tvidas at gmail d0t com>
 
 
     This program is free software; you can redistribute it and/or modify it
@@ -32,8 +32,6 @@
 
 #include <json-c/json.h>
 
-#include "sdk_versions.h"
-
 #if IDA_SDK_VERSION < 500
 #include <fpro.h>
 #endif
@@ -48,7 +46,7 @@ bool subscribe = true;
 
 //global buffer that receives the description of the project selected
 //by the user.
-char description[1024];
+char description[MAXSTR];
 //global array of integer project ids that map to the project 
 //descriptions sent by the server.
 int *projects;

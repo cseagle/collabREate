@@ -277,9 +277,9 @@ void createCollabStatus() {
       "Collab form\n\n"
       "%/\n"        // placeholder for the form's callback
       "<Messages:E1:::::>\n<Send:B3:20:::>< :q2::100:::>\n";
-   collab_msg_chooser ci;
+   static collab_msg_chooser ci;
    // selection for chooser list view
-   intvec_t ivec;
+   static intvec_t ivec;
    collab_tform = OpenForm_c(format, WOPN_TAB, collab_cb, &ci, &ivec, send_cb, &msg_text);
 }
 #endif
@@ -349,7 +349,6 @@ const char *cmd_chooser::header[] = { "Command" };
 
 int do_choose_command() {
    const char *format = "BUTTON YES* Ok\nBUTTON CANCEL Cancel\nSelect Command\n\n\n<Command:E:32:32::>\n";
-//   const char *format = "BUTTON YES* Ok\nBUTTON CANCEL Cancel\nSelect Command\n\n\n<:E:32:32::>\n";
    intvec_t choices;
    cmd_chooser info;
   
@@ -378,7 +377,6 @@ uint32 idaapi sizer(void *obj) {
 
 int do_choose_command() {
    const char *format = "BUTTON YES* Ok\nBUTTON CANCEL Cancel\nSelect Command\n\n\n<Command:E:32:32::>\n";
-   //   const char *format = "BUTTON YES* Ok\nBUTTON CANCEL Cancel\nSelect Command\n\n\n<:E:32:32::>\n";
    intvec_t choices;
    chooser_info_t info;
    memset(&info, 0, sizeof(info));

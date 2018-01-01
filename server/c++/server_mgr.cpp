@@ -722,7 +722,7 @@ void ServerManager::listUsers() {
             const char *user = PQgetvalue(rset, i, 1);
             uint64_t pub = ntohll(*((uint64_t*)PQgetvalue(rset, i, 2)));
             uint64_t sub = ntohll(*((uint64_t*)PQgetvalue(rset, i, 3)));
-            printf("%-4d%-10s%-10"PRIx64"%-10"PRIx64" %s\n", uid, user, pub, sub, getPermRowString(pub, sub,8).c_str());
+            printf("%-4d%-10s%-10" PRIx64 "%-10" PRIx64 " %s\n", uid, user, pub, sub, getPermRowString(pub, sub,8).c_str());
          }
       }
       PQclear(rset);
@@ -776,7 +776,7 @@ void ServerManager::listProjects() {
             }
             ProjectInfo *temppi = new ProjectInfo(pid, desc);
             const char *isSnap = (snapupdateid > 0) ? " X " : "   ";
-            printf("%-4d %-4d %-4s %-10"PRIx64" %-10"PRIx64" %s %s\n", pid, ppid, isSnap, pub, sub, getPermRowString(pub, sub, 6).c_str(), desc);
+            printf("%-4d %-4d %-4s %-10" PRIx64 " %-10" PRIx64 " %s %s\n", pid, ppid, isSnap, pub, sub, getPermRowString(pub, sub, 6).c_str(), desc);
             temppi->parent = ppid;
             temppi->pdesc = PQgetvalue(rset, i, 7);
             temppi->snapupdateid = snapupdateid;
@@ -950,19 +950,19 @@ void ServerManager::exec(int argc, char **argv) {
             continue;
          }
 
-         printf("Subscribe permission bitfield (default: 0x%"PRIx64"): ", (uint64_t)default_sub);
+         printf("Subscribe permission bitfield (default: 0x%" PRIx64 "): ", (uint64_t)default_sub);
          if (readLine(resp, sizeof(resp)) == NULL) {
             break;
          }
          uint64_t sub = parsePerms(resp, default_pub);
-         printf("Publish permission bitfield (default: 0x%"PRIx64"): ", (uint64_t)default_pub);
+         printf("Publish permission bitfield (default: 0x%" PRIx64 "): ", (uint64_t)default_pub);
          if (readLine(resp, sizeof(resp)) == NULL) {
             break;
          }
          uint64_t pub = parsePerms(resp, default_pub);
 
          string md5 = getMD5(pass1);
-         printf("%s %s %s 0x%"PRIx64" 0x%"PRIx64"\n", username.c_str(), pass1.c_str(), md5.c_str(), pub, sub);
+         printf("%s %s %s 0x%" PRIx64 " 0x%" PRIx64 "\n", username.c_str(), pass1.c_str(), md5.c_str(), pub, sub);
          
          sm->addUser(username, md5, pub, sub);
       }
@@ -1068,12 +1068,12 @@ void ServerManager::exec(int argc, char **argv) {
             if (askyn()) {
                printf("Would you like to change the permissions by specifying numeric values? ");
                if (askyn()) {
-                  printf("Enter new publish permissions (0x%"PRIx64"): ", pub);
+                  printf("Enter new publish permissions (0x%" PRIx64 "): ", pub);
                   if (readLine(resp, sizeof(resp)) == NULL) {
                      break;
                   }
                   pub = parsePerms(resp, pub);
-                  printf("Enter new subscribe permissions (0x%"PRIx64"): ", sub);
+                  printf("Enter new subscribe permissions (0x%" PRIx64 "): ", sub);
                   if (readLine(resp, sizeof(resp)) == NULL) {
                      break;
                   }

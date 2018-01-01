@@ -13,6 +13,13 @@
  * (http://www.opensource.org/licenses/mit-license.php)
  */
 
+/**
+ * @file
+ * @brief Internal string buffer handing.  Unless you're writing a 
+ *        json_object_to_json_string_fn implementation for use with
+ *        json_object_set_serializer() direct use of this is not
+ *        recommended.
+ */
 #ifndef _printbuf_h_
 #define _printbuf_h_
 
@@ -25,6 +32,7 @@ struct printbuf {
   int bpos;
   int size;
 };
+typedef struct printbuf printbuf;
 
 extern struct printbuf*
 printbuf_new(void);

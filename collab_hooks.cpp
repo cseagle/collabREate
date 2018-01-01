@@ -1,7 +1,7 @@
 /*
     IDA Pro Collabreation/Synchronization Plugin
-    Copyright (C) 2017 Chris Eagle <cseagle at gmail d0t com>
-    Copyright (C) 2017 Tim Vidas <tvidas at gmail d0t com>
+    Copyright (C) 2018 Chris Eagle <cseagle at gmail d0t com>
+    Copyright (C) 2018 Tim Vidas <tvidas at gmail d0t com>
 
     This program is free software; you can redistribute it and/or modify it
     under the terms of the GNU General Public License as published by the Free
@@ -54,8 +54,6 @@
 #include <string>
 using std::map;
 using std::string;
-
-#include "sdk_versions.h"
 
 #if IDA_SDK_VERSION < 560
 #define opinfo_t typeinfo_t
@@ -1654,7 +1652,6 @@ void change_range_comment(range_kind_t rk, const range_t *r, const char *cmt, bo
 #endif
 
 //notification hook function for idb notifications
-#if IDA_SDK_VERSION >= 510      //HT_IDB introduced in SDK 510
 #if IDA_SDK_VERSION < 700
 int idaapi idb_hook(void * /*user_data*/, int notification_code, va_list va) {
 #else
@@ -1748,11 +1745,7 @@ ssize_t idaapi idb_hook(void * /*user_data*/, int notification_code, va_list va)
       case idb_event::enum_cmt_changed: {      // A enum or member type comment has been change
                                                // in: tid_t id, bool repeatable
          tid_t t = va_arg(va, tid_t);
-#if IDA_SDK_VERSION < 540
-         bool rep = false;
-#else
          bool rep = va_arg(va, int) != 0;
-#endif
          change_enum_cmt(t, rep);
          break;
       }
@@ -1805,11 +1798,7 @@ ssize_t idaapi idb_hook(void * /*user_data*/, int notification_code, va_list va)
       case idb_event::struc_cmt_changed: {     // A structure type comment has been changed
                                                // in: tid_t struc_id, bool repeatable
          tid_t t = va_arg(va, tid_t);
-#if IDA_SDK_VERSION < 540
-         bool rep = false;
-#else
          bool rep = va_arg(va, int) != 0;
-#endif
          change_struc_cmt(t, rep);
          break;
       }
@@ -1981,7 +1970,6 @@ ssize_t idaapi idb_hook(void * /*user_data*/, int notification_code, va_list va)
 #endif
 
 #if 0
-#if IDA_SDK_VERSION >= 530
       case idb_event::area_cmt_changed: {
          // in: areacb_t *cb, const area_t *a, const char *cmt, bool repeatable
          areacb_t *cb = va_arg(va, areacb_t*);
@@ -1991,8 +1979,6 @@ ssize_t idaapi idb_hook(void * /*user_data*/, int notification_code, va_list va)
          change_area_comment(cb, a, cmt, rep);
          break;
       }
-#endif
-#if IDA_SDK_VERSION >= 540
       case idb_event::changing_cmt: {         // An item comment is to be changed
                                     // in: ea_t ea, bool repeatable_cmt, const char *newcmt
 //         ea_t ea = va_arg(va, ea_t);
@@ -2136,7 +2122,6 @@ ssize_t idaapi idb_hook(void * /*user_data*/, int notification_code, va_list va)
 //         bool rep = (bool)va_arg(va, int);
          break;
       }
-#endif
 #if IDA_SDK_VERSION >= 600
       case idb_event::changing_segm_name: {   // Segment name is beging changed
                                     // in: segment_t *s, const char *oldname
@@ -2183,7 +2168,6 @@ ssize_t idaapi idb_hook(void * /*user_data*/, int notification_code, va_list va)
 //   supress = supress && (auto_display.state != st_Ready);
    return 0;
 }
-#endif  //IDA_SDK_VERSION >= 510
 
 //notification hook function for idp notifications
 #if IDA_SDK_VERSION < 700
@@ -2261,7 +2245,6 @@ ssize_t idaapi idp_hook(void * /*user_data*/, int notification_code, va_list va)
          break;
       }
 #endif
-#if IDA_SDK_VERSION >= 510
 #if IDA_SDK_VERSION < 700
       case processor_t::renamed: {
          //this receives notifications for stack variables as well
@@ -2294,8 +2277,6 @@ ssize_t idaapi idp_hook(void * /*user_data*/, int notification_code, va_list va)
          break;
       }
 #endif
-#endif
-#if IDA_SDK_VERSION >= 520
 #if 0
       case processor_t::validate_flirt_func: {
          ea_t ea = va_arg(va, ea_t);
@@ -2306,8 +2287,6 @@ ssize_t idaapi idp_hook(void * /*user_data*/, int notification_code, va_list va)
          return 1;  //trust IDA's validation
       }
 #endif
-#endif
-#if IDA_SDK_VERSION >= 530
       case processor_t::ev_add_cref: {
          // args: ea_t from, ea_t to, cref_t type
          ea_t from = va_arg(va, ea_t);
@@ -2339,13 +2318,11 @@ ssize_t idaapi idp_hook(void * /*user_data*/, int notification_code, va_list va)
          idp_del_dref(from, to);
          break;
       }
-#endif
       case processor_t::ev_auto_queue_empty : {
 //         msg("auto_queue_empty\n");
          break;
 //         return 0;
       }
-#if IDA_SDK_VERSION >= 500
 #if IDA_SDK_VERSION < 700
       case processor_t::auto_empty: {
          //         msg("auto_empty\n");
@@ -2357,7 +2334,6 @@ ssize_t idaapi idp_hook(void * /*user_data*/, int notification_code, va_list va)
 //         return 0;
          break;
       }
-#endif
 #endif
       default:
 //         autoWait();

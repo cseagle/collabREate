@@ -1,6 +1,6 @@
 /*
     Asynchronous IDA communications handler
-    Copyright (C) 2008 Chris Eagle <cseagle at gmail d0t com>
+    Copyright (C) 2018 Chris Eagle <cseagle at gmail d0t com>
 
     This program is free software; you can redistribute it and/or modify it
     under the terms of the GNU General Public License as published by the Free
@@ -21,8 +21,6 @@
 #ifndef __IDACONNECTOR_H__
 #define __IDACONNECTOR_H__
 
-#include "sdk_versions.h"
-
 typedef bool (*Dispatcher)(const char *json_in);
 
 #ifndef __NT__
@@ -32,12 +30,6 @@ typedef bool (*Dispatcher)(const char *json_in);
 #define _SOCKET unsigned int
 #endif
 
-#if IDA_SDK_VERSION >= 550
 bool connect_to(const char *host, short port, Dispatcher d);
-#else
-_SOCKET connect_to(const char *host, short port);
-bool createSocketWindow(_SOCKET s, Dispatcher d);
-void killWindow();
-#endif
 
 #endif

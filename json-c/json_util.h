@@ -9,6 +9,10 @@
  *
  */
 
+/**
+ * @file
+ * @brief Miscllaneous utility functions and macros.
+ */ 
 #ifndef _json_util_h_
 #define _json_util_h_
 
@@ -71,14 +75,16 @@ extern int json_object_to_file_ext(const char *filename, struct json_object *obj
  * Handles partial writes and will keep writing until done, or an error
  * occurs.
  *
+ * @param fd an open, writable file descriptor to write to
+ * @param obj the object to serializer and write
  * @param flags flags to pass to json_object_to_json_string_ext()
  * @return -1 if something fails.  See json_util_get_last_err() for details.
  */
 extern int json_object_to_fd(int fd, struct json_object *obj, int flags);
 
 /**
- * Return the last error from json_object_to_file{,_ext},
- * json_object_to_fd() or
+ * Return the last error from various json-c functions, including:
+ * json_object_to_file{,_ext}, json_object_to_fd() or
  * json_object_from_{file,fd}, or NULL if there is none.
  */
 const char *json_util_get_last_err(void);

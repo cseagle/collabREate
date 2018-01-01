@@ -705,7 +705,7 @@ bool Client::msg_project_list(json_object *obj, Client *c) {
       if ((*pi)->parent > 0) {
          char buf[256];
          if ((*pi)->snapupdateid > 0) {
-            snprintf(buf, sizeof(buf), "[-] %s (SNAP of '%s'@%"PRIu64" updates])", (*pi)->desc.c_str(), (*pi)->pdesc.c_str(), (*pi)->snapupdateid);
+            snprintf(buf, sizeof(buf), "[-] %s (SNAP of '%s'@%" PRIu64 " updates])", (*pi)->desc.c_str(), (*pi)->pdesc.c_str(), (*pi)->snapupdateid);
 //                           log("[-] " + pi.desc + " (snapshot of (" + pi.parent + ")'" + pi.pdesc+"' ["+ pi.snapupdateid + " updates]) ", LDEBUG);
          }
          else {

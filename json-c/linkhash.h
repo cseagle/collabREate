@@ -10,6 +10,12 @@
  *
  */
 
+/**
+ * @file
+ * @brief Internal methods for working with json_type_object objects.  Although
+ *        this is exposed by the json_object_get_object() function and within the
+ *        json_object_iter type, it is not recommended for direct use.
+ */
 #ifndef _linkhash_h_
 #define _linkhash_h_
 
@@ -133,6 +139,7 @@ struct lh_table {
 	lh_hash_fn *hash_fn;
 	lh_equal_fn *equal_fn;
 };
+typedef struct lh_table lh_table;
 
 
 /**
@@ -143,6 +150,10 @@ for(entry = table->head; entry; entry = entry->next)
 
 /**
  * lh_foreach_safe allows calling of deletion routine while iterating.
+ *
+ * @param table a struct lh_table * to iterate over
+ * @param entry a struct lh_entry * variable to hold each element
+ * @param tmp a struct lh_entry * variable to hold a temporary pointer to the next element
  */
 #define lh_foreach_safe(table, entry, tmp) \
 for(entry = table->head; entry && ((tmp = entry->next) || 1); entry = tmp)
@@ -151,6 +162,7 @@ for(entry = table->head; entry && ((tmp = entry->next) || 1); entry = tmp)
 
 /**
  * Create a new linkhash table.
+ *
  * @param size initial table size. The table is automatically resized
  * although this incurs a performance penalty.
  * @param free_fn callback function used to free memory for entries
@@ -172,8 +184,8 @@ extern struct lh_table* lh_table_new(int size,
 				     lh_equal_fn *equal_fn);
 
 /**
- * Convenience function to create a new linkhash
- * table with char keys.
+ * Convenience function to create a new linkhash table with char keys.
+ *
  * @param size initial table size.
  * @param free_fn callback function used to free memory for entries.
  * @return On success, a pointer to the new linkhash table is returned.
@@ -184,8 +196,8 @@ extern struct lh_table* lh_kchar_table_new(int size,
 
 
 /**
- * Convenience function to create a new linkhash
- * table with ptr keys.
+ * Convenience function to create a new linkhash table with ptr keys.
+ *
  * @param size initial table size.
  * @param free_fn callback function used to free memory for entries.
  * @return On success, a pointer to the new linkhash table is returned.
@@ -197,8 +209,10 @@ extern struct lh_table* lh_kptr_table_new(int size,
 
 /**
  * Free a linkhash table.
- * If a callback free function is provided then it is called for all
- * entries in the table.
+ *
+ * If a lh_entry_free_fn callback free function was provided then it is
+ * called for all entries in the table.
+ *
  * @param t table to free.
  */
 extern void lh_table_free(struct lh_table *t);
@@ -206,6 +220,7 @@ extern void lh_table_free(struct lh_table *t);
 
 /**
  * Insert a record into the table.
+ *
  * @param t the table to insert into.
  * @param k a pointer to the key to insert.
  * @param v a pointer to the value to insert.
@@ -217,22 +232,25 @@ extern int lh_table_insert(struct lh_table *t, const void *k, const void *v);
 
 
 /**
- * Insert a record into the table. This one accepts the key's hash in additon
- * to the key. This is an exension to support functions that need to calculate
- * the hash several times and allows them to do it just once and then pass
- * in the hash to all utility functions. Depending on use case, this can be a 
- * very considerate performance improvement.
+ * Insert a record into the table using a precalculated key hash.
+ *
+ * The hash h, which should be calculated with lh_get_hash() on k, is provided by
+ *  the caller, to allow for optimization when multiple operations with the same
+ *  key are known to be needed.
+ *
  * @param t the table to insert into.
  * @param k a pointer to the key to insert.
  * @param v a pointer to the value to insert.
  * @param h hash value of the key to insert
- * @param opts opts, a subset of JSON_OBJECT_ADD_* flags is supported
+ * @param opts if set to JSON_C_OBJECT_KEY_IS_CONSTANT, sets lh_entry.k_is_constant
+ *             so t's free function knows to avoid freeing the key.
  */
 extern int lh_table_insert_w_hash(struct lh_table *t, const void *k, const void *v, const unsigned long h, const unsigned opts);
 
 
 /**
- * Lookup a record into the table.
+ * Lookup a record in the table.
+ *
  * @param t the table to lookup
  * @param k a pointer to the key to lookup
  * @return a pointer to the record structure of the value or NULL if it does not exist.
@@ -240,11 +258,12 @@ extern int lh_table_insert_w_hash(struct lh_table *t, const void *k, const void 
 extern struct lh_entry* lh_table_lookup_entry(struct lh_table *t, const void *k);
 
 /**
- * Lookup a record into the table. This one accepts the key's hash in additon
- * to the key. This is an exension to support functions that need to calculate
- * the hash several times and allows them to do it just once and then pass
- * in the hash to all utility functions. Depending on use case, this can be a 
- * very considerate performance improvement.
+ * Lookup a record in the table using a precalculated key hash.
+ *
+ * The hash h, which should be calculated with lh_get_hash() on k, is provided by
+ *  the caller, to allow for optimization when multiple operations with the same
+ *  key are known to be needed.
+ *
  * @param t the table to lookup
  * @param k a pointer to the key to lookup
  * @param h hash value of the key to lookup
@@ -253,16 +272,8 @@ extern struct lh_entry* lh_table_lookup_entry(struct lh_table *t, const void *k)
 extern struct lh_entry* lh_table_lookup_entry_w_hash(struct lh_table *t, const void *k, const unsigned long h);
 
 /**
- * Lookup a record into the table
- * @param t the table to lookup
- * @param k a pointer to the key to lookup
- * @return a pointer to the found value or NULL if it does not exist.
- * @deprecated Use lh_table_lookup_ex instead.
- */
-THIS_FUNCTION_IS_DEPRECATED(extern const void* lh_table_lookup(struct lh_table *t, const void *k));
-
-/**
- * Lookup a record in the table
+ * Lookup a record in the table.
+ *
  * @param t the table to lookup
  * @param k a pointer to the key to lookup
  * @param v a pointer to a where to store the found value (set to NULL if it doesn't exist).
@@ -272,6 +283,7 @@ extern json_bool lh_table_lookup_ex(struct lh_table *t, const void *k, void **v)
 
 /**
  * Delete a record from the table.
+ *
  * If a callback free function is provided then it is called for the
  * for the item being deleted.
  * @param t the table to delete from.
@@ -284,6 +296,7 @@ extern int lh_table_delete_entry(struct lh_table *t, struct lh_entry *e);
 
 /**
  * Delete a record from the table.
+ *
  * If a callback free function is provided then it is called for the
  * for the item being deleted.
  * @param t the table to delete from.
@@ -294,21 +307,6 @@ extern int lh_table_delete_entry(struct lh_table *t, struct lh_entry *e);
 extern int lh_table_delete(struct lh_table *t, const void *k);
 
 extern int lh_table_length(struct lh_table *t);
-
-/**
- * Prints a message to <code>stdout</code>,
- * then exits the program with an exit code of <code>1</code>.
- *
- * @param msg Message format string, like for <code>printf</code>.
- * @param ... Format args.
- *
- * @deprecated Since it is not a good idea to exit the entire program
- * 	because of an internal library failure, json-c will no longer
- * 	use this function internally.
- * 	However, because its interface is public, it will remain part of
- * 	the API on the off chance of legacy software using it externally.
- */
-void lh_abort(const char *msg, ...);
 
 /**
  * Resizes the specified table.
@@ -323,21 +321,36 @@ int lh_table_resize(struct lh_table *t, int new_size);
 
 
 /**
+ * @deprecated Don't use this outside of linkhash.h:
+ */
+#if !defined(_MSC_VER) || (_MSC_VER > 1800)
+/* VS2010 can't handle inline funcs, so skip it there */
+#define _LH_INLINE inline
+#else
+#define _LH_INLINE
+#endif
+
+/**
  * Calculate the hash of a key for a given table.
+ *
  * This is an exension to support functions that need to calculate
  * the hash several times and allows them to do it just once and then pass
- * in the hash to all utility functions. Depending on use case, this can be a 
- * very considerate performance improvement.
+ * in the hash to all utility functions. Depending on use case, this can be a
+ * considerable performance improvement.
  * @param t the table (used to obtain hash function)
  * @param k a pointer to the key to lookup
  * @return the key's hash
  */
-static inline unsigned long lh_get_hash(const struct lh_table *t, const void *k)
+static _LH_INLINE unsigned long lh_get_hash(const struct lh_table *t, const void *k)
 {
 	return t->hash_fn(k);
 }
 
-/* Don't use this outside of linkhash.h: */
+#undef _LH_INLINE
+
+/**
+ * @deprecated Don't use this outside of linkhash.h:
+ */
 #ifdef __UNCONST
 #define _LH_UNCONST(a) __UNCONST(a)
 #else
@@ -345,15 +358,17 @@ static inline unsigned long lh_get_hash(const struct lh_table *t, const void *k)
 #endif
 
 /**
- * Return a non-const version of lh_entry->k.
- * k is const to indicate and help ensure that linkhash itself doesn't modify
+ * Return a non-const version of lh_entry.k.
+ *
+ * lh_entry.k is const to indicate and help ensure that linkhash itself doesn't modify
  * it, but callers are allowed to do what they want with it.
- * See also lh_entry->k_is_constant
+ * See also lh_entry.k_is_constant
  */
 #define lh_entry_k(entry) _LH_UNCONST((entry)->k)
 
 /**
- * Return a non-const version of lh_entry->v.
+ * Return a non-const version of lh_entry.v.
+ *
  * v is const to indicate and help ensure that linkhash itself doesn't modify
  * it, but callers are allowed to do what they want with it.
  */

@@ -1,7 +1,7 @@
 /*
     IDA Pro Collabreation/Synchronization Plugin
-    Copyright (C) 2008 Chris Eagle <cseagle at gmail d0t com>
-    Copyright (C) 2008 Tim Vidas <tvidas at gmail d0t com>
+    Copyright (C) 2018 Chris Eagle <cseagle at gmail d0t com>
+    Copyright (C) 2018 Tim Vidas <tvidas at gmail d0t com>
 
 
     This program is free software; you can redistribute it and/or modify it
@@ -22,16 +22,7 @@
 #ifndef __COLLABREATE_H__
 #define __COLLABREATE_H__
 
-#ifdef _MSC_VER
-#if _MSC_VER >= 1600
 #include <stdint.h>
-#else
-#include "ms_stdint.h"
-#endif
-#else
-#include <stdint.h>
-#endif
-
 #include <stdarg.h>
 #include <time.h>
 #include <json-c/json.h>
@@ -226,7 +217,7 @@ extern Options tempOpts;
 extern Options *optMasks;
 
 extern uint64_t *snapUpdateIDs;
-extern char description[1024];
+extern char description[MAXSTR];
 
 extern int numProjectsGlobal;
 extern int isSnapShotGlobal;
@@ -319,12 +310,10 @@ char *formatLongLong(uint64_t, char *buf);
 void postCollabMessage(const char *msg, time_t t = 0);
 
 //IDA HOOKS
-#if IDA_SDK_VERSION >= 510      //HT_IDB introduced in SDK 510
 #if IDA_SDK_VERSION < 700
 int idaapi idb_hook(void * /*user_data*/, int notification_code, va_list va);
 #else
 ssize_t idaapi idb_hook(void * /*user_data*/, int notification_code, va_list va);
-#endif
 #endif
 #if IDA_SDK_VERSION < 700
 int idaapi idp_hook(void * /*user_data*/, int notification_code, va_list va);

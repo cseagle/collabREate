@@ -9,6 +9,10 @@
  *
  */
 
+/**
+ * @file
+ * @brief Do not use, json-c internal, may be changed or removed at any time.
+ */
 #ifndef _json_object_private_h_
 #define _json_object_private_h_
 
@@ -25,7 +29,7 @@ struct json_object
   enum json_type o_type;
   json_object_private_delete_fn *_delete;
   json_object_to_json_string_fn *_to_json_string;
-  int _ref_count;
+  uint_fast32_t _ref_count;
   struct printbuf *_pb;
   union data {
     json_bool c_boolean;
@@ -48,7 +52,10 @@ struct json_object
   void *_userdata;
 };
 
-void _set_last_err(const char *err_fmt, ...);
+void _json_c_set_last_err(const char *err_fmt, ...);
+
+extern const char *json_number_chars;
+extern const char *json_hex_chars;
 
 #ifdef __cplusplus
 }

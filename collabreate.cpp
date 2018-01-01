@@ -1,7 +1,7 @@
 /*
     IDA Pro Collabreation/Synchronization Plugin
-    Copyright (C) 2008 Chris Eagle <cseagle at gmail d0t com>
-    Copyright (C) 2008 Tim Vidas <tvidas at gmail d0t com>
+    Copyright (C) 2018 Chris Eagle <cseagle at gmail d0t com>
+    Copyright (C) 2018 Tim Vidas <tvidas at gmail d0t com>
 
 
     This program is free software; you can redistribute it and/or modify it
@@ -24,8 +24,8 @@
  *
  *  It is known to compile with
  *
- *   Microsoft Visual C++
- *   cygwin g++/make
+ *   Microsoft Visual C++ 2013+
+ *   Linux/OSX make and g++/clang
  *
  */
 
@@ -33,8 +33,6 @@
 
 #ifdef _WIN32
 #include <windows.h>
-extern HWND mainWindow;
-extern HMODULE hModule;
 #endif
 
 #include <pro.h>
@@ -70,7 +68,6 @@ using std::map;
 using std::string;
 
 #include "collabreate_ui.h"
-#include "sdk_versions.h"
 
 bool authenticated = false;
 bool fork_pending = false;
@@ -135,9 +132,7 @@ void hookAll() {
    if (userPublish) { //the only reason to hook is if we are publishing
       hook_to_notification_point(HT_IDP, idp_hook, NULL);
 //      hook_to_notification_point(HT_UI, ui_hook, NULL);
-#if IDA_SDK_VERSION >= 510      //HT_IDB introduced in SDK 510
       hook_to_notification_point(HT_IDB, idb_hook, NULL);
-#endif
    }
    isHooked = true;
 }
@@ -149,9 +144,7 @@ void unhookAll() {
    if (userPublish) { //the only reason to unhook is if we are publishing
       unhook_from_notification_point(HT_IDP, idp_hook, NULL);
 //      unhook_from_notification_point(HT_UI, ui_hook, NULL);
-#if IDA_SDK_VERSION >= 510      //HT_IDB introduced in SDK 510
       unhook_from_notification_point(HT_IDB, idb_hook, NULL);
-#endif
    }
    isHooked = false;
 }
@@ -184,7 +177,7 @@ int idaapi init(void) {
    //the database in the event that the original binary is deleted
    getFileMd5(md5, sizeof(md5));
    unsigned char gpid[GPID_SIZE];
-   ssize_t sz= getGpid(gpid, sizeof(gpid));
+   ssize_t sz = getGpid(gpid, sizeof(gpid));
    if (sz > 0) {
       msg(PLUGIN_NAME": Operating in caching mode until connected.\n");
       if (changeCache == NULL) {
@@ -217,10 +210,6 @@ int idaapi init(void) {
    }
    build_handler_map();
    if (init_network()) {
-#if IDA_SDK_VERSION < 600
-      mainWindow = (HWND)callui(ui_get_hwnd).vptr;
-      hModule = GetModuleHandle("collabreate.plw");
-#endif
       return PLUGIN_KEEP;
    }
    else {
@@ -258,7 +247,6 @@ void idaapi term(void) {
       changeCache = NULL;
    }
    unhookAll();
-   term_network();
 }
 
 //--------------------------------------------------------------------------
@@ -360,9 +348,6 @@ bool idaapi run(size_t /*arg*/) {
             authenticated = false;
             msg(PLUGIN_NAME": De-activating collabREate\n");
             cleanup();
-#if IDA_SDK_VERSION < 550
-            killWindow();
-#endif
             unhookAll();
             msg(PLUGIN_NAME": command   rx   tx\n");
             for (int i = 0; i <= MSG_IDA_MAX; i++) {
@@ -376,9 +361,6 @@ bool idaapi run(size_t /*arg*/) {
    }
    else {
       authenticated = false;
-#if IDA_SDK_VERSION < 550
-      killWindow();  //just to be safe
-#endif
       memset(stats, 0, sizeof(stats));
       if (do_connect(msg_dispatcher)) {
          msg(PLUGIN_NAME": collabREate activated\n");

@@ -1,7 +1,7 @@
 /*
     IDA Pro Collabreation/Synchronization Plugin
-    Copyright (C) 2017 Chris Eagle <cseagle at gmail d0t com>
-    Copyright (C) 2017 Tim Vidas <tvidas at gmail d0t com>
+    Copyright (C) 2018 Chris Eagle <cseagle at gmail d0t com>
+    Copyright (C) 2018 Tim Vidas <tvidas at gmail d0t com>
 
     This program is free software; you can redistribute it and/or modify it
     under the terms of the GNU General Public License as published by the Free
@@ -56,8 +56,6 @@
 #include <string>
 using std::map;
 using std::string;
-
-#include "sdk_versions.h"
 
 #if IDA_SDK_VERSION < 560
 #define opinfo_t typeinfo_t
@@ -270,11 +268,7 @@ int cmd_undefine(json_object *json) {
    ea_t ea;
    ea_from_json(json, "addr", &ea);
 #if 0
-#if IDA_SDK_VERSION >= 510
    do_unknown(ea, DOUNK_SIMPLE);
-#else
-   do_unknown(ea, false);
-#endif
 #else
    qstring a1;
    format_llx(ea, a1);
@@ -293,11 +287,7 @@ int cmd_make_code(json_object *json) {
    uint64_from_json(json, "length", &tmp);
    asize_t sz = (asize_t)tmp;
 #if 0
-#if IDA_SDK_VERSION >= 540
    create_insn(ea);
-#else
-   ua_code(ea);
-#endif
 #else
    qstring a1;
    format_llx(ea, a1);
@@ -541,10 +531,8 @@ int cmd_ti_changed(json_object *json) {
 #else
    set_tinfo(ea, &tinf);
 #endif
-#elif IDA_SDK_VERSION >= 520
-   set_tinfo(ea, ti, fnames);
 #else
-   set_ti(ea, ti, fnames);
+   set_tinfo(ea, ti, fnames);
 #endif
    qfree((void*)ti1);
    qfree((void*)fnames1);
@@ -584,10 +572,8 @@ int cmd_op_ti_changed(json_object *json) {
 #else
    set_op_tinfo(ea, opnum, &tinf);
 #endif
-#elif IDA_SDK_VERSION >= 520
-   set_op_tinfo(ea, opnum, ti, fnames);
 #else
-   set_op_ti(ea, opnum, ti, fnames);
+   set_op_tinfo(ea, opnum, ti, fnames);
 #endif
    qfree((void*)ti1);
    qfree((void*)fnames1);
@@ -1212,13 +1198,7 @@ int cmd_segm_deleted(json_object *json) {
    if (!ea_from_json(json, "addr", &ea)) {
       return -1;
    }
-#if IDA_SDK_VERSION < 500
-   del_segm(ea, 0);
-#elif IDA_SDK_VERSION < 530
-   del_segm(ea, SEGDEL_KEEP | SEGDEL_SILENT);
-#else
    del_segm(ea, SEGMOD_KEEP | SEGMOD_SILENT);
-#endif
    return 0;
 }
 
