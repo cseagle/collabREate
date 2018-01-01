@@ -39,7 +39,11 @@
 #include <netnode.hpp>
 #include <typeinf.hpp>
 #include <struct.hpp>
+#if IDA_SDK_VERSION >= 700
 #include <range.hpp>
+#else
+#include <area.hpp>
+#endif
 #include <frame.hpp>
 #include <segment.hpp>
 #include <enum.hpp>
@@ -64,6 +68,7 @@ using std::string;
 #endif
 
 const char *idp_messages[] = {
+#if IDA_SDK_VERSION < 700
    //enum idp_notify
    "init",  //0
    "term",  //1
@@ -219,10 +224,129 @@ const char *idp_messages[] = {
    "get_thiscall_regs3",//538
    "loader=1000",//1000
 */
+#else
+   "ev_init",
+   "ev_term",
+   "ev_newprc",
+   "ev_newasm",
+   "ev_newfile",
+   "ev_oldfile",
+   "ev_newbinary",
+   "ev_endbinary",
+   "ev_set_idp_options",
+   "ev_set_proc_options",
+   "ev_ana_insn",
+   "ev_emu_insn",
+   "ev_out_header",
+   "ev_out_footer",
+   "ev_out_segstart",
+   "ev_out_segend",
+   "ev_out_assumes",
+   "ev_out_insn",
+   "ev_out_mnem",
+   "ev_out_operand",
+   "ev_out_data",
+   "ev_out_label",
+   "ev_out_special_item",
+   "ev_gen_stkvar_def",
+   "ev_gen_regvar_def",
+   "ev_gen_src_file_lnnum",
+   "ev_creating_segm",
+   "ev_moving_segm",
+   "ev_coagulate",
+   "ev_undefine",
+   "ev_treat_hindering_item",
+   "ev_rename",
+   "ev_is_far_jump",
+   "ev_is_sane_insn",
+   "ev_is_cond_insn",
+   "ev_is_call_insn",
+   "ev_is_ret_insn",
+   "ev_may_be_func",
+   "ev_is_basic_block_end",
+   "ev_is_indirect_jump",
+   "ev_is_insn_table_jump",
+   "ev_is_switch",
+   "ev_calc_switch_cases",
+   "ev_create_switch_xrefs",
+   "ev_is_align_insn",
+   "ev_is_alloca_probe",
+   "ev_delay_slot_insn",
+   "ev_is_sp_based",
+   "ev_can_have_type",
+   "ev_cmp_operands",
+   "ev_adjust_refinfo",
+   "ev_get_operand_string",
+   "ev_get_reg_name",
+   "ev_str2reg",
+   "ev_get_autocmt",
+   "ev_get_bg_color",
+   "ev_is_jump_func",
+   "ev_func_bounds",
+   "ev_verify_sp",
+   "ev_verify_noreturn",
+   "ev_create_func_frame",
+   "ev_get_frame_retsize",
+   "ev_get_stkvar_scale_factor",
+   "ev_demangle_name",
+   "ev_add_cref",
+   "ev_add_dref",
+   "ev_del_cref",
+   "ev_del_dref",
+   "ev_coagulate_dref",
+   "ev_may_show_sreg",
+   "ev_loader_elf_machine",
+   "ev_auto_queue_empty",
+   "ev_validate_flirt_func",
+   "ev_adjust_libfunc_ea",
+   "ev_assemble",
+   "ev_extract_address",
+   "ev_realcvt",
+   "ev_gen_asm_or_lst",
+   "ev_gen_map_file",
+   "ev_create_flat_group",
+   "ev_getreg",
+   "ev_last_cb_before_debugger",
+   "ev_next_exec_insn",    //1000
+   "ev_calc_step_over",
+   "ev_calc_next_eas",
+   "ev_get_macro_insn_head",
+   "ev_get_dbr_opnum",
+   "ev_insn_reads_tbit",
+   "ev_clean_tbit",
+   "ev_get_idd_opinfo",
+   "ev_get_reg_info",
+   "ev_last_cb_before_type_callbacks",
+   "ev_setup_til",   //2000
+   "ev_get_abi_info",
+   "ev_max_ptr_size",
+   "ev_get_default_enum_size",
+   "ev_get_cc_regs",
+   "ev_get_stkarg_offset",
+   "ev_shadow_args_size",
+   "ev_get_simd_types",
+   "ev_calc_cdecl_purged_bytes",
+   "ev_calc_purged_bytes",
+   "ev_calc_retloc",
+   "ev_calc_arglocs",
+   "ev_calc_varglocs",
+   "ev_adjust_argloc",
+   "ev_lower_func_type",
+   "ev_equal_reglocs",
+   "ev_use_stkarg_type",
+   "ev_use_regarg_type",
+   "ev_use_arg_types",
+   "ev_arg_addrs_ready",
+   "ev_decorate_name",
+   "ev_loader"     //3000
+#endif
 };
+
+static unsigned int num_idp = (sizeof(idp_messages) / sizeof(const char*));
 
 const char *idb_messages[] = {
    //enum event_code_t
+#if IDA_SDK_VERSION < 700
    "byte_patched",   //0
    "cmt_changed",   //1
    "ti_changed",   //2
@@ -296,7 +420,101 @@ const char *idb_messages[] = {
    "changed_struc",     //61
    "local_types_changed", //62
    "segm_attrs_changed"   //63
+#else    //IDA_SDK_VERSION >= 700
+   "closebase",
+   "savebase",
+   "upgraded",
+   "auto_empty",
+   "auto_empty_finally",
+   "determined_main",
+   "local_types_changed",
+   "extlang_changed",
+   "idasgn_loaded",
+   "kernel_config_loaded",
+   "loader_finished",
+   "flow_chart_created",
+   "compiler_changed",
+   "changing_ti",
+   "ti_changed",
+   "changing_op_ti",
+   "op_ti_changed",
+   "changing_op_type",
+   "op_type_changed",
+   "enum_created",
+   "deleting_enum",
+   "enum_deleted",
+   "renaming_enum",
+   "enum_renamed",
+   "changing_enum_bf",
+   "enum_bf_changed",
+   "changing_enum_cmt",
+   "enum_cmt_changed",
+   "enum_member_created",
+   "deleting_enum_member",
+   "enum_member_deleted",
+   "struc_created",
+   "deleting_struc",
+   "struc_deleted",
+   "changing_struc_align",
+   "struc_align_changed",
+   "renaming_struc",
+   "struc_renamed",
+   "expanding_struc",
+   "struc_expanded",
+   "struc_member_created",
+   "deleting_struc_member",
+   "struc_member_deleted",
+   "renaming_struc_member",
+   "struc_member_renamed",
+   "changing_struc_member",
+   "struc_member_changed",
+   "changing_struc_cmt",
+   "struc_cmt_changed",
+   "segm_added",
+   "deleting_segm",
+   "segm_deleted",
+   "changing_segm_start",
+   "segm_start_changed",
+   "changing_segm_end",
+   "segm_end_changed",
+   "changing_segm_name",
+   "segm_name_changed",
+   "changing_segm_class",
+   "segm_class_changed",
+   "segm_attrs_updated",
+   "segm_moved",
+   "allsegs_moved",
+   "func_added",
+   "func_updated",
+   "set_func_start",
+   "set_func_end",
+   "deleting_func",
+   "frame_deleted",
+   "thunk_func_created",
+   "func_tail_appended",
+   "deleting_func_tail",
+   "func_tail_deleted",
+   "tail_owner_changed",
+   "func_noret_changed",
+   "stkpnts_changed",
+   "updating_tryblks",
+   "tryblks_updated",
+   "deleting_tryblks",
+   "sgr_changed",
+   "make_code",
+   "make_data",
+   "destroyed_items",
+   "renamed",
+   "byte_patched",
+   "changing_cmt",
+   "cmt_changed",
+   "changing_range_cmt",
+   "range_cmt_changed",
+   "extra_cmt_changed"
+#endif
 };
+
+static unsigned int num_idb = (sizeof(idb_messages) / sizeof(const char*));
 
 //Given a frame pointer, determine which if any function owns it.
 //This is a reverse lookup on stack frame structures
@@ -1678,7 +1896,9 @@ ssize_t idaapi idb_hook(void * /*user_data*/, int notification_code, va_list va)
       return 0;
    }
 */
-   msg("entering idb::%d (%s)\n", notification_code, notification_code < 60 ? idb_messages[notification_code] : "?");
+#ifdef DEBUG
+   msg("entering idb::%d (%s)\n", notification_code, notification_code < num_idb ? idb_messages[notification_code] : "?");
+#endif
 //   publish = false;
    switch (notification_code) {
       case idb_event::byte_patched: {          // A byte has been patched
@@ -2194,23 +2414,53 @@ ssize_t idaapi idp_hook(void * /*user_data*/, int notification_code, va_list va)
 */
 /*
    if (supress) {
-      //don't generate a databse message
+      //don't generate a database message
       return 0;
    }
 */
-   msg("entering idp::%d (%s)\n", notification_code, notification_code < 110 ? (idp_messages[notification_code] ? idp_messages[notification_code] : "wtf") : "?");
+#ifdef DEBUG
+#if IDA_SDK_VERSION < 700
+   msg("entering idp::%d (%s)\n", notification_code, notification_code < num_idp ? (idp_messages[notification_code] ? idp_messages[notification_code] : "wtf") : "?");
+#else
+   if (notification_code < processor_t::ev_last_cb_before_debugger) {
+      if (notification_code < num_idp) {
+         msg("entering idp::%d (%s)\n", notification_code, idp_messages[notification_code]);
+      }
+      else {
+         msg("entering idp::%d (UNKNOWN IDP)\n", notification_code);
+      }
+   }
+   else if (notification_code < processor_t::ev_last_cb_before_type_callbacks) {
+      unsigned int idx = notification_code - 1000 + processor_t::ev_last_cb_before_debugger + 1;
+      if (idx < num_idp) {
+         msg("entering idp::%d (%s)\n", notification_code, idp_messages[idx]);
+      }
+      else {
+         msg("entering idp::%d (UNKNOWN IDP DEBUGGER EVENT TYPE)\n", notification_code);
+      }
+   }
+   else if (notification_code < processor_t::ev_loader) {
+      unsigned int idx = notification_code - 2000 + processor_t::ev_last_cb_before_type_callbacks + 1;
+      if (idx < num_idp) {
+         msg("entering idp::%d (%s)\n", notification_code, idp_messages[idx]);
+      }
+      else {
+         msg("entering idp::%d (UNKNOWN IDP TYPE EVENT TYPE)\n", notification_code);
+      }
+   }
+   else {
+      unsigned int idx = notification_code - 3000 + processor_t::ev_loader;
+      if (idx < num_idp) {
+         msg("entering idp::%d (%s)\n", notification_code, idp_messages[idx]);
+      }
+      else {
+         msg("entering idp::%d (ev_loader + %d)\n", notification_code, notification_code - processor_t::ev_loader);
+      }
+   }
+#endif
+#endif
 //   publish = false;
    switch (notification_code) {
-      case processor_t::ev_undefine: {
-         ea_t ea = va_arg(va, ea_t);
-/*
-         qstring a1;
-         format_llx(ea, a1);
-         msg(PLUGIN_NAME": 0x%s undefined\n", a1.c_str());
-*/
-         idp_undefine(ea);
-         break;
-      }
 #if IDA_SDK_VERSION < 700
       case processor_t::make_code: {
          ea_t ea = va_arg(va, ea_t);
@@ -2236,16 +2486,12 @@ ssize_t idaapi idp_hook(void * /*user_data*/, int notification_code, va_list va)
          idp_make_data(ea, f, t, len);
          break;
       }
-#endif
-#if IDA_SDK_VERSION < 700
       case processor_t::move_segm: {
          ea_t ea = va_arg(va, ea_t);
          segment_t *seg = va_arg(va, segment_t*);
          idp_move_segm(ea, seg);
          break;
       }
-#endif
-#if IDA_SDK_VERSION < 700
       case processor_t::renamed: {
          //this receives notifications for stack variables as well
          ea_t ea = va_arg(va, ea_t);
@@ -2276,17 +2522,28 @@ ssize_t idaapi idp_hook(void * /*user_data*/, int notification_code, va_list va)
          idp_set_func_end(pfn, ea);
          break;
       }
-#endif
-#if 0
-      case processor_t::validate_flirt_func: {
-         ea_t ea = va_arg(va, ea_t);
-         const char *name = va_arg(va, const char *);
-         idp_validate_flirt(ea, name);
-//         publish = autoIsOk() == 1 ? userPublish : 0;
-//         supress = supress && (auto_display.state != st_Ready);
-         return 1;  //trust IDA's validation
+      case processor_t::auto_empty: {
+         //         msg("auto_empty\n");
+         break;
+         //         return 0;
+      }
+      case processor_t::auto_empty_finally: {
+//         msg("auto_empty_finally\n");
+//         return 0;
+         break;
       }
 #endif
+#if IDA_SDK_VERSION >= 700
+      case processor_t::ev_undefine: {
+         ea_t ea = va_arg(va, ea_t);
+/*
+         qstring a1;
+         format_llx(ea, a1);
+         msg(PLUGIN_NAME": 0x%s undefined\n", a1.c_str());
+*/
+         idp_undefine(ea);
+         break;
+      }
       case processor_t::ev_add_cref: {
          // args: ea_t from, ea_t to, cref_t type
          ea_t from = va_arg(va, ea_t);
@@ -2323,16 +2580,15 @@ ssize_t idaapi idp_hook(void * /*user_data*/, int notification_code, va_list va)
          break;
 //         return 0;
       }
-#if IDA_SDK_VERSION < 700
-      case processor_t::auto_empty: {
-         //         msg("auto_empty\n");
-         break;
-         //         return 0;
-      }
-      case processor_t::auto_empty_finally: {
-//         msg("auto_empty_finally\n");
-//         return 0;
-         break;
+#endif
+#if 0
+      case processor_t::validate_flirt_func: {
+         ea_t ea = va_arg(va, ea_t);
+         const char *name = va_arg(va, const char *);
+         idp_validate_flirt(ea, name);
+//         publish = autoIsOk() == 1 ? userPublish : 0;
+//         supress = supress && (auto_display.state != st_Ready);
+         return 1;  //trust IDA's validation
       }
 #endif
       default:

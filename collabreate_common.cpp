@@ -206,7 +206,7 @@ int numCommands() {
 }
 
 const char *getRunCommand(int i) {
-   int max = sizeof(runCommands) / sizeof(runCommands[0]);
+   int max = numCommands();
    if (i < 0 || i >= max) {
       return NULL;
    }

@@ -155,7 +155,7 @@
 
 class netnode;
 extern netnode cnn;
-extern qvector<qstring> msgHistory;
+extern qstrvec_t msgHistory;
 extern qstring *changeCache;
 
 #define COLLABREATE_NETNODE "$ COLLABREATE NETNODE"
@@ -331,6 +331,9 @@ bool msg_dispatcher(const char *json_in);
 
 #if IDA_SDK_VERSION >= 700
 
+#define startEA start_ea
+#define endEA end_ea
+
 #define askbuttons_c ask_buttons
 #define AskUsingForm_c ask_form
 #define OpenForm_c open_form
@@ -358,6 +361,9 @@ bool msg_dispatcher(const char *json_in);
 
 #else
 // IDASDK_VERSION < 700
+
+#define start_ea startEA
+#define end_ea endEA
 
 #define ask_buttons askbuttons_c
 #define ask_form AskUsingForm_c

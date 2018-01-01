@@ -258,15 +258,20 @@ void createCollabStatus() {
 struct collab_msg_chooser : public chooser_t {
    static const int widths[];
    static const char* header[];
-   collab_msg_chooser() : chooser_t(0, 1, widths, header, "Collab form") {};
-   void idaapi get_row(qstrvec_t * cols, int * /*icon_*/, chooser_item_attrs_t * /*attrs*/, size_t n) const {
-      cols->push_back(msgHistory[n]);
+   collab_msg_chooser() : chooser_t(CH_KEEP, 1, widths, header, "Collab form") {};
+   void idaapi get_row(qstrvec_t *cols, int * /*icon_*/, chooser_item_attrs_t * /*attrs*/, size_t n) const {
+      qstrvec_t &cols_ = *cols;
+      cols_[0] = msgHistory[n];
    };
 
    size_t idaapi get_count() const {
       return msgHistory.size();
    };
 };
+
+static collab_msg_chooser status;
+// selection for chooser list view
+static sizevec_t status_ivec;
 
 const int collab_msg_chooser::widths[] = { 128 };
 const char* collab_msg_chooser::header[] = { "Messages" };
@@ -277,10 +282,7 @@ void createCollabStatus() {
       "Collab form\n\n"
       "%/\n"        // placeholder for the form's callback
       "<Messages:E1:::::>\n<Send:B3:20:::>< :q2::100:::>\n";
-   static collab_msg_chooser ci;
-   // selection for chooser list view
-   static intvec_t ivec;
-   collab_tform = OpenForm_c(format, WOPN_TAB, collab_cb, &ci, &ivec, send_cb, &msg_text);
+   collab_tform = OpenForm_c(format, WOPN_TAB, collab_cb, &status, &status_ivec, send_cb, &msg_text);
 }
 #endif
 
@@ -330,13 +332,13 @@ struct cmd_chooser : public chooser_t {
    static const int widths[];
    static const char *header[];
 
-   cmd_chooser() : chooser_t(CH_MODAL, 1, widths, header, "Select Command") {
-      icon = -1;
-//      deflt = 5;
+   cmd_chooser() : chooser_t(CH_MODAL | CH_KEEP | CH_NOBTNS, 1, widths,
+                             header, CHOOSER_NOMAINMENU CHOOSER_NOSTATUSBAR "Select Command") {
    };
 
    virtual void idaapi get_row(qstrvec_t *cols, int * /*icon_*/, chooser_item_attrs_t * /*attrs*/, size_t n) const {
-      cols->push_back(getRunCommand((int)n));
+      qstrvec_t &cols_ = *cols;
+      cols_[0] = getRunCommand((int)n);
    };
 
    virtual size_t idaapi get_count() const {
@@ -344,31 +346,24 @@ struct cmd_chooser : public chooser_t {
    };
 };
 
+static sizevec_t cmd_choices;
+static cmd_chooser cmd_info;
+
 const int cmd_chooser::widths[] = { 32 };
-const char *cmd_chooser::header[] = { "Command" };
+const char *cmd_chooser::header[] = { "" };
 
 int do_choose_command() {
-   const char *format = "BUTTON YES* Ok\nBUTTON CANCEL Cancel\nSelect Command\n\n\n<Command:E:32:32::>\n";
-   intvec_t choices;
-   cmd_chooser info;
-  
-   int res = AskUsingForm_c(format, &info, &choices);
-   if (res == ASKBTN_YES) {
-      if (choices.size() == 1) {
-//      ::saveAuthData(user, password);
-         return choices[0] - 1;
-      }
-   }
-   return -1;
+   return cmd_info.choose();
 }
 #else
-void idaapi get_command(void *obj, uint32 n, char *const *arrptr) {
+char* idaapi get_command(void *obj, uint32 n, char *buf) {
    if (n) {
-      qstrncpy(arrptr[0], getRunCommand(n - 1), MAXSTR);
+      qstrncpy(buf, getRunCommand(n - 1), MAXSTR);
    }
    else {
-      qstrncpy(arrptr[0], "Command", MAXSTR);
+      qstrncpy(buf, "Command", MAXSTR);
    }
+   return buf;
 }
 
 uint32 idaapi sizer(void *obj) {
@@ -376,30 +371,9 @@ uint32 idaapi sizer(void *obj) {
 }
 
 int do_choose_command() {
-   const char *format = "BUTTON YES* Ok\nBUTTON CANCEL Cancel\nSelect Command\n\n\n<Command:E:32:32::>\n";
-   intvec_t choices;
-   chooser_info_t info;
-   memset(&info, 0, sizeof(info));
-   int widths[] = { 32 };
-   char *popups[] = { NULL };
-   info.cb = sizeof(info);
-   info.flags = CH_MODAL;
-   info.width = 0;
-   info.height = 0;
-   info.columns = 1;
-   info.widths = widths;
-   info.icon = -1;
-   info.deflt = 5;
-   //   info.popup_names = popups;
-   info.sizer = sizer;
-   info.getl = get_command;
-
-   int res = AskUsingForm_c(format, &info, &choices);
-   if (res == ASKBTN_YES) {
-      if (choices.size() == 1) {
-         //      ::saveAuthData(user, password);
-         return choices[0] - 1;
-      }
+   int res = choose(CH_MODAL | CH_NOBTNS, -1, -1, -1, -1, (void*)NULL, 32, sizer, get_command, "Command", -1);
+   if (res >= 1 && res <= numCommands()) {
+      return res - 1;
    }
    return -1;
 }

@@ -46,8 +46,6 @@
 #include <struct.hpp>
 #if IDA_SDK_VERSION < 700
 #include <area.hpp>
-#define start_ea startEA
-#define endEA end_ea
 #else
 #include <range.hpp>
 #endif
@@ -80,7 +78,7 @@ void unhookAll();
 
 //where we stash collab specific infoze
 netnode cnn(COLLABREATE_NETNODE, 0, true);
-qvector<qstring> msgHistory;
+qstrvec_t msgHistory;
 qstring *changeCache = NULL;
 
 #ifndef DEBUG
@@ -230,8 +228,13 @@ void idaapi term(void) {
    msg(PLUGIN_NAME": collabREate is being unloaded\n");
    authenticated = false;
    if (is_connected()) {
+      msg(PLUGIN_NAME": calling cleanup\n");
       cleanup();
+      msg(PLUGIN_NAME": back from cleanup\n");
    }
+   msg(PLUGIN_NAME": closing status form\n");
+   close_chooser("Collab form:1");
+   msg(PLUGIN_NAME": status form closed\n");
    if (msgHistory.size() > 0) {
       qstring temp;
       for (unsigned int i = 0; i < msgHistory.size(); i++) {
@@ -272,7 +275,9 @@ bool idaapi run(size_t /*arg*/) {
 #else
       qstring desc;
 #endif
-      switch (do_choose_command()) {
+      int cmd = do_choose_command();
+      msg("User chose command %d\n", cmd);
+      switch (cmd) {
          case USER_FORK:
 #if IDA_SDK_VERSION < 700
             desc = askstr(HIST_CMT, "", "Please enter a forked project description");

@@ -40,7 +40,11 @@
 #include <netnode.hpp>
 #include <typeinf.hpp>
 #include <struct.hpp>
+#if IDA_SDK_VERSION >= 700
 #include <range.hpp>
+#else
+#include <area.hpp>
+#endif
 #include <frame.hpp>
 #include <segment.hpp>
 #include <enum.hpp>
