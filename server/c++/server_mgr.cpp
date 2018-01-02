@@ -1,7 +1,7 @@
 /*
    collabREate server_mgr.cpp
-   Copyright (C) 2012 Chris Eagle <cseagle at gmail d0t com>
-   Copyright (C) 2012 Tim Vidas <tvidas at gmail d0t com>
+   Copyright (C) 2018 Chris Eagle <cseagle at gmail d0t com>
+   Copyright (C) 2018 Tim Vidas <tvidas at gmail d0t com>
 
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the Free
@@ -27,7 +27,7 @@
 #include <arpa/inet.h>
 #include <stdlib.h>
 #include <inttypes.h>
-#include <json.h>
+#include <json-c/json.h>
 #include "client.h"
 #include "utils.h"
 #include "proj_info.h"
@@ -634,11 +634,8 @@ int ServerManager::importProject(FILE *ifile, const char *newowner) {
             json_object *update = json_tokener_parse(line.c_str());
             //printf("update:" + updateid + " orig uid " + uid + " oldpid " + pid + " cmd " + cmd + " datalen " + datalen );
             printf(".");
-
-            //insertUpdate
-            append_json_string_val(update, "newowner", newowner);
-
             obj = json_object_new_object();
+            append_json_string_val(obj, "newowner", newowner);
             size_t jlen;
             append_json_string_val(obj, "update", json_object_to_json_string_length(update, JSON_C_TO_STRING_PLAIN, &jlen));
             send_data(MNG_MIGRATE_UPDATE, obj);

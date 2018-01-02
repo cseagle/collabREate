@@ -1,7 +1,7 @@
 /*
    collabREate client.cpp
-   Copyright (C) 2012 Chris Eagle <cseagle at gmail d0t com>
-   Copyright (C) 2012 Tim Vidas <tvidas at gmail d0t com>
+   Copyright (C) 2018 Chris Eagle <cseagle at gmail d0t com>
+   Copyright (C) 2018 Tim Vidas <tvidas at gmail d0t com>
 
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the Free
@@ -24,7 +24,7 @@
 #include <ctype.h>
 #include <pthread.h>
 #include <map>
-#include <json.h>
+#include <json-c/json.h>
 
 #include "utils.h"
 #include "proj_info.h"
@@ -699,11 +699,11 @@ bool Client::msg_project_list(json_object *obj, Client *c) {
    //create list of projects
    for (vector<ProjectInfo*>::iterator pi = plist->begin(); pi != plist->end(); pi++) {
 //                     log(" " + pi.lpid + " "+ pi.desc, LINFO4);
+      char buf[256];
       json_object *proj = json_object_new_object();
       append_json_int32_val(proj, "id", (*pi)->lpid);
       append_json_uint64_val(proj, "snap_id", (*pi)->snapupdateid);
       if ((*pi)->parent > 0) {
-         char buf[256];
          if ((*pi)->snapupdateid > 0) {
             snprintf(buf, sizeof(buf), "[-] %s (SNAP of '%s'@%" PRIu64 " updates])", (*pi)->desc.c_str(), (*pi)->pdesc.c_str(), (*pi)->snapupdateid);
 //                           log("[-] " + pi.desc + " (snapshot of (" + pi.parent + ")'" + pi.pdesc+"' ["+ pi.snapupdateid + " updates]) ", LDEBUG);
@@ -712,13 +712,11 @@ bool Client::msg_project_list(json_object *obj, Client *c) {
             snprintf(buf, sizeof(buf), "[%d] %s (FORK of '%s')", (*pi)->connected, (*pi)->desc.c_str(), (*pi)->pdesc.c_str());
 //                           log("[" + pi.connected + "] " + pi.desc + " (forked from (" + pi.parent + ") '" + pi.pdesc +"')", LDEBUG);
          }
-         append_json_string_val(proj, "description", buf);
       }
       else {
-         char buf[128];
          snprintf(buf, sizeof(buf), "[%d] %s", (*pi)->connected, (*pi)->desc.c_str());
-         append_json_string_val(proj, "description", buf);
       }
+      append_json_string_val(proj, "description", buf);
       //since the user permissions may already limit the eventual effective permissions
       //only show the user the maximum attainable by this particular user (mask)
       //upublish = usubscribe = FULL_PERMISSIONS;  //quick BASIC mode test

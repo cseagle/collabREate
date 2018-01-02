@@ -1,7 +1,7 @@
 /*
    collabREate client.h
-   Copyright (C) 2012 Chris Eagle <cseagle at gmail d0t com>
-   Copyright (C) 2012 Tim Vidas <tvidas at gmail d0t com>
+   Copyright (C) 2018 Chris Eagle <cseagle at gmail d0t com>
+   Copyright (C) 2018 Tim Vidas <tvidas at gmail d0t com>
 
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the Free
@@ -24,7 +24,7 @@
 #include <map>
 #include <string>
 #include <stdint.h>
-#include <json.h>
+#include <json-c/json.h>
 #include "utils.h"
 
 using namespace std;

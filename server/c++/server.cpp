@@ -1,7 +1,7 @@
 /*
    collabREate server.cpp
-   Copyright (C) 2012 Chris Eagle <cseagle at gmail d0t com>
-   Copyright (C) 2012 Tim Vidas <tvidas at gmail d0t com>
+   Copyright (C) 2018 Chris Eagle <cseagle at gmail d0t com>
+   Copyright (C) 2018 Tim Vidas <tvidas at gmail d0t com>
 
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the Free
@@ -36,7 +36,7 @@
 #include <err.h>
 #include <errno.h>
 #include <pthread.h>
-#include <json.h>
+#include <json-c/json.h>
 
 #include "utils.h"
 #include "basic_mgr.h"
@@ -49,8 +49,22 @@
 #define ERROR_BAD_GID "setgid current gid: %d target gid: %d\n"   
 #define ERROR_BAD_UID "setuid current uid: %d target uid: %d\n"   
 #define ERROR_SET_SIGCHLD "Unable to set SIGCHLD handler"
+#define ERROR_SET_SIGTERM "Unable to set SIGTERM handler"
 
 json_object *conf = NULL;
+
+ManagerHelper *helper;
+
+/*
+ * This farms exit status from forked children to avoid
+ * having any zombie processes lying around
+ */
+void sigterm(int sig) {
+   if (helper) {
+      helper->shutdown();
+   }
+   exit(0);
+}
 
 /*
  * This farms exit status from forked children to avoid
@@ -89,29 +103,17 @@ void loop(NetworkService *svc) {
    //should choose between Basic and Database connection managers here
    mgr->start();
    //need to instantiate a ManagerHelper here as well
-   ManagerHelper helper(mgr, conf);
-   helper.start();
-   while (!helper.done) {
+   ManagerHelper hlp(mgr, conf);
+   hlp.start();
+   helper = &hlp;
+   while (!hlp.done) {
       NetworkIO *nio = svc->accept();
       fprintf(stderr, "Accepted new client\n");
       if (nio) {
          mgr->add(nio);
       }
    }
-
-/*
-   DatabaseConnectionManager mgr(conf);
-   mgr.start();
-   //need to instantiate a ManagerHelper here as well
-   ManagerHelper helper(&mgr, conf);
-   helper.start();
-   while (true) {
-      NetworkIO *nio = svc->accept();
-      if (nio) {
-         mgr.add(nio);
-      }   
-   }
-*/
+   while (!hlp.quit) {};
 }
 
 /*
@@ -214,6 +216,13 @@ int main(int argc, char **argv, char **envp) {
       exit(-1);
 #endif
    }
+   if (signal(SIGTERM, sigterm) == SIG_ERR) {
+#ifdef DEBUG      
+      err(-1, ERROR_SET_SIGTERM);
+#else
+      exit(-1);
+#endif
+   }
    int opt;
    while ((opt = getopt(argc, argv, "c:")) != -1) {
       switch (opt) {
@@ -243,7 +252,7 @@ int main(int argc, char **argv, char **envp) {
    if (svc_user != NULL) {
       drop_privs_user(svc_user);
    }
-//   daemon(1, 0);
+   daemon(1, 0);
    writePidFile();
    loop(svc);
    return 0;

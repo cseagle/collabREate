@@ -1,7 +1,7 @@
 /*
    collabREate mgr_helper.cpp
-   Copyright (C) 2012 Chris Eagle <cseagle at gmail d0t com>
-   Copyright (C) 2012 Tim Vidas <tvidas at gmail d0t com>
+   Copyright (C) 2018 Chris Eagle <cseagle at gmail d0t com>
+   Copyright (C) 2018 Tim Vidas <tvidas at gmail d0t com>
 
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the Free
@@ -74,6 +74,7 @@ void ManagerHelper::initCommon() {
       init_handlers();
    }
    done = false;
+   quit = false;
    bool localonly = DEFAULT_LOCAL;
    bool dbMode = false;
    int port = DEFAULT_PORT;
@@ -215,14 +216,19 @@ void ManagerHelper::mng_get_stats(json_object *obj, ManagerHelper *mh) {
    mh->send_data(MNG_STATS, out);
 }
 
-void ManagerHelper::mng_shutdown(json_object *obj, ManagerHelper *mh) {
-   mh->logln("client requested server shutdown", LINFO);
-   mh->cm->Shutdown();
-   delete mh->cm;
-   mh->cm = NULL;
-   mh->done = true;
-   delete mh->nio;
+void ManagerHelper::shutdown() {
+   done = true;
+   logln("client requested server shutdown", LINFO);
+   cm->Shutdown();
+   delete cm;
+   cm = NULL;
+   delete nio;
+   quit = true;
    exit(0);
+}
+
+void ManagerHelper::mng_shutdown(json_object *obj, ManagerHelper *mh) {
+   mh->shutdown();
 }
 
 void ManagerHelper::mng_project_migrate(json_object *obj, ManagerHelper *mh) {
