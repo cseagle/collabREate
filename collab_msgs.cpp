@@ -715,10 +715,10 @@ int cmd_enum_cmt_changed(json_object *json) {
    }
    msg("enum cmt changed for enum %s, comment: %s\n", name, cmt);
    enum_t id = get_enum(name);
-   if (id == -1) {
+   if (-1 == (int)id) {
 #if IDA_SDK_VERSION >= 570
       const_t m = get_enum_member_by_name(name);
-      if (m != -1) {
+      if (-1 == (int)m) {
          set_enum_member_cmt(m, cmt, rep);
       }
 #endif

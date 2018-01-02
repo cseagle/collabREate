@@ -29,6 +29,7 @@
 
 #define NO_OBSOLETE_FUNCS
 #define USE_DANGEROUS_FUNCTIONS
+#define USE_STANDARD_FILE_FUNCTIONS
 
 #include <pro.h>
 

@@ -187,7 +187,7 @@ bool changeProject(int index) {
 }
 
 //the order of these is important, the callback returns the ordinal of the selected string
-char *const runCommands[] = {
+const char *runCommands[] = {
    "Fork project",
    "Set checkpoint",
    "Manage requested permissions",

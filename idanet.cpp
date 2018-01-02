@@ -261,8 +261,10 @@ bool AsyncSocket::isConnected() {
 void AsyncSocket::cleanup(bool warn) {
    //cancel all notifications. if we don't do this ida will crash on exit.
    msg(PLUGIN_NAME": cleanup called.\n");
-   if (conn != INVALID_SOCKET) {
-      ::closesocket(conn);
+   if (connected) {
+      int res = ::closesocket(conn);
+      msg("closesocket returned %d\n", res);
+      connected = false;
       conn = (_SOCKET)INVALID_SOCKET;
 #ifdef _WIN32
       if (thread) {
@@ -331,7 +333,7 @@ bool AsyncSocket::sendAll(const qstring &s) {
    while (true) {
 //      msg("sending new buffer\n");
       int len = ::send(conn, buf.c_str(), (int)buf.length(), 0);
-      if (len == buf.length()) {
+      if (len == (int)buf.length()) {
          break;
       }
       if (len == SOCKET_ERROR) {
@@ -344,7 +346,7 @@ bool AsyncSocket::sendAll(const qstring &s) {
          msg(PLUGIN_NAME": Failed to send requested data. %d != %d. Error: 0x%x(%d)\n", len, buf.length(), sockerr, sockerr);
          return false;
       }
-      else if (len != buf.length()) {
+      else if (len != (int)buf.length()) {
          //shift the remainder and try again
          buf = buf.c_str() + len;
          //msg(PLUGIN_NAME": Short send. %d != %d.", len, out.size());
