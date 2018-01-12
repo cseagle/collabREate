@@ -138,6 +138,10 @@ static bool dispatch(Client *c, void *user) {
    Packet *p = (Packet*)user;
 
    if (c != p->c) {  //only send to other than originator
+      //increment ref count on json object before sending
+      //because writeJson will decrement it and we can't have the object
+      //garbage collected until all clients have received it
+      json_object_get(p->obj);
       c->post(p->cmd, p->obj);
    }
    else {
