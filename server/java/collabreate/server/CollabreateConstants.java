@@ -26,7 +26,7 @@ package collabreate.server;
  * the collabreate server
  * @author Tim Vidas
  * @author Chris Eagle
- * @version 0.1.0, August 2008
+ * @version 0.2.0, January 2017
  */
 
 public interface CollabreateConstants {
@@ -36,75 +36,113 @@ public interface CollabreateConstants {
 
    public static final long FULL_PERMISSIONS            = 0x7fffffff;
 
-   public static final int PROTOCOL_VERSION             = 2;
+   public static final int PROTOCOL_VERSION             = 4;
 
-   public static final int COMMAND_BYTE_PATCHED         = 1;
-   public static final int COMMAND_CMT_CHANGED          = 2;
-   public static final int COMMAND_TI_CHANGED           = 3;
-   public static final int COMMAND_OP_TI_CHANGED        = 4;
-   public static final int COMMAND_OP_TYPE_CHANGED      = 5;
-   public static final int COMMAND_ENUM_CREATED         = 6;
-   public static final int COMMAND_ENUM_DELETED         = 7;
-   public static final int COMMAND_ENUM_BF_CHANGED      = 8;
-   public static final int COMMAND_ENUM_RENAMED         = 9;
-   public static final int COMMAND_ENUM_CMT_CHANGED     = 10;
-   public static final int COMMAND_ENUM_CONST_CREATED   = 11;
-   public static final int COMMAND_ENUM_CONST_DELETED   = 12;
-   public static final int COMMAND_STRUC_CREATED        = 13;
-   public static final int COMMAND_STRUC_DELETED        = 14;
-   public static final int COMMAND_STRUC_RENAMED        = 15;
-   public static final int COMMAND_STRUC_EXPANDED       = 16;
-   public static final int COMMAND_STRUC_CMT_CHANGED    = 17;
-   
-   public static final int COMMAND_CREATE_STRUC_MEMBER_DATA = 18;
-   public static final int COMMAND_CREATE_STRUC_MEMBER_STRUCT = 19;
-   public static final int COMMAND_CREATE_STRUC_MEMBER_REF = 20;
-   public static final int COMMAND_CREATE_STRUC_MEMBER_STROFF = 21;
-   public static final int COMMAND_CREATE_STRUC_MEMBER_STR = 22;
-   public static final int COMMAND_CREATE_STRUC_MEMBER_ENUM = 23;
-   
-   public static final int COMMAND_STRUC_MEMBER_DELETED = 24;
-   
-   //public static final int COMMAND_STRUC_MEMBER_RENAMED
-   public static final int COMMAND_SET_STACK_VAR_NAME     = 25;
-   public static final int COMMAND_SET_STRUCT_MEMBER_NAME = 26;
-   
-   //public static final int COMMAND_STRUC_MEMBER_CHANGED
-   public static final int COMMAND_STRUC_MEMBER_CHANGED_DATA = 27;
-   public static final int COMMAND_STRUC_MEMBER_CHANGED_STRUCT = 28;
-   public static final int COMMAND_STRUC_MEMBER_CHANGED_STR = 29;
-   
-   public static final int COMMAND_THUNK_CREATED        = 30;
-   public static final int COMMAND_FUNC_TAIL_APPENDED   = 31;
-   public static final int COMMAND_FUNC_TAIL_REMOVED    = 32;
-   public static final int COMMAND_TAIL_OWNER_CHANGED   = 33;
-   public static final int COMMAND_FUNC_NORET_CHANGED   = 34;
-   public static final int COMMAND_SEGM_ADDED           = 35;
-   public static final int COMMAND_SEGM_DELETED         = 36;
-   public static final int COMMAND_SEGM_START_CHANGED   = 37;
-   public static final int COMMAND_SEGM_END_CHANGED     = 38;
-   public static final int COMMAND_SEGM_MOVED           = 39;
-   public static final int COMMAND_AREA_CMT_CHANGED     = 40;
-   public static final int COMMAND_STRUC_MEMBER_CHANGED_OFFSET = 41;
-   public static final int COMMAND_STRUC_MEMBER_CHANGED_ENUM = 42;
-   public static final int COMMAND_CREATE_STRUC_MEMBER_OFFSET = 43;   
-   
-   public static final int COMMAND_IDP                 = 128;   //This is not a command
-   public static final int COMMAND_UNDEFINE            = 129;
-   public static final int COMMAND_MAKE_CODE           = 130;
-   public static final int COMMAND_MAKE_DATA           = 131;
-   public static final int COMMAND_MOVE_SEGM           = 132;
-   public static final int COMMAND_RENAMED             = 133;
-   public static final int COMMAND_ADD_FUNC            = 134;
-   public static final int COMMAND_DEL_FUNC            = 135;
-   public static final int COMMAND_SET_FUNC_START      = 137;
-   public static final int COMMAND_SET_FUNC_END        = 138;
-   public static final int COMMAND_VALIDATE_FLIRT_FUNC = 139;
+   public static final String COMMAND_BYTE_PATCHED         = "byte_patched";
+   public static final String COMMAND_CMT_CHANGED          = "cmt_changed";
+   public static final String COMMAND_TI_CHANGED           = "ti_changed";
+   public static final String COMMAND_OP_TI_CHANGED        = "op_ti_changed";
+   public static final String COMMAND_OP_TYPE_CHANGED      = "op_type_changed";
+   public static final String COMMAND_ENUM_CREATED         = "enum_created";
+   public static final String COMMAND_ENUM_DELETED         = "enum_deleted";
+   public static final String COMMAND_ENUM_BF_CHANGED      = "enum_bf_changed";
+   public static final String COMMAND_ENUM_RENAMED         = "enum_renamed";
+   public static final String COMMAND_ENUM_CMT_CHANGED     = "enum_cmt_changed";
+   public static final String COMMAND_ENUM_CONST_CREATED   = "enum_const_created";
+   public static final String COMMAND_ENUM_CONST_DELETED   = "enum_const_deleted";
+   public static final String COMMAND_STRUC_CREATED        = "struc_created";
+   public static final String COMMAND_STRUC_DELETED        = "struc_deleted";
+   public static final String COMMAND_STRUC_RENAMED        = "struc_renamed";
+   public static final String COMMAND_STRUC_EXPANDED       = "struc_expanded";
+   public static final String COMMAND_STRUC_CMT_CHANGED    = "struc_cmt_changed";
 
-   public static final int COMMAND_ADD_CREF            = 140;
-   public static final int COMMAND_ADD_DREF            = 141;
-   public static final int COMMAND_DEL_CREF            = 142;
-   public static final int COMMAND_DEL_DREF            = 143;
+   public static final String COMMAND_CREATE_STRUC_MEMBER_DATA   = "create_struc_mbr_data";
+   public static final String COMMAND_CREATE_STRUC_MEMBER_STRUCT = "create_struc_mbr_struc";
+   public static final String COMMAND_CREATE_STRUC_MEMBER_REF    = "create_struc_mbr_ref";
+   public static final String COMMAND_CREATE_STRUC_MEMBER_STROFF = "create_struc_mbr_stroff";
+   public static final String COMMAND_CREATE_STRUC_MEMBER_STR    = "create_struc_mbr_str";
+   public static final String COMMAND_CREATE_STRUC_MEMBER_ENUM   = "create_struc_mbr_enum";
+
+   public static final String COMMAND_STRUC_MEMBER_DELETED      = "struc_mbr_deleted";
+
+   //public static final String COMMAND_STRUC_MEMBER_RENAMED
+   public static final String COMMAND_SET_STACK_VAR_NAME        = "set_stack_var_name";
+   public static final String COMMAND_SET_STRUCT_MEMBER_NAME    = "set_struc_mbr_name";
+
+   //public static final String COMMAND_STRUC_MEMBER_CHANGED
+   public static final String COMMAND_STRUC_MEMBER_CHANGED_DATA   = "struc_mbr_chg_data";
+   public static final String COMMAND_STRUC_MEMBER_CHANGED_STRUCT = "struc_mbr_chg_struc";
+   public static final String COMMAND_STRUC_MEMBER_CHANGED_STR    = "struc_mbr_chg_str";
+
+   public static final String COMMAND_THUNK_CREATED        = "thunk_created";
+   public static final String COMMAND_FUNC_TAIL_APPENDED   = "func_tail_appended";
+   public static final String COMMAND_FUNC_TAIL_REMOVED    = "func_tail_removed";
+   public static final String COMMAND_TAIL_OWNER_CHANGED   = "tail_owner_chg";
+   public static final String COMMAND_FUNC_NORET_CHANGED   = "func_noret_chg";
+   public static final String COMMAND_SEGM_ADDED           = "segm_added";
+   public static final String COMMAND_SEGM_DELETED         = "segm_deleted";
+   public static final String COMMAND_SEGM_START_CHANGED   = "segm_start_chg";
+   public static final String COMMAND_SEGM_END_CHANGED     = "segm_end_chg";
+   public static final String COMMAND_SEGM_MOVED           = "segm_moved";
+   public static final String COMMAND_AREA_CMT_CHANGED     = "area_cmt_chg";
+   public static final String COMMAND_STRUC_MEMBER_CHANGED_OFFSET = "struc_mbr_chg_offset";
+   public static final String COMMAND_STRUC_MEMBER_CHANGED_ENUM   = "struc_mbr_chg_enum";
+   public static final String COMMAND_CREATE_STRUC_MEMBER_OFFSET  = "create_struc_mbr_offset";
+
+   public static final String AREACB_FUNCS                  = "funcs";
+   public static final String AREACB_SEGS                   = "segs";
+
+   public static final String COMMAND_UNDEFINE            = "undefine";
+   public static final String COMMAND_MAKE_CODE           = "make_code";
+   public static final String COMMAND_MAKE_DATA           = "make_data";
+   public static final String COMMAND_MOVE_SEGM           = "move_segm";
+   public static final String COMMAND_RENAMED             = "renamed";
+   public static final String COMMAND_ADD_FUNC            = "add_func";
+   public static final String COMMAND_DEL_FUNC            = "del_func";
+   public static final String COMMAND_SET_FUNC_START      = "set_func_start";
+   public static final String COMMAND_SET_FUNC_END        = "set_func_end";
+   public static final String COMMAND_VALIDATE_FLIRT_FUNC = "validate_flirt_func";
+   public static final String COMMAND_ADD_CREF            = "add_cref";
+   public static final String COMMAND_ADD_DREF            = "add_dref";
+   public static final String COMMAND_DEL_CREF            = "del_cref";
+   public static final String COMMAND_DEL_DREF            = "del_dref";
+
+   public static final String COMMAND_USER_MESSAGE        = "user_message";
+
+   public static final String MSG_CONTROL_FIRST            = "control_first";
+   public static final String MSG_INITIAL_CHALLENGE        = "initial_challenge";
+   public static final String MSG_AUTH_REQUEST             = "auth_request";
+   public static final String MSG_AUTH_REPLY               = "auth_reply";
+   public static final int AUTH_REPLY_SUCCESS           = 1;
+   public static final int AUTH_REPLY_FAIL              = 0;
+   public static final String MSG_PROJECT_LIST             = "project_list";
+   public static final String MSG_PROJECT_JOIN_REQUEST     = "project_join_request";
+   public static final String MSG_PROJECT_JOIN_REPLY       = "project_join_reply";
+   public static final int JOIN_REPLY_SUCCESS           = 1;
+   public static final int JOIN_REPLY_FAIL              = 0;
+   public static final String MSG_PROJECT_NEW_REQUEST      = "project_new_request";
+   public static final String MSG_SEND_UPDATES             = "send_updates";
+   public static final String MSG_PROJECT_REJOIN_REQUEST   = "project_rejoin_request";
+   public static final String MSG_ACK_UPDATEID             = "ack_updateid";
+   public static final String MSG_PROJECT_SNAPSHOT_REQUEST = "project_snapshot_request";
+   public static final String MSG_PROJECT_SNAPSHOT_REPLY   = "project_snapshot_reply";
+   public static final int PROJECT_SNAPSHOT_SUCCESS     = 1;
+   public static final int PROJECT_SNAPSHOT_FAIL        = 0;
+   public static final String MSG_PROJECT_FORK_REQUEST     = "project_fork_request";
+   public static final String MSG_PROJECT_SNAPFORK_REQUEST = "project_snapfork_request";
+   public static final String MSG_PROJECT_FORK_FOLLOW      = "project_fork_follow";
+   public static final String MSG_PROJECT_LEAVE            = "project_leave";
+   public static final String MSG_GET_REQ_PERMS            = "get_req_perms";
+   public static final String MSG_GET_REQ_PERMS_REPLY      = "get_req_perms_reply";
+   public static final String MSG_SET_REQ_PERMS            = "set_req_perms";
+   public static final String MSG_SET_REQ_PERMS_REPLY      = "set_req_perms_reply";
+   public static final String MSG_GET_PROJ_PERMS           = "get_proj_perms";
+   public static final String MSG_GET_PROJ_PERMS_REPLY     = "get_proj_perms_reply";
+   public static final String MSG_SET_PROJ_PERMS           = "set_proj_perms";
+   public static final String MSG_SET_PROJ_PERMS_REPLY     = "set_proj_perms_reply";
+
+   public static final String MSG_ERROR                    = "collab_error";
+   public static final String MSG_FATAL                    = "collab_fatal";
 
    //the above commands are grouped in order to provide
    //permissions based on these masks
@@ -139,61 +177,23 @@ public interface CollabreateConstants {
                               "Flirt",
                               "Thunk",
                               "Xrefs"
-                       };   
-   
+                       };
+
    public static final int SERVER_THRESHOLD            = 200;
    public static final int SERVER_MAP_TID              = 200;
    public static final int SERVER_RENAME_STRUCT        = 201;
-   public static final int COMMAND_USER_MESSAGE        = 202;
-   
-   
-   public static final int MSG_CONTROL_FIRST           = 1000;
-   public static final int MSG_INITIAL_CHALLENGE       = 1000;
-   public static final int MSG_AUTH_REQUEST            = 1001;
-   public static final int MSG_AUTH_REPLY              = 1002;
-   public static final int AUTH_REPLY_SUCCESS          = 0;
-   public static final int AUTH_REPLY_FAIL             = 1;
-   public static final int MSG_PROJECT_LIST            = 1003;
-   public static final int MSG_PROJECT_JOIN_REQUEST    = 1004;
-   public static final int MSG_PROJECT_JOIN_REPLY      = 1005;
-   public static final int JOIN_REPLY_SUCCESS          = 0;
-   public static final int JOIN_REPLY_FAIL             = 1;
-   public static final int MSG_PROJECT_NEW_REQUEST     = 1006;
-   public static final int MSG_SEND_UPDATES            = 1007;
-   public static final int MSG_PROJECT_REJOIN_REQUEST  = 1008;
-   public static final int MSG_ACK_UPDATEID            = 1009;
-   public static final int MSG_PROJECT_SNAPSHOT_REQUEST = 1010;
-   public static final int MSG_PROJECT_SNAPSHOT_REPLY  = 1011;
-   public static final int PROJECT_SNAPSHOT_SUCCESS    = 0;
-   public static final int PROJECT_SNAPSHOT_FAIL       = 1;
-   public static final int MSG_PROJECT_FORK_REQUEST    = 1012;
-   public static final int MSG_PROJECT_SNAPFORK_REQUEST = 1013;
-   public static final int MSG_PROJECT_FORK_FOLLOW     = 1014;
-   public static final int MSG_PROJECT_LEAVE           = 1015;
-   public static final int MSG_GET_REQ_PERMS           = 1016;
-   public static final int MSG_GET_REQ_PERMS_REPLY     = 1017;
-   public static final int MSG_SET_REQ_PERMS           = 1018;
-   public static final int MSG_SET_REQ_PERMS_REPLY     = 1019;
-   public static final int MSG_GET_PROJ_PERMS          = 1020;
-   public static final int MSG_GET_PROJ_PERMS_REPLY    = 1021;
-   public static final int MSG_SET_PROJ_PERMS          = 1022;
-   public static final int MSG_SET_PROJ_PERMS_REPLY    = 1023;
-
-   
-   public static final int MSG_ERROR                    = 1100;
-   public static final int MSG_FATAL                    = 1101;
 
    public static final int MNG_CONTROL_FIRST            = 2000;
-   public static final int MNG_GET_CONNECTIONS          = 2000;
-   public static final int MNG_CONNECTIONS              = 2001;
-   public static final int MNG_GET_STATS                = 2002;
-   public static final int MNG_STATS                    = 2003;
-   public static final int MNG_SHUTDOWN                 = 2004;
-   public static final int MNG_PROJECT_MIGRATE          = 2005;
-   public static final int MNG_PROJECT_MIGRATE_REPLY    = 2006;
-   public static final int MNG_MIGRATE_REPLY_SUCCESS    = 0;
-   public static final int MNG_MIGRATE_REPLY_FAIL       = 1;
-   public static final int MNG_MIGRATE_UPDATE           = 2007;
+   public static final String MNG_GET_CONNECTIONS        =  "mng_get_connections";
+   public static final String MNG_CONNECTIONS            =  "mng_connections";
+   public static final String MNG_GET_STATS              =  "mng_get_stats";
+   public static final String MNG_STATS                  =  "mng_stats";
+   public static final String MNG_SHUTDOWN               =  "mng_shutdown";
+   public static final String MNG_PROJECT_MIGRATE        =  "mng_project_migrate";
+   public static final String MNG_PROJECT_MIGRATE_REPLY  =  "mng_project_migrate_reply";
+   public static final int MNG_MIGRATE_REPLY_SUCCESS    = 1;
+   public static final int MNG_MIGRATE_REPLY_FAIL       = 0;
+   public static final String MNG_MIGRATE_UPDATE         =  "mng_migrate_update";
 
    public static final int MAX_COMMAND = 2048;
 
@@ -211,7 +211,7 @@ public interface CollabreateConstants {
    public static final int LINFO4   = 7;
    public static final int LSQL     = 10;
    public static final int LDEBUG   = 15;
- 
+
 
    public static final String FILE_SIG = "collabRE";
    public static final int FILE_VER = 1;

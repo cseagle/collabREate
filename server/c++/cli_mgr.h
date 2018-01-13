@@ -1,7 +1,7 @@
 /*
    collabREate cli_mgr.h
-   Copyright (C) 2012 Chris Eagle <cseagle at gmail d0t com>
-   Copyright (C) 2012 Tim Vidas <tvidas at gmail d0t com>
+   Copyright (C) 2018 Chris Eagle <cseagle at gmail d0t com>
+   Copyright (C) 2018 Tim Vidas <tvidas at gmail d0t com>
 
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the Free
@@ -28,6 +28,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 #include <semaphore.h>
+#include <json-c/json.h>
 
 #include "projectmap.h"
 
@@ -46,12 +47,10 @@ typedef map<int,set<Client*>*>::iterator Projects_it;
 class Packet {
 public:
    Client *c;
-   const uint8_t *d;
-   int dataLen;
+   const char *cmd;
+   json_object *obj;
    uint64_t uid;
-   Packet(Client *src, uint8_t *data, int dlen, uint64_t updateid);
-
-   ~Packet();
+   Packet(Client *src, const char *cmd, json_object *obj, uint64_t updateid);
 };
 
 
@@ -68,9 +67,10 @@ protected:
    
    //counting semephore for incoming packets from the server
    sem_t queueSem;
+   sem_t queueMutex;
 
 public:
-   ConnectionManagerBase(map<string,string> *p, bool mode);
+   ConnectionManagerBase(json_object *conf, bool mode);
    void start();
 
    /**
@@ -103,14 +103,14 @@ public:
     * terminate terminates the connection manager
     * it terminates all clients connected to all projects 
     */
-   void terminate();
+   virtual void terminate();
 
 
    /**
     * calls the terminate function of the associated CollabreateServer
     */
    void Shutdown() {
-      ::terminate();
+      terminate();
    }
 
    /**
@@ -131,7 +131,7 @@ public:
     * @param cmd the 'command' that was performed (comment, rename, etc)
     * @param data the 'data' portion of the command (the comment text, etc)
     */
-   virtual void migrateUpdate(int newowner, int pid, int cmd, const uint8_t *data, int dlen) = 0;
+   virtual void migrateUpdate(const char *newowner, int pid, const char *cmd, json_object *obj) = 0;
 
    /**
     * post both queues a newly received update to be sent to other clients and (if in DB mode)
@@ -140,7 +140,7 @@ public:
     * @param cmd the 'command' that was performed (comment, rename, etc)
     * @param data the 'data' portion of the command (the comment text, etc)
     */
-   virtual void post(Client *src, int cmd, uint8_t *data, int dlen) = 0;
+   virtual void post(Client *src, const char *cmd, json_object *obj) = 0;
 
    /**
     * dumpStats dumps send / receive stats for each connected client 
@@ -158,9 +158,9 @@ public:
    virtual void sendLatestUpdates(Client *c, uint64_t lastUpdate) = 0;
 
    /**
-    * getProjectInfo gets informatio related to a local project
+    * getProjectInfo gets information related to a local project
     * @param pid the local pid of a project to get info on
-    * @return a  project info object for the provided pid
+    * @return a  project info object for the provided pid, caller needs to delete this
     */
    virtual ProjectInfo *getProjectInfo(int pid) = 0;
 
@@ -257,7 +257,7 @@ public:
     * @return the new project id on success, -1 on failure
     */
 
-   virtual int migrateProject(int owner, const string &gpid, const string &hash, const string &desc, uint64_t pub, uint64_t sub) = 0;
+   virtual int migrateProject(const char *owner, const string &gpid, const string &hash, const string &desc, uint64_t pub, uint64_t sub) = 0;
 
    /**
     * addProject adds a project to the database and reflector (or merely a reflector in non-DB mode) 
@@ -299,7 +299,7 @@ protected:
    static void *run(void *arg);
 
 private:
-   map<string,string> *props;
+   json_object *conf;
 
    bool basicMode;
 

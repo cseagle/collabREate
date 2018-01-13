@@ -1,7 +1,7 @@
 /*
    collabREate utils.cpp
-   Copyright (C) 2012 Chris Eagle <cseagle at gmail d0t com>
-   Copyright (C) 2012 Tim Vidas <tvidas at gmail d0t com>
+   Copyright (C) 2018 Chris Eagle <cseagle at gmail d0t com>
+   Copyright (C) 2018 Tim Vidas <tvidas at gmail d0t com>
 
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the Free
@@ -35,14 +35,19 @@
 #include <stdint.h>
 #include <string>
 #include <openssl/md5.h>
+#include <json-c/json.h>
 
-#include "buffer.h"
 #include "utils.h"
 
 #define ERROR_CREATE_SOCK "Unable to create socket"
 #define ERROR_REUSE_SOCK "Unable to set reuse"
 #define ERROR_BIND_SOCK "Unable to bind socket"
 #define ERROR_LISTEN_SOCK "Unable to listen on socket"
+
+#define _FILE_STATE_OPEN  1
+#define _FILE_STATE_ERROR 2
+#define _FILE_STATE_EOF   4
+#define _FILE_HAVE_LAST   8
 
 const char *permStrings[] = {
       "Undefine",
@@ -193,21 +198,28 @@ const string &IOException::getMessage() {
    return msg;
 }
 
+json_object *IOBase::readJson() {
+   string line;
+   if (readLine(line)) {
+      return json_tokener_parse(line.c_str());
+   }
+   return NULL;
+}
+
+bool IOBase::writeJson(json_object *obj) {
+   size_t jlen;
+   const char *json = json_object_to_json_string_length(obj, JSON_C_TO_STRING_PLAIN, &jlen);
+   *this << json << "\n";
+   json_object_put(obj);   //release the object
+   return true;
+}
+
+FileIO::FileIO() {
+   state = curr = max = 0;
+}
+
 IOBase &FileIO::operator<<(const string &s) {
    this->sendMsg(s.c_str(), 0);
-   return *this;
-}
-
-IOBase &FileIO::operator<<(const Buffer &b) {
-   this->sendAll(b.get_buf(), b.size());
-   return *this;
-}
-
-IOBase &FileIO::operator>>(Buffer &b) {
-   int res = this->readAll(b.get_buf(), b.capacity());
-   if (res >= 0) {
-      b.seek(res);
-   }
    return *this;
 }
 
@@ -224,6 +236,83 @@ void FileIO::setFileDescriptor(int fd) {
    this->fd = fd;
 }
 
+int FileIO::fillbuf() {
+/*
+   fd_set rds;
+   FD_ZERO(&rds);
+   FD_SET(fd, &rds);
+*/
+   curr = max = 0;
+   max = ::read(fd, buf, sizeof(buf));
+   if (max < 0) {
+      state |= _FILE_STATE_ERROR;
+      return EOF;
+   }
+   else if (max == 0) {
+      state |= _FILE_STATE_EOF;
+      return EOF;
+   }
+   return max;
+}
+
+int FileIO::read() {
+   if (curr < max) {
+/*
+      if (buf[curr] == '\n') {
+         fprintf(stderr, "read returning: \\n\n");
+      }
+      else {
+         fprintf(stderr, "read returning: %c\n", buf[curr]);
+      }
+*/
+      return buf[curr++];
+   }
+   //buffer empty get some more
+   int res = fillbuf();
+   if (res > 0) {
+      res = (uint32_t)buf[curr++];
+   }
+   return res;
+}
+
+uint32_t FileIO::get_avail(void *ubuf, uint32_t size) {
+   uint32_t result = 0;
+   if (curr < max) {
+      uint32_t avail = max - curr;
+      if (avail >= size) {
+         memcpy(ubuf, buf, size);
+         curr += size;
+         result = size;
+      }
+      else {
+         memcpy(ubuf, buf, avail);
+         curr += avail;
+         result = avail;
+      }
+   }
+   return result;
+}
+
+int FileIO::read(void *ubuf, uint32_t size) {
+   int fb;
+   uint32_t have = get_avail(ubuf, size);
+   if (have != size) {
+      do {
+         fb = fillbuf();
+         if (fb > 0) {
+            have += get_avail(have + (char*)ubuf, size - have);
+            if (have == size) {
+               return have;
+            }
+         }
+         else if (have > 0) {
+            return have;
+         }
+      } while (fb == sizeof(buf));
+   }
+   return fb;
+}
+
 /*
  * This reads up to size bytes into a user supplied buffer
  * Returns the number of bytes read or -1 if size bytes
@@ -231,12 +320,11 @@ void FileIO::setFileDescriptor(int fd) {
  * This function is really only useful for reading fixed 
  * size fields.
  */
-int FileIO::readAll(void *buf, unsigned int size) {
+int FileIO::readAll(void *ubuf, unsigned int size) {
    unsigned int total = 0;
-   unsigned char *b = (unsigned char *)buf;
    int nbytes;
    while (total < size) {
-      nbytes = read(fd, b + total, size - total);
+      nbytes = read(total +(char*)ubuf, size - total);
       if (nbytes <= 0) {
          return -1;
       }
@@ -252,6 +340,7 @@ int FileIO::readAll(void *buf, unsigned int size) {
  * This function is really only useful for reading fixed 
  * size fields.
  */
+/*
 int NetworkIO::readAll(void *buf, unsigned int size) {
    unsigned int total = 0;
    unsigned char *b = (unsigned char *)buf;
@@ -265,6 +354,7 @@ int NetworkIO::readAll(void *buf, unsigned int size) {
    }
    return (int)total;
 }
+*/
 
 /*
  * Read characters into buf until endchar is found. Stop reading when
@@ -273,38 +363,37 @@ int NetworkIO::readAll(void *buf, unsigned int size) {
  * is possible to perform size+1 reads as long as the last char read
  * is endchar.
  */
-int FileIO::read_until_delim(char *buf, unsigned int size, char endchar) {
-   char ch;
+int FileIO::read_until_delim(char *ubuf, unsigned int size, char endchar) {
+   int ch;
    unsigned int total = 0;
    while (1) {
-      if (read(fd, &ch, 1) <= 0) {
+      ch = read();
+      if (ch == EOF) {
          return -1;
       }
       if (ch == endchar) break;
       if (total >= size) return -1;
-      buf[total++] = ch;
+      ubuf[total++] = (char)ch;
    }
    return (int)total;
 }
 
-bool FileIO::readLine(Buffer &b) {
-   unsigned char ch;
-   while (read(fd, &ch, 1) == 1) {
+bool FileIO::readLine(string &s) {
+   int ch;
+   while ((ch = read()) >= 0) {
       if (ch == '\n') {
          return true;
       }
-      if (!b.write(ch)) {
-         return false;
-      }
+      s += (char)ch;
    }
    return false;
 }
 
 string FileIO::readLine() {
-   unsigned char ch;
+   int ch;
    string res;
-   while (read(fd, &ch, 1) == 1) {
-      res += ch;
+   while ((ch = read()) >= 0) {
+      res += (char)ch;
       if (ch == '\n') {
          break;
       }
@@ -329,7 +418,7 @@ NetworkIO::NetworkIO(const char *host, int port) {
    snprintf(str_port, sizeof(str_port), "%d", port);
               
    if (getaddrinfo(host, str_port, &hints, &addr) != 0) {
-      throw IOException();
+      throw IOException("Failed to getaddrinfo");
    }
 
    for (ap = addr; ap != NULL; ap = ap->ai_next) {
@@ -346,7 +435,7 @@ NetworkIO::NetworkIO(const char *host, int port) {
    }
    
    if (ap == NULL) {
-      throw IOException();
+      throw IOException("Fail: ap is NULL");
    }
 
    freeaddrinfo(addr);
@@ -359,6 +448,7 @@ NetworkIO::NetworkIO(const char *host, int port) {
  * is possible to perform size+1 reads as long as the last char read
  * is endchar.
  */
+/*
 int NetworkIO::read_until_delim(char *buf, unsigned int size, char endchar) {
    char ch;
    unsigned int total = 0;
@@ -373,15 +463,13 @@ int NetworkIO::read_until_delim(char *buf, unsigned int size, char endchar) {
    return (int)total;
 }
 
-bool NetworkIO::readLine(Buffer &b) {
+bool NetworkIO::readLine(string &s) {
    unsigned char ch;
    while (recv(fd, &ch, 1, 0) == 1) {
       if (ch == '\n') {
          return true;
       }
-      if (!b.write(ch)) {
-         return false;
-      }
+      s += ch;
    }
    return false;
 }
@@ -397,6 +485,7 @@ string NetworkIO::readLine() {
    }
    return res;
 }
+*/
 
 int NetworkIO::getPeerPort() {
    sockaddr_in sa;
@@ -424,76 +513,8 @@ string NetworkIO::getPeerAddr() {
    return "???";
 }
 
-uint16_t FileIO::readShort() {
-   uint16_t res;
-   if (readAll(&res, sizeof(res)) == sizeof(res)) {
-      return ntohs(res);
-   }
-   throw IOException();
-}
-
-uint32_t FileIO::readInt() {
-   uint32_t res;
-   if (readAll(&res, sizeof(res)) == sizeof(res)) {
-      return ntohl(res);
-   }
-   throw IOException();
-}
-
-uint64_t FileIO::readLong() {
-   uLongLong res;
-   res.ii[1] = readInt();
-   res.ii[0] = readInt();
-   return res.ll;
-}
-
-int FileIO::readFully(uint8_t *buf, uint32_t len) {
-   int res = readAll(buf, len);
-   if (res != len) {
-      throw IOException();
-   }
-   return res;
-}
-
-string FileIO::readUTF() {
-   uint16_t len = readShort();
-   char *s = new char[len];
-   int rlen = readAll(s, len);
-   if (rlen != len) {
-      throw IOException();
-      delete [] s;
-   }   
-   string res(s, len);
-   delete [] s;
-   return res;
-}
-
-bool FileIO::writeShort(uint16_t s) {
-   s = htons(s);
-   return sendAll(&s, sizeof(s)) == sizeof(s);
-}
-
-bool FileIO::writeInt(uint32_t i) {
-   i = htonl(i);
-   return sendAll(&i, sizeof(i)) == sizeof(i);
-}
-
-bool FileIO::writeLong(uint64_t l) {
-   uLongLong v;
-   v.ll = l;
-   v.ii[0] = htonl(v.ii[0]);
-   v.ii[1] = htonl(v.ii[1]);
-   return sendAll(&v.ii[1], sizeof(v.ii[1])) == sizeof(v.ii[1]) && 
-          sendAll(&v.ii[0], sizeof(v.ii[0])) == sizeof(v.ii[0]);
-}
-
 bool FileIO::write(const void *buf, uint32_t len) {
    return sendAll(buf, len) == len;
-}
-
-bool FileIO::writeUTF(const string &s) {
-   uint16_t l = s.length();
-   return writeShort(l) && write(s.c_str(), l);
 }
 
 /*
@@ -515,6 +536,8 @@ int FileIO::sendMsg(const char *buf, bool nullflag) {
 int FileIO::sendAll(const void *buf, unsigned int size) {
    unsigned int total = 0;
    const unsigned char *b = (const unsigned char *)buf;
+   fprintf(stderr, "FileIO::sendAll\n");
+   fwrite(buf, size, 1, stderr);
    while (total < size) {
       int nbytes = ::write(fd, b + total, size - total);
       if (nbytes == 0) return -1;
@@ -628,7 +651,7 @@ Tcp6Service::Tcp6Service(const char *host, int port) {
    hints.ai_next = NULL;
               
    if (getaddrinfo(host, str_port, &hints, &addr) != 0) {
-      throw IOException();
+      throw IOException("Failed to getaddrinfo");
    }
 
    for (ap = addr; ap != NULL; ap = ap->ai_next) {
@@ -788,102 +811,176 @@ int fill_random(unsigned char *buf, unsigned int size) {
    }
 }
 
-map<string,string> *parseConf(const char *fname) {
-   map<string,string> *conf = new map<string,string>;
-   if (fname) {
-      FILE *f = fopen(fname, "r");
-      if (f) {
-         char buf[1024];
-         while (fgets(buf, sizeof(buf), f)) {
-            char *key = buf;
-            while (isspace(*key)) {
-               key++;
-            }
-            if (key[0] == '#') {
-               continue;
-            }
-            char *value = strchr(key, '\n');
-            if (value) {
-               *value = 0;
-            }
-            value = strchr(key, ' ');
-            if (value == NULL) {
-               value = strchr(key, '\t');
-            }
-            if (value) {
-               while (isspace(*value)) {
-                  *value++ = 0;
-               }
-               if (*value) {
-                  (*conf)[key] = value;
-               }
-            }
-         }
-         fclose(f);
-      }
-      else {
-         fprintf(stderr, "Failed to open config file: %s\n", fname);
-      }
-   }
-#ifdef DEBUG
-   for (map<string,string>::iterator i = (*conf).begin(); i != (*conf).end(); i++) {
-      fprintf(stderr, "%s:%s\n", (*i).first.c_str(), (*i).second.c_str());
-   }
-#endif
-   return conf;
+json_object *parseConf(const char *fname) {
+   return json_object_from_file(fname);
 }
 
-short getShortOption(map<string,string> *conf, const string &opt, short defaultValue) {
-   const char *var = getenv(opt.c_str());
-   if (var) {
-      return (short)strtol(var, NULL, 0);
-   }
-
-   map<string,string>::iterator i = (*conf).find(opt);
-   if (i == (*conf).end()) {
-      return defaultValue;
-   }
-   else {
-      return (short)strtol((*i).second.c_str(), NULL, 0);
-   }
+short getShortOption(json_object *conf, const string &opt, short defaultValue) {
+   return (short)getIntOption(conf, opt, defaultValue);
 }
 
-int getIntOption(map<string,string> *conf, const string &opt, int defaultValue) {
+int getIntOption(json_object *conf, const string &opt, int defaultValue) {
    const char *var = getenv(opt.c_str());
    if (var) {
       return strtol(var, NULL, 0);
    }
 
-   map<string,string>::iterator i = (*conf).find(opt);
-   if (i == (*conf).end()) {
+   json_object *val = json_object_object_get(conf, opt.c_str());
+   if (val == NULL) {
       return defaultValue;
    }
    else {
-      return strtol((*i).second.c_str(), NULL, 0);
+      return (int)json_object_get_int(val);
    }
 }
 
-string getStringOption(map<string,string> *conf, const string &opt, const char *defaultValue) {
+string getStringOption(json_object *conf, const string &opt, const char *defaultValue) {
    const char *res = getenv(opt.c_str());
    if (res) {
       return res;
    }
 
-   map<string,string>::iterator i = (*conf).find(opt);
-   if (i == (*conf).end()) {
+   json_object *val = json_object_object_get(conf, opt.c_str());
+   if (val == NULL) {
       return defaultValue;
    }
    else {
-      return (*i).second;
+      return json_object_get_string(val);
    }
 }
 
-const char *getCharOption(map<string,string> *conf, const string &opt, const char *defaultValue) {
-   map<string,string>::iterator i = (*conf).find(opt);
-   if (i == (*conf).end()) {
+const char *getCstringOption(json_object *conf, const string &opt, const char *defaultValue) {
+   const char *res = getenv(opt.c_str());
+   if (res) {
+      return res;
+   }
+
+   json_object *val = json_object_object_get(conf, opt.c_str());
+   if (val == NULL) {
       return defaultValue;
    }
    else {
-      return (*i).second.c_str();
+      return json_object_get_string(val);
    }
+}
+
+const char *hex_encode(const void *bin, uint32_t len) {
+   char *res = new char[len * 2 + 1];
+   const uint8_t *_bin = (const uint8_t *)bin;
+   for (uint32_t i = 0; i < len; i++) {
+      snprintf(res + i * 2, 3, "%02x", _bin[i]);
+   }
+   return res;
+}
+
+uint8_t *hex_decode(const char *hex, uint32_t *len) {
+   *len = strlen(hex);
+   if (*len & 1) {
+      return NULL;
+   }
+   *len /= 2;
+   uint8_t *res = new uint8_t[*len];
+   for (uint32_t i = 0; i < *len; i++) {
+      uint32_t bval;
+      if (sscanf(hex + i * 2, "%02x", &bval) != 1) {
+         delete [] res;
+         return NULL;
+      }
+      res[i] = (uint8_t)bval;
+   }
+   return res;
+}
+
+void append_json_hex_val(json_object *obj, const char *key, const uint8_t *value, uint32_t len) {
+   if (len == 0) {
+      len = strlen((const char*)value);
+   }
+   const char *hex = hex_encode(value, len);
+   json_object_object_add_ex(obj, key, json_object_new_string(hex), JSON_NEW_CONST_KEY);
+   delete [] hex;
+}
+
+void append_json_string_val(json_object *obj, const char *key, const char *value) {
+   json_object_object_add_ex(obj, key, json_object_new_string(value), JSON_NEW_CONST_KEY);
+}
+
+void append_json_string_val(json_object *obj, const char *key, const string &value) {
+   append_json_string_val(obj, key, value.c_str());
+}
+
+void append_json_bool_val(json_object *obj, const char *key, bool value) {
+   json_object_object_add_ex(obj, key, json_object_new_boolean((json_bool)value), JSON_NEW_CONST_KEY);
+}
+
+void append_json_uint64_val(json_object *obj, const char *key, uint64_t value) {
+   json_object_object_add_ex(obj, key, json_object_new_int64(value), JSON_NEW_CONST_KEY);
+}
+
+void append_json_uint32_val(json_object *obj, const char *key, uint32_t value) {
+   append_json_uint64_val(obj, key, value);
+}
+
+void append_json_int32_val(json_object *obj, const char *key, int32_t value) {
+   json_object_object_add_ex(obj, key, json_object_new_int(value), JSON_NEW_CONST_KEY);
+}
+
+uint8_t *hex_from_json(json_object *json, const char *key, uint32_t *len) {
+   const char *hexstr = string_from_json(json, key);
+   uint8_t *res = NULL;
+   if (hexstr != NULL) {
+      res = hex_decode(hexstr, len);
+   }
+   return res;
+}
+
+const char *string_from_json(json_object *json, const char *key) {
+   json_object *value;
+
+   if (!json_object_object_get_ex(json, key, &value)) {
+      return NULL;
+   }
+
+   return json_object_get_string(value);
+}
+
+bool bool_from_json(json_object *json, const char *key, bool *val) {
+   json_object *value;
+
+   if (!json_object_object_get_ex (json, key, &value)) {
+      return false;
+   }
+
+   *val = (bool)json_object_get_boolean(value);
+   return true;
+}
+
+bool uint64_from_json(json_object *json, const char *key, uint64_t *val) {
+   json_object *value;
+
+   if (!json_object_object_get_ex (json, key, &value)) {
+      return false;
+   }
+
+   *val = (uint64_t)json_object_get_int64(value);
+   return true;
+}
+
+bool uint32_from_json(json_object *json, const char *key, uint32_t *val) {
+   uint64_t tmp;
+   if (uint64_from_json(json, key, &tmp)) {
+      *val = (uint32_t)tmp;
+      return true;
+   }
+   return false;
+}
+
+bool int32_from_json(json_object *json, const char *key, int32_t *val) {
+   json_object *value;
+
+   if (!json_object_object_get_ex (json, key, &value)) {
+      return false;
+   }
+
+   *val = (int32_t)json_object_get_int(value);
+   return true;
 }

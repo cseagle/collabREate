@@ -1,7 +1,7 @@
 /*
    collabREate proj_info.cpp
-   Copyright (C) 2012 Chris Eagle <cseagle at gmail d0t com>
-   Copyright (C) 2012 Tim Vidas <tvidas at gmail d0t com>
+   Copyright (C) 2018 Chris Eagle <cseagle at gmail d0t com>
+   Copyright (C) 2018 Tim Vidas <tvidas at gmail d0t com>
 
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the Free
@@ -28,8 +28,11 @@ ProjectInfo::ProjectInfo(uint32_t localpid, const string &description, uint32_t 
    pdesc = "";
    snapupdateid = 0;
    pub = sub = 0;
-   owner = 0;
    proto = 0;
    hash = "";
    gpid = "";
+}
+
+ProjectInfo::ProjectInfo(const ProjectInfo &pi) {
+   *this = pi;
 }

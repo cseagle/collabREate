@@ -1,7 +1,7 @@
 /*
     Asynchronous IDA communications handler
-    Copyright (C) 2008 Chris Eagle <cseagle at gmail d0t com>
-    Copyright (C) 2008 Tim Vidas <tvidas at gmail d0t com>
+    Copyright (C) 2018 Chris Eagle <cseagle at gmail d0t com>
+    Copyright (C) 2018 Tim Vidas <tvidas at gmail d0t com>
 
 
     This program is free software; you can redistribute it and/or modify it
@@ -24,6 +24,7 @@
 #include <windows.h>
 #endif
 #include <winsock2.h>
+#include <ws2tcpip.h>
 #endif
 #include <pro.h>
 
@@ -33,43 +34,13 @@
 #include <loader.hpp>
 #include <nalt.hpp>
 #include <md5.h>
-
-#ifdef _MSC_VER
-#if _MSC_VER >= 1600
 #include <stdint.h>
-#else
-#include "ms_stdint.h"
-#endif
-#else
-#include <stdint.h>
-#endif
 
 #include "collabreate.h"
-#include "sdk_versions.h"
-#include "idanet.hpp"
-
-#if IDA_SDK_VERSION < 500
-#include <fpro.h>
-#endif
+#include "idanet.h"
 
 //array to track send and receive stats for all of the collabreate commands
 extern int stats[2][MSG_IDA_MAX + 1];
-
-#if IDA_SDK_VERSION < 550
-
-#ifndef HWND_MESSAGE
-#define HWND_MESSAGE ((HWND)(-3))
-#endif
-
-#define SOCKET_MSG WM_USER
-#define PLUGIN_NAME "collabREate"
-
-static SOCKET conn = INVALID_SOCKET;
-static HWND msg_hwnd;
-static WNDPROC old_proc;
-static Dispatcher dispatch;
-
-#else
 
 #ifndef _WIN32
 #include <sys/time.h>
@@ -81,39 +52,23 @@ static Dispatcher dispatch;
 #include <errno.h>
 
 #define closesocket close
-#define INVALID_SOCKET -1
+#define INVALID_SOCKET ((_SOCKET)-1)
 #define SOCKET_ERROR -1
 #endif
 
-struct BufferNode {
-   Buffer *buf;
-   BufferNode *next;
-
-   BufferNode(Buffer *b) : buf(b), next(NULL) {}; 
-};
-
-struct BufferList {
-   BufferNode *head;
-   BufferNode *tail;
-   qmutex_t mtx;
-
-   BufferList();
-
-   Buffer *dequeue();
-   bool enqueue(Buffer *b);
-};
-
 struct disp_request_t : public exec_request_t {
-   disp_request_t(Dispatcher disp) : d(disp) {};
+   disp_request_t(Dispatcher disp) : d(disp) {mtx = qmutex_create();};
+   ~disp_request_t();
    virtual int idaapi execute(void);
 
    //disp_requst_t takes ownership of the buffer
    //it will be deleted eventually in execute
-   void queueBuffer(Buffer *b);
+   void queueLine(qstring *line);
 
    void flush(void);
 
-   BufferList buffers;
+   qvector<qstring*> lines;
+   qmutex_t mtx;
    Dispatcher d;
 };
 
@@ -124,8 +79,8 @@ public:
    bool connect(const char *host, short port);
    bool close();
    void cleanup(bool warn = false);
-   bool sendAll(Buffer &b);
-   bool send(Buffer &b);
+   bool sendAll(const qstring &s);
+   bool sendMsg(const qstring &s);
    int recv(unsigned char *buf, unsigned int len);
 private:
 #ifdef _WIN32
@@ -138,51 +93,11 @@ private:
    Dispatcher d;
    disp_request_t *drt;
    _SOCKET conn;
+   bool connected;
    static bool initNetwork();
 };
 
 static AsyncSocket *comm;
-
-#endif
-
-//how large is the current data packet under construction
-int requiredSize(Buffer &b) {
-   if (b.size() >= (int)sizeof(int)) {
-      return qntohl(*(int*)b.get_buf());
-   }
-   return -1;
-}
-
-//does the buffer contain a complete data packet?
-bool isComplete(Buffer &b) {
-   int rs = requiredSize(b);
-   return rs > 0 && b.size() >= rs;
-}
-
-//shift the content of a buffer left by one data packet
-void shift(Buffer &b) {
-   if (isComplete(b)) {
-      uint32_t rs = requiredSize(b);
-      uint32_t extra = b.size() - rs;
-      const unsigned char *buf = b.get_buf();
-      b.reset();
-      if (extra) {
-         b.write(buf + rs, extra);
-      }
-   }
-}
-
-//shift the content of a buffer left by len bytes
-void shift(Buffer &b, int len) {
-   if (len <= b.size()) {
-      int extra = b.size() - len;
-      const unsigned char *buf = b.get_buf();
-      b.reset();
-      if (extra) {
-         b.write(buf + len, extra);
-      }
-   }
-}
 
 bool init_network() {
    static bool isInit = false;
@@ -210,349 +125,77 @@ bool init_network() {
 }
 
 //connect to a remote host as specified by host and port
-//host may be wither an ip address or a host name
-_SOCKET connect_to(const char *host, short port) {
-   _SOCKET sock;
-   sockaddr_in server;
-   memset(&server, 0, sizeof(server));
-   server.sin_family = AF_INET;
-   server.sin_addr.s_addr = inet_addr(host);
-   server.sin_port = qhtons(port);
+//host may be either an ip address or a host name
+bool connect_to(const char *host, short port, _SOCKET *sock) {
 
-   //If a domain name was specified, we may not have an IP.
-   if (server.sin_addr.s_addr == INADDR_NONE) {
-      hostent *he = gethostbyname(host);
-      if (he == NULL) {
-         msg(PLUGIN_NAME": Unable to resolve name: %s\n", host);
-         return INVALID_SOCKET;
-      }
-      server.sin_addr = *(in_addr*) he->h_addr;
-   }
+   bool result = false;
 
-   //create a socket.
-   if ((sock = socket(AF_INET, SOCK_STREAM, 0)) != INVALID_SOCKET) {
-      if (connect(sock, (sockaddr *) &server, sizeof(server)) == SOCKET_ERROR) {
-         msg(PLUGIN_NAME": Failed to connect to server.\n");
-         closesocket(sock);
-         sock = INVALID_SOCKET;
-      }
-      else {
-#ifdef _WIN32
-         DWORD tv = 2000;
-#else
-         timeval tv;
-         tv.tv_sec = 2;
-         tv.tv_usec = 0;
-#endif
-         //we force a periodic timeout to force a recv error after
-         //the socket has been closed. On windows, simply closing 
-         //the socket causes a blocking recv to fail and the recvHandler
-         //thread to terminate. On Linux, closing the socket was not
-         //causing the blocking recv to terminate, hence the timeout
-         //following a timeout, if the socket has been closed, the next
-         //receive will fail. Not elegant but it works
-         setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char*)&tv, sizeof(tv));
-      }
-   }
-   else {
-      msg(PLUGIN_NAME": Failed to create socket.\n");
-   }
-      
-   return sock;
-}
+   addrinfo hints;
+   addrinfo *ai;
+   sockaddr_in *server;
+   
+   memset(&hints, 0, sizeof(addrinfo));
+   hints.ai_family = AF_INET;
+   hints.ai_socktype = SOCK_STREAM;
 
-void killWindow() {
-#if IDA_SDK_VERSION < 550
-   if (msg_hwnd) {
-      DestroyWindow(msg_hwnd);
-      msg_hwnd = NULL;
-   }
-#endif
-}
+   if (getaddrinfo(host, NULL, &hints, &ai) == 0) {
 
-bool term_network() {
-#ifdef _WIN32
-   killWindow();
-//   return WSACleanup() == 0;
-#endif
-   return true;
-}
-
-#if IDA_SDK_VERSION < 550 
-
-bool is_connected() {
-   return conn != INVALID_SOCKET;
-}
-
-//buffer to cache data in the case WSAEWOULDBLOCK
-static Buffer sendBuf;
-
-/*
- * socket_callback()
- *
- * this is the proc handler we register with our invisible window for hooking the
- * socket notification messages.
- *
- * returns:   boolean value representing success or failure.
- */
-BOOL CALLBACK socket_callback(HWND hWnd, UINT message, WPARAM wparam, LPARAM lparam) {
-   if (message == SOCKET_MSG) {
-      if (WSAGETSELECTERROR(lparam)) {
-         msg(PLUGIN_NAME": connection to server severed at WSAGETSELECTERROR %d.\n", WSAGetLastError());
-         cleanup(true);
-         return FALSE;
-      }
-      switch(WSAGETSELECTEVENT(lparam)) {
-         case FD_READ:   //receiving data.
-            //msg(PLUGIN_NAME": receiving data.\n");
-            if (dispatch) {
-               static Buffer b;
-               char buf[2048];  //read a large chunk, we'll be notified if there is more
-               int len = recv(conn, buf, sizeof(buf), 0);
-               //connection closed.
-               if (len <= 0) {
-                  cleanup();
-                  msg(PLUGIN_NAME": Socket read failed. connection closed. %d\n", WSAGetLastError());
-                  return false;
-               }
-               //msg(PLUGIN_NAME": received: %d bytes \n", len);
-               b.write(buf, len);   //copy new data into static buffer
-               //now dispatch any complete data packets to user dispatcher
-               //it is important to understand that the recv above may receive 
-               //partial data packets
-               //if (isComplete(b)) {
-               //      msg(PLUGIN_NAME": b is complete.\n");
-               //}
-               //else {
-               //      msg(PLUGIN_NAME": b is not compelete.\n");
-               //}
-               while (isComplete(b)) {
-                  Buffer data(b.get_buf() + sizeof(int), requiredSize(b) - sizeof(int));
-                  //msg("dispatching a %d sized buffer (expected %d out of %d)\n", data.size(), requiredSize(b) - sizeof(int), b.size());
-                  if (!(*dispatch)(data)) {  //not sure we really care what is returned here
-                     msg(PLUGIN_NAME": connection to server severed at dispatch.\n");
-                     cleanup(true);
-                     break;
-                  }
-                  else {
-                     //msg(PLUGIN_NAME": dispatch routine called successfully.\n");
-                  }
-                  shift(b);  //shift any remaining portions of the buffer to the front
-               }
-            }
-            break;
-         case FD_WRITE: {   //sending data.
-            //msg(PLUGIN_NAME": writing data.\n");
-            if (sendBuf.size() == 0) break;  //nothing to send
-            int len = send(conn, (const char*)sendBuf.get_buf(), sendBuf.size(), 0);
-            //remember, send is not guaranteed to send complete buffer
-            if (len == SOCKET_ERROR) {
-               int error = WSAGetLastError();
-               if (error != WSAEWOULDBLOCK) {
-                  cleanup(true);
-               }
-            }
-            else if (len != sendBuf.size()) {
-               //partial read, so shift remainder of buffer to front
-               shift(sendBuf, (uint32_t)len);
-               //msg(PLUGIN_NAME": wrote: %d bytes \n", len);
-            }
-            else {
-               //entire buffer was sent, so clear the buffer
-               sendBuf.reset();
-               //msg(PLUGIN_NAME": wrote: %d bytes \n", len);
-            }
-            break;
+      server = (sockaddr_in*)ai->ai_addr;
+      server->sin_port = qhtons(port);
+   
+      //create a socket.
+      if ((*sock = (_SOCKET)socket(AF_INET, SOCK_STREAM, 0)) != INVALID_SOCKET) {
+         if (connect(*sock, ai->ai_addr, (int)ai->ai_addrlen) == SOCKET_ERROR) {
+            msg(PLUGIN_NAME": Failed to connect to server.\n");
+            closesocket(*sock);
          }
-         case FD_CLOSE:  //server connection closed.
-            cleanup(true);
-            msg(PLUGIN_NAME": connection to server severed at FD_CLOSE.\n");
-            break;
-      }
-   }
-   return FALSE;
-}
-
-/////////////////////////////////////////////////////////////////////////////////////////
-//cleanup(bool warn)
-//
-//cancel all notifications, close the socket and destroy the hook notification window.
-//
-//arguments: warn true displays a warning that cleanup is being called, false no warning
-//returns:   none.
-//
-void cleanup(bool warn) {
-   //cancel all notifications. if we don't do this ida will crash on exit.
-   msg(PLUGIN_NAME": cleanup called.\n");
-   if (conn != INVALID_SOCKET) {
-      if (msg_hwnd) {
-         WSAAsyncSelect(conn, msg_hwnd, 0, 0);
-         dispatch = NULL;
-      }
-      closesocket(conn);
-      conn = INVALID_SOCKET;
-      if (warn) {
-         warning("Connection to collabREate server has been closed.\n"
-                 "You should reconnect to the server before sending\n"
-                 "additional updates.");
-      }
-   }
-}
-
-//create a window for the async socket, this window
-//receives the WM_xxx messages associated with the socket
-bool createSocketWindow(_SOCKET s, Dispatcher d) {
-   //create a message handling window for the async socket.
-   msg_hwnd = CreateWindowEx(0, "STATIC", PLUGIN_NAME, 0, 0, 0, 0, 0, HWND_MESSAGE, 0, 0, 0);
-   if (msg_hwnd == NULL) {
-      msg(PLUGIN_NAME": CreateWindowEx() failed.\n");
-      return false;
-   }
-   
-   //register the callback function for our invisible window.
-   old_proc = (WNDPROC)SetWindowLong(msg_hwnd, GWL_WNDPROC, (long) socket_callback);
-   if (old_proc == 0) {
-      killWindow();
-      msg(PLUGIN_NAME": SetWindowLong() failed.\n");
-      return false;
-   }
-
-   conn = s;
-   dispatch = d;
-   
-   //make the socket a non-blocking asynchronous socket hooked with our socket_callback handler.
-   if (WSAAsyncSelect(conn, msg_hwnd, SOCKET_MSG, FD_READ | FD_WRITE | FD_CLOSE) == SOCKET_ERROR) {
-      killWindow();
-      dispatch = NULL;
-      conn = INVALID_SOCKET;
-      msg(PLUGIN_NAME": Failed to create asynchronous connection to server.\n");
-      return false;
-   }
-   //asynchronous socket properly configured
-#ifdef DEBUG 
-   msg(PLUGIN_NAME": Successfully configured async socket\n");
+         else {
+#ifdef _WIN32
+            DWORD tv = 2000;
+#else
+            timeval tv;
+            tv.tv_sec = 2;
+            tv.tv_usec = 0;
 #endif
-   return true;
-}
-
-int send_all(Buffer &b) {
-   int len = send(conn, (const char*)b.get_buf(), b.size(), 0);
-   if (len == SOCKET_ERROR) {
-      int error = WSAGetLastError();
-      if (error == WSAEWOULDBLOCK) {
-         sendBuf << b;
-         return 0;
+            //we force a periodic timeout to force a recv error after
+            //the socket has been closed. On windows, simply closing 
+            //the socket causes a blocking recv to fail and the recvHandler
+            //thread to terminate. On Linux, closing the socket was not
+            //causing the blocking recv to terminate, hence the timeout
+            //following a timeout, if the socket has been closed, the next
+            //receive will fail. Not elegant but it works
+            setsockopt(*sock, SOL_SOCKET, SO_RCVTIMEO, (char*)&tv, sizeof(tv));
+            result = true;
+         }
       }
       else {
-         cleanup();
-         killWindow();
-         msg(PLUGIN_NAME": Failed to send requested data. %d != %d. Error: %x, %d\n", len, b.size(), error, error);
-         return -1;
+         msg(PLUGIN_NAME": Failed to create socket.\n");
       }
-   }
-   else if (len != b.size()) {
-      //move the remainder into sendBuf
-      shift(b, len);
-      sendBuf << b;
-      //msg(PLUGIN_NAME": Short send. %d != %d.", len, out.size());
-   }
-   return len;
+      freeaddrinfo(ai);
+   }      
+   return result;
 }
 
-//Send a buffer of data
-int send_data(Buffer &b) {
-//   if (!is_connected() || supress) return 0;   //silently fail
-   if (!is_connected()) {
-      if (changeCache != NULL) {
-//         msg("writing to change cache\n");
-         changeCache->writeInt(b.size() + sizeof(int));
-         *changeCache << b;
-      }
-      return b.size();
-   }
-   Buffer out;
-   int sz = b.size() + sizeof(int);
-   out.writeInt(sz);
-   int command = b.readInt();
-   if (command >= 0 && command <= MSG_IDA_MAX) {
-      stats[1][command]++;
-   }
-//   msg("send_data sending message: %d\n", command);
-   out << b;
-   return send_all(out);
-/*
-   int len = send(conn, (const char*)out.get_buf(), out.size(), 0);
-   if (len == SOCKET_ERROR) {
-      int error = WSAGetLastError();
-      if (error == WSAEWOULDBLOCK) {
-         sendBuf << out;
-         return 0;
-      }
-      else {
-         cleanup();
-         killWindow();
-         msg(PLUGIN_NAME": Failed to send requested data. %d != %d. Error: %x, %d\n", len, out.size(), error, error);
-         return -1;
-      }
-   }
-   else if (len != out.size()) {
-      //move the remainder into sendBuf
-      shift(out, len);
-      sendBuf << out;
-      //msg(PLUGIN_NAME": Short send. %d != %d.", len, out.size());
-   }
-   return len;
-*/
-}
-
-#else  //IDA_SDK_VERSION >= 550
-
-BufferList::BufferList() : head(NULL), tail(NULL) {
-   mtx = qmutex_create();
-}
-
-Buffer *BufferList::dequeue() {
-   Buffer *b = NULL;
-   if (head) {
-      BufferNode *bn = head;
-      b = head->buf;
-      qmutex_lock(mtx);
-      head = head->next;
-      if (head == NULL) {
-         tail = NULL;
-      }
-      qmutex_unlock(mtx);
-      delete bn;
-   }
-   return b;
-}
-
-bool BufferList::enqueue(Buffer *b) {
-   bool first = false;
-   BufferNode *n = new BufferNode(b);
-   qmutex_lock(mtx);
-   if (tail) {
-      tail->next = n;
-   }
-   else {
-      head = n;
-      first = true;
-   }
-   tail = n;
-   qmutex_unlock(mtx);
-   return first;
-}
+disp_request_t::~disp_request_t() {
+   flush();
+   qmutex_free(mtx);
+};
 
 //this is the callback that gets called by execute_sync, in theory new datagrams
 //can arrive and be processed during the loop since queue synchronization takes
-//place within the BufferList
+//place within the StringList
 int idaapi disp_request_t::execute(void) {
 //   msg("execute called\n");
-   Buffer *b;
-   while ((b = buffers.dequeue()) != NULL) {
-//      (*d)(*b);
-// /*
-      if (!(*d)(*b)) {  //not sure we really care what is returned here
+   while (lines.size() > 0) {
+      qmutex_lock(mtx);
+      qvector<qstring*>::iterator i = lines.begin();
+      qstring *s = *i;
+      lines.erase(i);
+      qmutex_unlock(mtx);
+      msg("dequeued: %s\n", s->c_str());
+      bool res = (*d)(s->c_str());
+      delete s;
+      if (!res) {  //not sure we really care what is returned here
 //         msg(PLUGIN_NAME": connection to server severed at dispatch.\n");
          comm->cleanup(true);
          break;
@@ -560,17 +203,21 @@ int idaapi disp_request_t::execute(void) {
       else {
          //msg(PLUGIN_NAME": dispatch routine called successfully.\n");
       }
-// */
-      delete b;
    }
    return 0;
 }
 
 //queue up a received datagram for eventual handlng via IDA's execute_sync mechanism
 //call no sdk functions other than execute_sync
-void disp_request_t::queueBuffer(Buffer *b) {
-   if (buffers.enqueue(b)) {
-      //only invoke execute_sync if the buffer just added was at the head of he queue
+void disp_request_t::queueLine(qstring *line) {
+   bool call_exec = false;
+   qmutex_lock(mtx);
+   lines.push_back(line);
+   call_exec = lines.size() == 1;
+   qmutex_unlock(mtx);
+
+   if (call_exec) {
+      //only invoke execute_sync if the buffer just added was at the head of the queue
       //in theory this allows multiple datagrams to get queued for handling
       //in a single execute_sync callback
       execute_sync(*this, MFF_WRITE);
@@ -578,10 +225,12 @@ void disp_request_t::queueBuffer(Buffer *b) {
 }
 
 void disp_request_t::flush() {
-   Buffer *b;
-   while ((b = buffers.dequeue()) != NULL) {
-      delete b;
+   qmutex_lock(mtx);
+   for (qvector<qstring*>::iterator i = lines.begin(); i != lines.end(); i++) {
+      delete *i;
    }
+   lines.clear();
+   qmutex_unlock(mtx);
 }
 
 bool connect_to(const char *host, short port, Dispatcher d) {
@@ -594,11 +243,11 @@ bool connect_to(const char *host, short port, Dispatcher d) {
 }
 
 bool is_connected() {
-   return comm != NULL;
+   return comm != NULL ? comm->isConnected() : false;
 }
 
 bool AsyncSocket::isConnected() {
-   return conn != INVALID_SOCKET;
+   return connected;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -612,9 +261,11 @@ bool AsyncSocket::isConnected() {
 void AsyncSocket::cleanup(bool warn) {
    //cancel all notifications. if we don't do this ida will crash on exit.
    msg(PLUGIN_NAME": cleanup called.\n");
-   if (conn != INVALID_SOCKET) {
-      ::closesocket(conn);
-      conn = INVALID_SOCKET;
+   if (connected) {
+      int res = ::closesocket(conn);
+      msg("closesocket returned %d\n", res);
+      connected = false;
+      conn = (_SOCKET)INVALID_SOCKET;
 #ifdef _WIN32
       if (thread) {
          msg("attempting to sync on thread exit\n");
@@ -656,8 +307,7 @@ void cleanup(bool warn) {
 //host may be wither an ip address or a host name
 bool AsyncSocket::connect(const char *host, short port) {
    //create a socket.
-   conn = connect_to(host, port);
-   if (conn != INVALID_SOCKET) {
+   if (connect_to(host, port, &conn)) {
       //socket is connected create thread to handle receive data
 #ifdef _WIN32
       if ((thread = CreateThread(NULL, 0, recvHandler, this, 0, NULL)) == NULL) {
@@ -668,18 +318,22 @@ bool AsyncSocket::connect(const char *host, short port) {
          msg(PLUGIN_NAME": Failed to create connection handler.\n");
          cleanup();
       }
+      else {
+         connected = true;
+      }
    }
    else {
       msg(PLUGIN_NAME": Failed to create socket.\n");
    }
-   return isConnected();
+   return connected;
 }
 
-bool AsyncSocket::sendAll(Buffer &b) {
+bool AsyncSocket::sendAll(const qstring &s) {
+   qstring buf = s;
    while (true) {
 //      msg("sending new buffer\n");
-      int len = ::send(conn, (const char*)b.get_buf(), b.size(), 0);
-      if (len == b.size()) {
+      int len = ::send(conn, buf.c_str(), (int)buf.length(), 0);
+      if (len == (int)buf.length()) {
          break;
       }
       if (len == SOCKET_ERROR) {
@@ -689,70 +343,24 @@ bool AsyncSocket::sendAll(Buffer &b) {
          int sockerr = errno;
 #endif
          cleanup();
-         msg(PLUGIN_NAME": Failed to send requested data. %d != %d. Error: 0x%x(%d)\n", len, b.size(), sockerr, sockerr);
+         msg(PLUGIN_NAME": Failed to send requested data. %d != %d. Error: 0x%x(%d)\n", len, buf.length(), sockerr, sockerr);
          return false;
       }
-      else if (len != b.size()) {
+      else if (len != (int)buf.length()) {
          //shift the remainder and try again
-         shift(b, len);
+         buf = buf.c_str() + len;
          //msg(PLUGIN_NAME": Short send. %d != %d.", len, out.size());
       }
    }
    return true;
-}
-
-//Send a buffer of data
-bool AsyncSocket::send(Buffer &b) {
-//   if (!isConnected() || supress) return 0;   //silently fail
-   if (!isConnected()) {
-      if (changeCache != NULL) {
-         msg("writing to change cache\n");
-         changeCache->writeInt(b.size() + sizeof(int));
-         *changeCache << b;
-      }
-      return true;
-   }
-   Buffer out;
-   int sz = b.size() + sizeof(int);
-   out.writeInt(sz);
-   int command = b.readInt();
-   if (command >= 0 && command <= MSG_IDA_MAX) {
-      stats[1][command]++;
-   }
-   out << b;
-   return sendAll(out);
-/*
-   while (true) {
-//      msg("sending new buffer\n");
-      int len = ::send(conn, (const char*)out.get_buf(), out.size(), 0);
-      if (len == out.size()) {
-         break;
-      }
-      if (len == SOCKET_ERROR) {
-#ifdef _WIN32
-         int sockerr = WSAGetLastError();
-#else
-         int sockerr = errno;
-#endif
-         cleanup();
-         msg(PLUGIN_NAME": Failed to send requested data. %d != %d. Error: 0x%x(%d)\n", len, out.size(), sockerr, sockerr);
-         return false;
-      }
-      else if (len != out.size()) {
-         //shift the remainder and try again
-         shift(out, len);
-         //msg(PLUGIN_NAME": Short send. %d != %d.", len, out.size());
-      }
-   }
-   return true;
-*/
 }
 
 AsyncSocket::AsyncSocket(Dispatcher disp) {
    d = disp;
    thread = 0;
    init_network();
-   conn = INVALID_SOCKET;
+   conn = (_SOCKET)INVALID_SOCKET;
+   connected = false;
    drt = new disp_request_t(d);
 }
 
@@ -773,12 +381,12 @@ DWORD WINAPI AsyncSocket::recvHandler(void *_sock) {
 #else
 void *AsyncSocket::recvHandler(void *_sock) {
 #endif
-   static Buffer b;
+   static qstring b;
    unsigned char buf[2048];  //read a large chunk, we'll be notified if there is more
    AsyncSocket *sock = (AsyncSocket*)_sock;
 
-   while (sock->conn != INVALID_SOCKET) {
-      int len = sock->recv(buf, sizeof(buf));
+   while (sock->isConnected()) {
+      int len = sock->recv(buf, sizeof(buf) - 1);
       if (len <= 0) {
 #ifdef _WIN32
          //timeouts are okay
@@ -796,40 +404,42 @@ void *AsyncSocket::recvHandler(void *_sock) {
 //       in any case thread is exiting
          break;
       }
+      buf[len] = 0;
       if (sock->d) {
-         b.write(buf, len);   //append new data into static buffer
-         while (isComplete(b)) {
-            Buffer *data = new Buffer(b.get_buf() + sizeof(int), requiredSize(b) - sizeof(int));
-            sock->drt->queueBuffer(data);
-            shift(b);  //shift any remaining portions of the buffer to the front
+         size_t lf;
+         msg("recv: %s\n", buf);
+         b.append((char*)buf, len);   //append new data into static buffer
+         while ((lf = b.find('\n')) != b.npos) {
+            qstring *line = new qstring(b.c_str(), lf);
+            msg("line: %s\n", line->c_str());
+            sock->drt->queueLine(line);
+            b.remove(0, lf + 1); //shift any remaining portions of the buffer to the front
          }
       }
    }
    return 0;
 }
 
-int send_all(Buffer &b) {
+int send_all(const qstring &s) {
    if (comm) {
-      return comm->sendAll(b);
+      return comm->sendAll(s);
    }
    return 0;
 }
 
-int send_data(Buffer &b) {
+int send_msg(const qstring &s) {
    if (comm) {
-      return comm->send(b);
+      return comm->sendAll(s);
    }
    else {
       if (changeCache != NULL) {
 //         msg("writing to change cache\n");
-         changeCache->writeInt(b.size() + sizeof(int));
-         *changeCache << b;
-         return b.size();
+         *changeCache += s;
+         return (int)s.length();
       }
    }
    return 0;
 }
 
-#endif
 
 

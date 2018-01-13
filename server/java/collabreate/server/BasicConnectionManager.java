@@ -24,6 +24,7 @@ import java.io.*;
 import java.net.*;
 import java.sql.*;
 import java.util.*;
+import com.google.gson.*;
 
 /**
  * BasicConnectionManager
@@ -31,7 +32,7 @@ import java.util.*;
  * interested clients
  * @author Tim Vidas
  * @author Chris Eagle
- * @version 0.1.0, August 2008
+ * @version 0.2.0, January 2017
  */
 
 
@@ -40,8 +41,8 @@ public class BasicConnectionManager extends ConnectionManagerBase {
    private Hashtable<String, Vector<ProjectInfo>> basicProjects = new Hashtable<String, Vector<ProjectInfo>>();
    private int basicmodepid = 500;   
 
-   public BasicConnectionManager(CollabreateServer mcs, Properties p) {
-      super(mcs, p, true);
+   public BasicConnectionManager(CollabreateServer mcs, JsonObject conf) {
+      super(mcs, conf, true);
    }
 
    /**
@@ -67,7 +68,7 @@ public class BasicConnectionManager extends ConnectionManagerBase {
     * @param cmd the 'command' that was performed (comment, rename, etc)
     * @param data the 'data' portion of the command (the comment text, etc)
     */
-   protected void migrateUpdate(int newowner, int pid, int cmd, byte[] data) {}
+   protected void migrateUpdate(String newowner, int pid, String cmd, JsonObject update) {}
 
    /**
     * post both queues a newly received update to be sent to other clients and (if in DB mode)
@@ -76,9 +77,9 @@ public class BasicConnectionManager extends ConnectionManagerBase {
     * @param cmd the 'command' that was performed (comment, rename, etc)
     * @param data the 'data' portion of the command (the comment text, etc)
     */
-   protected void post(Client src, int cmd, byte[] data) {
+   protected void post(Client src, String cmd, JsonObject json) {
       synchronized (queue) {
-         queue.add(new Packet(src, data, 0));   //add a new packet with the binary data to the queue
+         queue.add(new Packet(src, cmd, json, 0));   //add a new packet with the binary data to the queue
          queue.notify();  //notify is the compliment to wait
       }
    }
@@ -277,7 +278,7 @@ public class BasicConnectionManager extends ConnectionManagerBase {
     * @return the new project id on success, -1 on failure
     */
 
-   protected int migrateProject(int owner, String gpid, String hash, String desc, long pub, long sub) {
+   protected int migrateProject(String owner, String gpid, String hash, String desc, long pub, long sub) {
       logln("migrating in BASIC mode doesn't make sense!", LERROR);
       return -1;
    }

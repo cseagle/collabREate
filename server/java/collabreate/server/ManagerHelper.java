@@ -24,6 +24,7 @@ import java.io.*;
 import java.net.*;
 import java.sql.*;
 import java.util.*;
+import com.google.gson.*;
 
 /**
  * ManagerHelper
@@ -31,18 +32,18 @@ import java.util.*;
  * the ServerManager class.
  * @author Tim Vidas
  * @author Chris Eagle
- * @version 0.1.0, August 2008
+ * @version 0.2.0, January 2017
  */
 
 public class ManagerHelper extends Thread implements CollabreateConstants {
 
-   private static final String DEFAULT_PORT = "5043";
-   private static final String DEFAULT_LOCAL = "1";
+   private static final int DEFAULT_PORT = 5043;
+   private static final int DEFAULT_LOCAL = 1;
 
-   private DataInputStream dis;
-   private DataOutputStream dos;
+   private JsonStreamParser parser;
+   private PrintStream ps;
    private ServerSocket ss;
-   private Properties props = new Properties();
+   private JsonObject config = new JsonObject();
    private ConnectionManagerBase cm;
    private int pidForUpdates;
    private boolean dbMode;
@@ -54,10 +55,10 @@ public class ManagerHelper extends Thread implements CollabreateConstants {
     * @param connm the connectionManager associated with this ManagerHelper
     * @param p a propertied object (config file)
     */
-   public ManagerHelper(ConnectionManagerBase connm,Properties p) throws Exception {
+   public ManagerHelper(ConnectionManagerBase connm, JsonObject conf) throws Exception {
       cm = connm;
       pidForUpdates = 0;
-      props = p;
+      config = conf;
       initCommon();
    }
 
@@ -72,20 +73,41 @@ public class ManagerHelper extends Thread implements CollabreateConstants {
       initCommon();
    }
 
+   private String getConfigString(String key, String default_value) {
+      if (config.has(key)) {
+         return config.getAsJsonPrimitive(key).getAsString();
+      }
+      return default_value;
+   }
+
+   private int getConfigInt(String key, int default_value) {
+      if (config.has(key)) {
+         return config.getAsJsonPrimitive(key).getAsInt();
+      }
+      return default_value;
+   }
+
+   private boolean getConfigBoolean(String key, boolean default_value) {
+      if (config.has(key)) {
+         return config.getAsJsonPrimitive(key).getAsBoolean();
+      }
+      return default_value;
+   }
+
    private void initCommon() throws Exception {
       try {
-         int port  = Integer.parseInt(props.getProperty("MANAGE_PORT", DEFAULT_PORT));
-         int localonly = Integer.parseInt(props.getProperty("MANAGE_LOCAL", DEFAULT_LOCAL));
-         if(localonly == 0 ) {
+         int port = getConfigInt("MANAGE_PORT", DEFAULT_PORT);
+         boolean localonly = getConfigBoolean("MANAGE_LOCAL", true);
+         if (!localonly) {
             ss = new ServerSocket(port);  //bind any
          }
          else {
             ss = new ServerSocket(port,1,InetAddress.getByName("127.0.0.1"));
          }
       } catch (Exception e) {
-         logln("Could not setup ManagerHelper socket");
+         logln("Could not setup ManagerHelper socket\n" + e.getMessage());
       }
-      dbMode = props.getProperty("SERVER_MODE", "database").equals("database");
+      dbMode = getConfigString("SERVER_MODE", "database").equals("database");
    }
 
    /**
@@ -93,7 +115,13 @@ public class ManagerHelper extends Thread implements CollabreateConstants {
     * @param command the server command to send
     * @param data the data relevant to be sent with command
     */
-   protected void send_data(int command, byte[] data) {
+   protected void send_data(String command, JsonObject json) {
+      try {
+         json.addProperty("type", command);
+         ps.println(json.toString());
+      } catch (Exception ex) {
+      }
+/*
       try {
          if (command >= MNG_CONTROL_FIRST) {
             dos.writeInt(8 + data.length);
@@ -107,6 +135,7 @@ public class ManagerHelper extends Thread implements CollabreateConstants {
          }
       } catch (Exception ex) {
       }
+*/
    }
 
    /**
@@ -120,93 +149,84 @@ public class ManagerHelper extends Thread implements CollabreateConstants {
          while (true) {
             try {
                Socket s = ss.accept();
-               dis = new DataInputStream(new BufferedInputStream(s.getInputStream()));
-               dos = new DataOutputStream(s.getOutputStream());
+               parser = new JsonStreamParser(new InputStreamReader(s.getInputStream()));
+               ps = new PrintStream(s.getOutputStream(), true);
                logln("New Management connection: " + s.getInetAddress().getHostAddress() + ":" + s.getPort(), LINFO);
                while (true) {
-                  CollabreateOutputStream os = new CollabreateOutputStream();
-                  int len = dis.readInt();
-                  int cmd = dis.readInt();
+                  JsonElement json_e = parser.next();
+                  if (!json_e.isJsonObject()) {
+                     break;
+                  }
+                  JsonObject json = (JsonObject)json_e;
+                  String cmd = json.getAsJsonPrimitive("type").getAsString();
+                  JsonObject resp = new JsonObject();
+                  if (cmd.equals(MNG_GET_CONNECTIONS)) {
+                     logln("sending connections", LINFO3);
+                     String c = cm.listConnections();
+                     resp.addProperty("connections", c);
+                     send_data(MNG_CONNECTIONS, resp);
+                  }
+                  else if (cmd.equals(MNG_GET_STATS)) {
+                     logln("sending stats", LINFO3);
+                     String c = cm.dumpStats();
+                     resp.addProperty("stats", c);
+                     send_data(MNG_STATS, resp);
+                  }
+                  else if (cmd.equals(MNG_SHUTDOWN)) {
+                     logln("client requested server shutdown", LINFO);
+                     cm.Shutdown();
+                  }
+                  else if (cmd.equals(MNG_PROJECT_MIGRATE)) {
+                     logln("client requested a project migrate", LINFO);
+                     //Client c = new Client(cm,new Socket());
+                     int status = MNG_MIGRATE_REPLY_FAIL;
+                     try {
+                        String username = json.getAsJsonPrimitive("newowner").getAsString();
+                        String gpid = json.getAsJsonPrimitive("gpid").getAsString();
+                        String hash = json.getAsJsonPrimitive("hash").getAsString();
+                        String desc = json.getAsJsonPrimitive("description").getAsString();
+                        long pub = json.getAsJsonPrimitive("publish").getAsLong() & 0x7FFFFFFF;
+                        long sub = json.getAsJsonPrimitive("subscribe").getAsLong() & 0x7FFFFFFF;
 
-                  switch(cmd) {
-                     case MNG_GET_CONNECTIONS: {
-                        logln("sending connections", LINFO3);
-                        String c = cm.listConnections();
-                        os.writeUTF(c);
-                        send_data(MNG_CONNECTIONS, os.toByteArray());
-                        break;
-                     }
-                     case MNG_GET_STATS: {
-                        logln("sending stats", LINFO3);
-                        String c = cm.dumpStats();
-                        os.writeUTF(c);
-                        send_data(MNG_STATS, os.toByteArray());
-                        break;
-                     }
-                     case MNG_SHUTDOWN: {
-                        logln("client requested server shutdown", LINFO);
-                        cm.Shutdown();
-                        break;
-                     }
-                     case MNG_PROJECT_MIGRATE: {
-                        logln("client requested a project migrate", LINFO);
-                        //Client c = new Client(cm,new Socket());
-                        byte[] md5_bytes = new byte[MD5_SIZE];
-                        byte[] gpid_bytes = new byte[GPID_SIZE];
-                        int status = MNG_MIGRATE_REPLY_FAIL;
-                        try {
-                           int uid = dis.readInt();
-                           dis.readFully(gpid_bytes);
-                           String gpid = Utils.toHexString(gpid_bytes);
-                           dis.readFully(md5_bytes);
-                           String hash = Utils.toHexString(md5_bytes);
-                           String desc = dis.readUTF();
-                           long pub = dis.readLong() & 0x7FFFFFFF;
-                           long sub = dis.readLong() & 0x7FFFFFFF;
-
-                           int newpid = cm.migrateProject(uid,gpid,hash,desc,pub,sub);
-                           if (newpid > 0) {
-                              logln("Added new project " + newpid + " via project migration from another server");
-                              status = MNG_MIGRATE_REPLY_SUCCESS;
-                              pidForUpdates = newpid;  //store globally for any updates that may come in
-                           }
-                           else {
-                              logln("migrate project failed for gpid " + gpid + " hash " + hash);
-                              status = MNG_MIGRATE_REPLY_FAIL;
-                           }
-                           os.writeInt(status);
-                           send_data(MNG_PROJECT_MIGRATE_REPLY, os.toByteArray());
-                        } catch (Exception ex) {
-                           logln("Malformed PROJECT MIGRATE", LERROR);
-                           break;
+                        int newpid = cm.migrateProject(username,gpid,hash,desc,pub,sub);
+                        if (newpid > 0) {
+                           logln("Added new project " + newpid + " via project migration from another server");
+                           status = MNG_MIGRATE_REPLY_SUCCESS;
+                           pidForUpdates = newpid;  //store globally for any updates that may come in
                         }
-                        break;
+                        else {
+                           logln("migrate project failed for gpid " + gpid + " hash " + hash);
+                           status = MNG_MIGRATE_REPLY_FAIL;
+                        }
+                        resp.addProperty("status", status);
+                        send_data(MNG_PROJECT_MIGRATE_REPLY, resp);
+                     } catch (Exception ex) {
+                        logln("Malformed PROJECT MIGRATE", LERROR);
                      }
-                     case MNG_MIGRATE_UPDATE: {
-                        logln("in MNG_MIGRATE_UPDATE", LERROR);
-                        int uid = dis.readInt();
-                        logln("... got uid" + uid, LERROR);
-                        int pid = dis.readInt();
-                        logln("... got pid" + pid, LERROR);
-                        int ucmd = dis.readInt();
+                  }
+                  else if (cmd.equals(MNG_MIGRATE_UPDATE)) {
+                     logln("in MNG_MIGRATE_UPDATE", LERROR);
+                     String username = json.getAsJsonPrimitive("newowner").getAsString();
+                     logln("... got username" + username, LERROR);
+                     String inner = json.getAsJsonPrimitive("update").getAsString();
+                     JsonParser jp = new JsonParser();
+                     JsonElement inner_element = jp.parse(inner);
+                     if (inner_element.isJsonObject()) {
+                        JsonObject inner_json = (JsonObject)inner_element;
+                        String ucmd = inner_json.getAsJsonPrimitive("type").getAsString();
                         logln("... got cmd" + ucmd, LERROR);
-                        int datalen = dis.readInt();
-                        logln("... got datalen" + datalen, LERROR);
-                        byte[] data = new byte[datalen];
-                        dis.readFully(data);
-                        logln("... got data", LERROR);
-                        cm.migrateUpdate(uid, pidForUpdates, ucmd, data);
-                        break;
+                        cm.migrateUpdate(username, pidForUpdates, ucmd, inner_json);
                      }
-                     default: {
-                        logln("unkown command", LERROR);
+                     else {
+                        //bad inner json
+                     }
+                  }
+                  else {
+                     logln("unkown command", LERROR);
 //The ServerManager has no means of processing this message as it is very much
 //a synchronous protocol: Send Command -> Process Reply.  If we don't recognize
 //their command we can easily drop it, but they are not likely to be looking
 //for our reply
-//                        os.writeUTF("bad command received:" + cmd);
-//                        send_data(MNG_CONNECTIONS, os.toByteArray());
-                     }
                   }
                }
             } catch (EOFException e) {

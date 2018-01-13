@@ -25,25 +25,27 @@ import java.net.*;
 import java.sql.*;
 import java.util.*;
 import java.security.*;
+import com.google.gson.*;
 
 
 /**
  * CollabreateServer
  * This class is responsible for accepting new incoming client
- * connections and passing them along to the ConnectionManager
+ * nections and passing them along to the ConnectionManager
  * @author Tim Vidas
  * @author Chris Eagle
- * @version 0.1.0, August 2008
+ * @version 0.2.0, January 2017
  */
 public class CollabreateServer extends Thread implements CollabreateConstants {
 
    /**
     * the tcp port to default to if no config is specified
     */
-   public static final String DEFAULT_PORT = "5042";
+   public static final int DEFAULT_PORT = 5042;
+
+   private JsonObject config = new JsonObject();
 
    private ServerSocket ss;
-   private Properties props = new Properties();
    private ConnectionManagerBase cm;
    private ManagerHelper mh;
 
@@ -57,8 +59,10 @@ public class CollabreateServer extends Thread implements CollabreateConstants {
     */
    protected CollabreateServer(String configFile) throws Exception {
       try {
-         FileInputStream fis = new FileInputStream(configFile);
-         props.load(fis);
+         JsonParser p = new JsonParser();
+         FileReader fr = new FileReader(configFile);
+         config = (JsonObject)p.parse(fr);
+         fr.close();
       } catch (Exception ex) {
          System.err.println("Failed to load config file: " + configFile);
          throw ex;
@@ -130,13 +134,27 @@ public class CollabreateServer extends Thread implements CollabreateConstants {
       }
    }
 
+   private String getConfigString(String key, String default_value) {
+      if (config.has(key)) {
+         return config.getAsJsonPrimitive(key).getAsString();
+      }
+      return default_value;
+   }
+
+   private int getConfigInt(String key, int default_value) {
+      if (config.has(key)) {
+         return config.getAsJsonPrimitive(key).getAsInt();
+      }
+      return default_value;
+   }
+
    /**
     * getJDBCConnection sets up and returns a JDBC connection 
     * @return a JDBC connection
     */
    private Connection getJDBCConnection() {
       Connection con = null;
-      String driver = props.getProperty("JDBC_DRIVER", "org.postgresql.Driver");
+      String driver = getConfigString("JDBC_DRIVER", "org.postgresql.Driver");
       try {
          Class.forName(driver);
       } catch(java.lang.ClassNotFoundException e) {
@@ -149,17 +167,17 @@ public class CollabreateServer extends Thread implements CollabreateConstants {
       }
 
       try {
-         String userid = props.getProperty("DB_USER", "collabreate");
-         String password = props.getProperty("DB_PASS");
+         String userid = getConfigString("DB_USER", "collabreate");
+         String password = getConfigString("DB_PASS", null);
          if (password == null) {
             //need to prompt for the password
          }
-         String url = props.getProperty("JDBC_URL");
+         String url = getConfigString("JDBC_URL", null);
          if (url == null) {
-            String dbname = props.getProperty("DB_NAME", "collabreate");
-            String host = props.getProperty("DB_HOST", "127.0.0.1");
-            String ssl = props.getProperty("USE_SSL", "no");
-            String dbtype = props.getProperty("JDBC_NAME", "postgresql");
+            String dbname = getConfigString("DB_NAME", "collabreate");
+            String host = getConfigString("DB_HOST", "127.0.0.1");
+            String ssl = getConfigString("USE_SSL", "no");
+            String dbtype = getConfigString("JDBC_NAME", "postgresql");
             url = "jdbc:" + dbtype + "://" + host + "/" + dbname;
             if (ssl.equalsIgnoreCase("yes")) {
                url += "?ssl";
@@ -188,10 +206,10 @@ public class CollabreateServer extends Thread implements CollabreateConstants {
    }
 
    private void initCommon() throws Exception {
-      int port  = Integer.parseInt(props.getProperty("SERVER_PORT", DEFAULT_PORT));
+      int port = getConfigInt("SERVER_PORT", DEFAULT_PORT);
       ss = new ServerSocket(port);
 
-      String logFile = props.getProperty("LogFile");
+      String logFile = getConfigString("LogFile", null);
       if (logFile != null) {
          try {
             logStream = new PrintStream(new FileOutputStream(logFile, true), true);
@@ -206,27 +224,24 @@ public class CollabreateServer extends Thread implements CollabreateConstants {
          logln("Could not get LogFile from server.conf");
       }
 
-      String verbosityProp = props.getProperty("LogVerbosity");
-      if (verbosityProp != null) {
-         verbosityLevel = Integer.parseInt(verbosityProp);
-      }
+      verbosityLevel = getConfigInt("LogVerbosity", LINFO1);
       logln("Log Verbosity set to " + verbosityLevel);
 
-      boolean dbMode = props.getProperty("SERVER_MODE", "database").equals("database");
+      boolean dbMode = getConfigString("SERVER_MODE", "database").equals("database");
       if (!dbMode) {
-         cm = new BasicConnectionManager(this, props);
+         cm = new BasicConnectionManager(this, config);
       }
       else {
          Connection con = getJDBCConnection();
          if (con == null) {
-            cm = new BasicConnectionManager(this, props);
+            cm = new BasicConnectionManager(this, config);
          }
          else {
-            cm = new DatabaseConnectionManager(this, props, con);
+            cm = new DatabaseConnectionManager(this, config, con);
          }
       }
       cm.start();
-      mh = new ManagerHelper(cm, props);
+      mh = new ManagerHelper(cm, config);
       mh.start();
    }
 

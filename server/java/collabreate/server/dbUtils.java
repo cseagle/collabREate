@@ -24,7 +24,7 @@ import java.io.*;
 import java.net.*;
 import java.sql.*;
 import java.util.*;
-
+import com.google.gson.*;
 
 /**
  * dbUtils
@@ -42,8 +42,8 @@ public class dbUtils implements CollabreateConstants {
     */
    protected static Connection getJDBCConnection(ServerManager sm) {
       Connection con = null;
-      Properties props = sm.getProps();
-      String driver = props.getProperty("JDBC_DRIVER", "org.postgresql.Driver");
+      JsonObject config = sm.getConfig();
+      String driver = getConfigString(config, "JDBC_DRIVER", "org.postgresql.Driver");
       try {
          Class.forName(driver);
          if (driver.indexOf("mysql") != -1) {
@@ -59,17 +59,17 @@ public class dbUtils implements CollabreateConstants {
       }
 
       try {
-         String userid = props.getProperty("DB_USER", "collabreate");
-         String password = props.getProperty("DB_PASS");
+         String userid = getConfigString(config, "DB_USER", "collabreate");
+         String password = getConfigString(config, "DB_PASS", null);
          if (password == null) {
             //need to prompt for the password
          }
-         String url = props.getProperty("JDBC_URL");
+         String url = getConfigString(config, "JDBC_URL", null);
          if (url == null) {
-            String dbname = props.getProperty("DB_NAME", "collabreate");
-            String host = props.getProperty("DB_HOST", "127.0.0.1");
-            String ssl = props.getProperty("USE_SSL", "no");
-            String dbtype = props.getProperty("JDBC_NAME", "postgresql");
+            String dbname = getConfigString(config, "DB_NAME", "collabreate");
+            String host = getConfigString(config, "DB_HOST", "127.0.0.1");
+            String ssl = getConfigString(config, "USE_SSL", "no");
+            String dbtype = getConfigString(config, "JDBC_NAME", "postgresql");
             url = "jdbc:" + dbtype + "://" + host + "/" + dbname;
             if (ssl.equalsIgnoreCase("yes")) {
                url += "?ssl";
@@ -94,6 +94,20 @@ public class dbUtils implements CollabreateConstants {
          //Is this a fatal error, do you want to close con here?
       }
       return con;
+   }
+
+   private static String getConfigString(JsonObject config, String key, String default_value) {
+      if (config.has(key)) {
+         return config.getAsJsonPrimitive(key).getAsString();
+      }
+      return default_value;
+   }
+
+   private static int getConfigInt(JsonObject config, String key, int default_value) {
+      if (config.has(key)) {
+         return config.getAsJsonPrimitive(key).getAsInt();
+      }
+      return default_value;
    }
 
    /**

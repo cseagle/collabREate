@@ -1,7 +1,7 @@
 /*
    collabREate basic_mgr.h
-   Copyright (C) 2012 Chris Eagle <cseagle at gmail d0t com>
-   Copyright (C) 2012 Tim Vidas <tvidas at gmail d0t com>
+   Copyright (C) 2018 Chris Eagle <cseagle at gmail d0t com>
+   Copyright (C) 2018 Tim Vidas <tvidas at gmail d0t com>
 
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the Free
@@ -48,7 +48,8 @@ private:
    sem_t pidLock;
 
 public:
-   BasicConnectionManager(map<string,string> *p);
+   BasicConnectionManager(json_object *conf);
+   ~BasicConnectionManager();
 
    /**
     * authenticate authenticates a user (for use in database mode)
@@ -58,8 +59,7 @@ public:
     * @param response the calculated response from the plugin to check 
     * @return the user id of an authenticated user, or INVALID_USER
     */
-   int authenticate(Client *c, string user, const uint8_t *challenge, int clen, const uint8_t *response, int rlen);
-
+   int authenticate(Client *c, const char *user, const uint8_t *challenge, uint32_t clen, const uint8_t *response, uint32_t rlen);
    /**
     * migrateUpdate is very similar to 'post', migrateUpdate only 
     * archives the udpate in the database so that future clients can receive it 
@@ -68,7 +68,7 @@ public:
     * @param cmd the 'command' that was performed (comment, rename, etc)
     * @param data the 'data' portion of the command (the comment text, etc)
     */
-   void migrateUpdate(int newowner, int pid, int cmd, const uint8_t *data, int dlen) {};
+   void migrateUpdate(const char *newowner, int pid, const char *cmd, json_object *obj) {};
 
    /**
     * post both queues a newly received update to be sent to other clients and (if in DB mode)
@@ -77,7 +77,7 @@ public:
     * @param cmd the 'command' that was performed (comment, rename, etc)
     * @param data the 'data' portion of the command (the comment text, etc)
     */
-   void post(Client *src, int cmd, uint8_t *data, int dlen);
+   void post(Client *src, const char *cmd, json_object *obj);
 
    /**
     * sendLatestUpdates sends updates from LastUpdate to current 
@@ -92,7 +92,7 @@ public:
    /**
     * getProjectInfo gets information related to a local project
     * @param pid the local pid of a project to get info on
-    * @return a  project info object for the provided pid
+    * @return a  project info object for the provided pid, caller needs to delete this
     */
    ProjectInfo *getProjectInfo(int pid);
    
@@ -185,7 +185,7 @@ public:
     * @return the new project id on success, -1 on failure
     */
 
-   int migrateProject(int owner, string gpid, const string &hash, const string &desc, uint64_t pub, uint64_t sub);
+   int migrateProject(const char *owner, const string &gpid, const string &hash, const string &desc, uint64_t pub, uint64_t sub);
 
    /**
     * addProject adds a project to the database and reflector (or merely a reflector in non-DB mode) 

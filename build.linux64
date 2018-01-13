@@ -1,6 +1,0 @@
-#!/bin/sh
-
-qmake -o Makefile64.g++ collab64.pro -platform linux-g++
-gmake -f Makefile64.g++ clean
-gmake -f Makefile64.g++
-cp ../../../bin/plugins/libcollab_qt.so.1.0.0 ../../../bin/plugins/collab_qt.plx64

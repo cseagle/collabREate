@@ -1,0 +1,42 @@
+{
+  "#title" : "# Sample config file for collabREate server",
+
+  "#RUN_AS" : "collab",
+
+  "#log_file" : "# This file needs to be creatable/writable by the server user",
+  "LOG_FILE" :  "/var/log/collab",
+
+  "#log_verbosity" : "#higher numbers result in loging more events",
+  "LOG_VERBOSITY" : 4,
+
+  "SERVER_PORT" : 5042,
+
+  "SERVER_MODE" : "database",
+  "#SERVER_MODE" : "basic",
+
+  "JDBC_DRIVER" : "org.postgresql.Driver",
+  "JDBC_NAME" : "postgresql",
+
+  "#JDBC_DRIVER" : "com.mysql.jdbc.Driver",
+  "#JDBC_NAME" : "mysql",
+
+  "#jdbc_url" : "#Specifying JDBC_URL overrides JDBC_NAME, DB_HOST, DB_NAME, and USE_SSL",
+  "#JDBC_URL" : "jdbc:postgresql://127.0.0.1/collabDB",
+
+  "DB_HOST" : "127.0.0.1",
+  "DB_NAME" : "collabDB",
+  "USE_SSL" : "no",
+  "DB_USER" : "collab",
+  "DB_PASS" : "collabpass",
+
+  "#server_manager" : "### these are used by the ServerManager ###",
+
+  "#manage_port" : "# port for server to listen, client to connect",
+  "MANAGE_PORT" : 5043,
+
+  "#manage_host" : "# host for client to connect to",
+  "MANAGE_HOST" : "localhost",
+
+  "#manage_local" : "#if MANAGE_LOCAL is true the management port only accepts connections from localhost",
+  "MANAGE_LOCAL" : true
+}

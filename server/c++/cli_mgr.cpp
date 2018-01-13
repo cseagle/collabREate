@@ -1,7 +1,7 @@
 /*
    collabREate cli_mgr.cpp
-   Copyright (C) 2012 Chris Eagle <cseagle at gmail d0t com>
-   Copyright (C) 2012 Tim Vidas <tvidas at gmail d0t com>
+   Copyright (C) 2018 Chris Eagle <cseagle at gmail d0t com>
+   Copyright (C) 2018 Tim Vidas <tvidas at gmail d0t com>
 
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the Free
@@ -29,12 +29,12 @@
 #include "projectmap.h"
 #include "clientset.h"
 
-Packet::Packet(Client *src, uint8_t *data, int dlen, uint64_t updateid) {
+Packet::Packet(Client *src, const char *cmd, json_object *obj, uint64_t updateid) {
    c = src;
-   d = data;
-   dataLen = dlen;
-   uid = htonll(updateid);
-   memcpy(data + 8, &uid, sizeof(uint64_t));
+   this->cmd = cmd;
+   this->obj = obj;
+   uid = updateid;
+   append_json_uint64_val(obj, "updateid", updateid);   //is this really necessary?
 }
 
 /**
@@ -42,12 +42,13 @@ Packet::Packet(Client *src, uint8_t *data, int dlen, uint64_t updateid) {
  */
 const char * const ConnectionManagerBase::EMPTY_GPID = "0000000000000000000000000000000000000000000000000000000000000000";
 
-ConnectionManagerBase::ConnectionManagerBase(map<string,string> *p, bool mode) {
-   props = p;
+ConnectionManagerBase::ConnectionManagerBase(json_object *conf, bool mode) {
+   this->conf = conf;
    basicMode = mode;
    done = false;
    sem_init(&pidLock, 0, 1);
    sem_init(&queueSem, 0, 0);
+   sem_init(&queueMutex, 0, 1);
 }
 
 void ConnectionManagerBase::start() {
@@ -89,6 +90,9 @@ void ConnectionManagerBase::terminate() {
    ::logln("ConnectionManager terminating", LINFO);
    done = true;
    projects.loopClients(termClients, NULL);
+   if (conf != NULL) {
+      json_object_put(conf);
+   }
 }
 
 /**
@@ -134,13 +138,17 @@ static bool dispatch(Client *c, void *user) {
    Packet *p = (Packet*)user;
 
    if (c != p->c) {  //only send to other than originator
-      c->post(p->d, p->dataLen);
+      //increment ref count on json object before sending
+      //because writeJson will decrement it and we can't have the object
+      //garbage collected until all clients have received it
+      json_object_get(p->obj);
+      c->post(p->cmd, p->obj);
    }
    else {
       //send updateid back to the originator
-      Buffer os;
-      os.writeLong(p->uid);
-      c->send_data(MSG_ACK_UPDATEID, os.get_buf(), os.size());
+      json_object *obj = json_object_new_object();
+      append_json_uint64_val(obj, "updateid", p->uid);
+      c->send_data(MSG_ACK_UPDATEID, obj);
    }
 
    return true;
@@ -155,11 +163,15 @@ void *ConnectionManagerBase::run(void *arg) {
    ConnectionManagerBase *mgr = (ConnectionManagerBase*)arg;
    while (!mgr->done) {
       sem_wait(&mgr->queueSem);
+      sem_wait(&mgr->queueMutex);
       Packet *p = mgr->queue[0];
       //*** does add/remove need to be synchronized on vectors?
       mgr->queue.erase(mgr->queue.begin());
+      sem_post(&mgr->queueMutex);
       //get the project associated with this notification
       mgr->projects.loopProject(p->c->getPid(), dispatch, p);
+      json_object_put(p->obj);
+      delete p;
    }
 }
 

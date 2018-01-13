@@ -1,3 +1,9 @@
+* 01/02/17
+  Conversion to protocol version 4, a JSON based messaging protocol
+  Only the C++ server has been updated at this point
+  Attempt to use only native IDA api functions for user interface
+  Eliminate QT specific code to make building easier
+
 * 05/25/14
   Added primitive messaging capability in CollabREate window. Message history is
   cached in the IDB and restored with each session.

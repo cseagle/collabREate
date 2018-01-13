@@ -24,6 +24,8 @@ import java.io.*;
 import java.net.*;
 import java.sql.*;
 import java.util.*;
+import com.google.gson.*;
+
 
 /**
  * ConnectionManagerBase
@@ -31,7 +33,7 @@ import java.util.*;
  * interested clients
  * @author Tim Vidas
  * @author Chris Eagle
- * @version 0.1.0, August 2008
+ * @version 0.2.0, January 2017
  */
 
 
@@ -48,7 +50,7 @@ public abstract class ConnectionManagerBase extends Thread implements Collabreat
 
    private boolean done = false;
 
-   private Properties props;
+   protected JsonObject config = new JsonObject();
 
    protected static Object pidLock = new Object();
 
@@ -56,10 +58,24 @@ public abstract class ConnectionManagerBase extends Thread implements Collabreat
    
    private boolean basicMode = true;
 
-   public ConnectionManagerBase(CollabreateServer mcs, Properties p, boolean mode) {
+   public ConnectionManagerBase(CollabreateServer mcs, JsonObject conf, boolean mode) {
       cs = mcs;
-      props = p;
+      config = conf;
       basicMode = mode;
+   }
+
+   public String getConfigString(String key, String default_value) {
+      if (config.has(key)) {
+         return config.getAsJsonPrimitive(key).getAsString();
+      }
+      return default_value;
+   }
+
+   public int getConfigInt(String key, int default_value) {
+      if (config.has(key)) {
+         return config.getAsJsonPrimitive(key).getAsInt();
+      }
+      return default_value;
    }
 
    /**
@@ -111,25 +127,6 @@ public abstract class ConnectionManagerBase extends Thread implements Collabreat
     */
    protected void logex(Exception ex, int verbosity) {
       cs.logex(ex, verbosity);
-   }
-
-   /**
-    * insertUpdateid is basically htonll and strategically places the result into the
-    * datastream eventually to be sent out on the wire, this is done prior to sending because the 
-    * lastupdateid is not known prior to the insert, but is known prior to resending to other clients
-    * @param data a bytearray of the update data 
-    * @param offset an offset into the data bytearray of where the empty 'placeholder' slot is for the updateid
-    * @param updateid the update to byteswap and insert
-    */
-   protected static void insertUpdateid(byte[] data, int offset, long updateid) {
-      data[offset++] = (byte)(updateid >> 56);
-      data[offset++] = (byte)(updateid >> 48);
-      data[offset++] = (byte)(updateid >> 40);
-      data[offset++] = (byte)(updateid >> 32);
-      data[offset++] = (byte)(updateid >> 24);
-      data[offset++] = (byte)(updateid >> 16);
-      data[offset++] = (byte)(updateid >> 8);
-      data[offset] = (byte)(updateid);
    }
 
    /**
@@ -191,7 +188,7 @@ public abstract class ConnectionManagerBase extends Thread implements Collabreat
     * @param cmd the 'command' that was performed (comment, rename, etc)
     * @param data the 'data' portion of the command (the comment text, etc)
     */
-   protected abstract void migrateUpdate(int newowner, int pid, int cmd, byte[] data);
+   protected abstract void migrateUpdate(String newowner, int pid, String cmd, JsonObject update);
 
    /**
     * post both queues a newly received update to be sent to other clients and (if in DB mode)
@@ -200,7 +197,7 @@ public abstract class ConnectionManagerBase extends Thread implements Collabreat
     * @param cmd the 'command' that was performed (comment, rename, etc)
     * @param data the 'data' portion of the command (the comment text, etc)
     */
-   protected abstract void post(Client src, int cmd, byte[] data);
+   protected abstract void post(Client src, String cmd, JsonObject json);
 
    /**
     * remove removes a client from a currently reflecting project 
@@ -259,7 +256,7 @@ public abstract class ConnectionManagerBase extends Thread implements Collabreat
                   for (Client c : vc) {     //foreach Client c
                      if (c != p.c) {  //only send to other than originator
                         try {
-                           c.post(p.d);
+                           c.post(p.cmd, p.update);
                         } catch (Exception ex) {
                            logex(ex);
                            bad.add(c);
@@ -267,9 +264,9 @@ public abstract class ConnectionManagerBase extends Thread implements Collabreat
                      }
                      else {
                         //send updateid back to the originator
-                        CollabreateOutputStream os = new CollabreateOutputStream();
-                        os.writeLong(p.uid);
-                        c.send_data(MSG_ACK_UPDATEID, os.toByteArray());
+                        JsonObject resp = new JsonObject();
+                        resp.addProperty("updateid", p.uid);
+                        c.send_data(MSG_ACK_UPDATEID, resp);
                      }
                   }
                }
@@ -420,7 +417,7 @@ public abstract class ConnectionManagerBase extends Thread implements Collabreat
     * @return the new project id on success, -1 on failure
     */
 
-   protected abstract int migrateProject(int owner, String gpid, String hash, String desc, long pub, long sub);
+   protected abstract int migrateProject(String owner, String gpid, String hash, String desc, long pub, long sub);
 
    /**
     * addProject adds a project to the database and reflector (or merely a reflector in non-DB mode) 
@@ -464,14 +461,16 @@ public abstract class ConnectionManagerBase extends Thread implements Collabreat
     */
    public class Packet {
       protected Client c;
-      protected byte[] d;
+      protected JsonObject update;
       protected long uid;
+      protected String cmd;
 
-      public Packet(Client src, byte[] data, long updateid) {
+      public Packet(Client src, String cmd, JsonObject update, long updateid) {
          c = src;
-         d = data;
          uid = updateid;
-         insertUpdateid(data, 8, uid);
+         this.cmd = cmd;
+         update.addProperty("updateid", updateid);
+         this.update = update;
       }
    }
 

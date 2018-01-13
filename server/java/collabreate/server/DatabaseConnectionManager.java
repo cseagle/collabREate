@@ -24,6 +24,7 @@ import java.io.*;
 import java.net.*;
 import java.sql.*;
 import java.util.*;
+import com.google.gson.*;
 
 /**
  * DatabaseConnectionManager
@@ -31,7 +32,7 @@ import java.util.*;
  * interested clients
  * @author Tim Vidas
  * @author Chris Eagle
- * @version 0.1.0, August 2008
+ * @version 0.2.0, January 2017
  */
 
 
@@ -54,10 +55,10 @@ public class DatabaseConnectionManager extends ConnectionManagerBase {
    private PreparedStatement projectPermsUpdateQuery;
 //   private PreparedStatement snapProjectQuery;
 
-   public DatabaseConnectionManager(CollabreateServer mcs, Properties p, Connection dbconn) {
-      super(mcs, p, false);
+   public DatabaseConnectionManager(CollabreateServer mcs, JsonObject conf, Connection dbconn) {
+      super(mcs, conf, false);
       con = dbconn;
-      String driver = p.getProperty("JDBC_DRIVER", "org.postgresql.Driver");
+      String driver = getConfigString("JDBC_DRIVER", "org.postgresql.Driver");
       if (driver.indexOf("mysql") != -1) {
          useMysql = true;
       }
@@ -108,20 +109,20 @@ public class DatabaseConnectionManager extends ConnectionManagerBase {
     * @param cmd the 'command' that was performed (comment, rename, etc)
     * @param data the 'data' portion of the command (the comment text, etc)
     */
-   protected void migrateUpdate(int newowner, int pid, int cmd, byte[] data) {
+   protected void migrateUpdate(String newowner, int pid, String cmd, JsonObject json) {
       logln("in migrateUpdate", LINFO4);
       long updateid = 0;
       synchronized (queue) {
          try {
             //db insert
-            postUpdateQuery.setInt(1, newowner);
+            postUpdateQuery.setString(1, newowner);
             postUpdateQuery.setInt(2, pid);
-            postUpdateQuery.setInt(3, cmd);
+            postUpdateQuery.setString(3, cmd);
             //note that this data array already has 8 bytes (8-15) reserved to receive the updateid
             //when updates are requested in the future
-            postUpdateQuery.setBytes(4, data);
+            postUpdateQuery.setString(4, json.toString());
             updateid = runInsertLong(postUpdateQuery);
-            logln("migrated update: " + updateid + "cmd: " + cmd + "pid: " + pid + " size: " + data.length, LINFO4);
+            logln("migrated update: " + updateid + "cmd: " + cmd + "pid: " + pid, LINFO4);
          } catch (Exception e) {
             logex(e);
          }
@@ -137,23 +138,23 @@ public class DatabaseConnectionManager extends ConnectionManagerBase {
     * @param cmd the 'command' that was performed (comment, rename, etc)
     * @param data the 'data' portion of the command (the comment text, etc)
     */
-   protected void post(Client src, int cmd, byte[] data) {
+   protected void post(Client src, String cmd, JsonObject json) {
       long updateid = 0;
       synchronized (queue) {
          try {
             //db insert
-            postUpdateQuery.setInt(1, src.getUid());
+            postUpdateQuery.setString(1, src.getUser());
             postUpdateQuery.setInt(2, src.getPid());
-            postUpdateQuery.setInt(3, cmd);
+            postUpdateQuery.setString(3, cmd);
             //note that this data array already has 8 bytes (8-15) reserved to receive the updateid
             //when updates are requested in the future
-            postUpdateQuery.setBytes(4, data);
+            postUpdateQuery.setString(4, json.toString());
             updateid = runInsertLong(postUpdateQuery);
-            logln("Added update: " + updateid + "cmd: " + cmd + "pid: " + src.getPid() + " size: " + data.length, LINFO4);
+            logln("Added update: " + updateid + "cmd: " + cmd + "pid: " + src.getPid(), LINFO4);
          } catch (Exception e) {
             logex(e);
          }
-         queue.add(new Packet(src, data, updateid));   //add a new packet with the binary data to the queue
+         queue.add(new Packet(src, cmd, json, updateid));   //add a new packet with the binary data to the queue
          queue.notify();  //notify is the compliment to wait
       }
    }
@@ -168,7 +169,7 @@ public class DatabaseConnectionManager extends ConnectionManagerBase {
          findProjectByPidQuery = con.prepareStatement("select p.pid,p.hash,p.gpid,p.snapupdateid,p.description,f.parent,q.description,p.pub,p.sub,p.owner,p.protocol from projects p left join (forklist f left join projects q on f.parent=q.pid) on p.pid=f.child where p.pid = ? order by p.pid asc;");
          findProjectByGpidQuery = con.prepareStatement("select pid,hash,gpid,protocol from projects where gpid = ? order by pid asc;");
          getUserInfoQuery = con.prepareStatement("select userid,pwhash,pub,sub from users where username = ? order by userid asc;");
-         getLatestUpdatesQuery = con.prepareStatement("select updateid,cmd,data from updates where updateid > ? and pid = ? order by updateid asc;");
+         getLatestUpdatesQuery = con.prepareStatement("select updateid,cmd,json from updates where updateid > ? and pid = ? order by updateid asc;");
          projectPermsUpdateQuery = con.prepareStatement("update projects set pub=?,sub=? where pid=?");
 
          if (useMysql) {
@@ -180,7 +181,7 @@ public class DatabaseConnectionManager extends ConnectionManagerBase {
          }
          else {
             copyUpdatesQuery = con.prepareStatement("begin; create temporary table tmptable (like updates) on commit drop; insert into tmptable select * from updates where pid = ? and updateid <= ?; update only tmptable set pid=?; insert into updates (select * from tmptable); commit;");
-            postUpdateQuery = con.prepareStatement("insert into updates (userid,pid,cmd,data) values (?,?,?,?) returning updateid;");
+            postUpdateQuery = con.prepareStatement("insert into updates (username,pid,cmd,json) values (?,?,?,?) returning updateid;");
             addProjectQuery = con.prepareStatement("insert into projects (hash,gpid,description,owner,pub,sub,protocol) values (?,?,?,?,?,?,?) returning pid;");
             addProjectSnapQuery = con.prepareStatement("insert into projects (hash,gpid,description,owner,snapupdateid,protocol) values (?,?,?,?,?,?) returning pid;");
             addProjectForkQuery = con.prepareStatement("insert into forklist (child,parent) values (?,?) returning fid;");
@@ -259,11 +260,13 @@ public class DatabaseConnectionManager extends ConnectionManagerBase {
          ResultSet rs = getLatestUpdatesQuery.executeQuery();
          while (rs.next()) {
             long updateid = rs.getLong(1);
-            int cmd = rs.getInt(2);
-            byte data[] = rs.getBytes(3);
+            String cmd = rs.getString(2);
+            String json = rs.getString(3);
+            JsonParser p = new JsonParser();
+            JsonObject update = (JsonObject)p.parse(json);
+            update.addProperty("updateid", updateid);
             logln("posting " + updateid + " (cmd " + cmd + ")");
-            insertUpdateid(data, 8, updateid);
-            c.post(data);
+            c.post(cmd, update);
          }
          rs.close();
       } catch (Exception ex) {
@@ -298,7 +301,7 @@ public class DatabaseConnectionManager extends ConnectionManagerBase {
             pinfo.snapupdateid = snapupdateid;
             pinfo.pub = rs.getLong(8);
             pinfo.sub = rs.getLong(9);
-            pinfo.owner = rs.getInt(10);
+            pinfo.owner = rs.getString(10);
             pinfo.proto = proto;
             if (projects.containsKey(lpid)) {
                pinfo.connected = (projects.get(lpid)).size();
@@ -343,7 +346,7 @@ public class DatabaseConnectionManager extends ConnectionManagerBase {
             pinfo.snapupdateid = snapupdateid;
             pinfo.pub = rs.getLong(8);
             pinfo.sub = rs.getLong(9);
-            pinfo.owner = rs.getInt(10);
+            pinfo.owner = rs.getString(10);
             pinfo.proto = proto;
             if (projects.containsKey(lpid)) {
                pinfo.connected = (projects.get(lpid)).size();
@@ -387,7 +390,7 @@ public class DatabaseConnectionManager extends ConnectionManagerBase {
             c.setPid(lpid);
             c.setHash(rs.getString(2));
             c.setGpid(rs.getString(3));
-            if (rs.getInt(10) == c.getUid()) { //project owner gets full perms, regardless of user, project, or requested perms
+            if (rs.getString(10) == c.getUser()) { //project owner gets full perms, regardless of user, project, or requested perms
                logln("Project Owner joined! yay!", LINFO3);
                c.setPub(FULL_PERMISSIONS);
                c.setSub(FULL_PERMISSIONS);
@@ -460,7 +463,7 @@ public class DatabaseConnectionManager extends ConnectionManagerBase {
         */
 
       int spid = -1;
-      int uid = c.getUid();
+      String uid = c.getUser();
       int oldpid = c.getPid();
       String gpid;
       try {
@@ -476,7 +479,7 @@ public class DatabaseConnectionManager extends ConnectionManagerBase {
                addProjectSnapQuery.setString(1, c.getHash());
                addProjectSnapQuery.setString(2, gpid);
                addProjectSnapQuery.setString(3, desc);
-               addProjectSnapQuery.setInt(4, uid);
+               addProjectSnapQuery.setString(4, uid);
                addProjectSnapQuery.setLong(5, lastupdateid);
                addProjectSnapQuery.setInt(6, PROTOCOL_VERSION);
                try {
@@ -736,7 +739,7 @@ public class DatabaseConnectionManager extends ConnectionManagerBase {
     * @return the new project id on success, -1 on failure
     */
 
-   protected int migrateProject(int owner, String gpid, String hash, String desc, long pub, long sub) {
+   protected int migrateProject(String owner, String gpid, String hash, String desc, long pub, long sub) {
       logln("in migrateProject ", LDEBUG);
       int lpid = -1;
       try {
@@ -747,7 +750,7 @@ public class DatabaseConnectionManager extends ConnectionManagerBase {
             addProjectQuery.setString(1, hash);
             addProjectQuery.setString(2, gpid);
             addProjectQuery.setString(3, desc);
-            addProjectQuery.setInt(4, owner);
+            addProjectQuery.setString(4, owner);
             addProjectQuery.setLong(5, pub);
             addProjectQuery.setLong(6, sub);
             addProjectQuery.setInt(7, PROTOCOL_VERSION);
@@ -782,7 +785,7 @@ public class DatabaseConnectionManager extends ConnectionManagerBase {
    protected int addProject(Client c, String hash, String desc, long pub, long sub) {
       logln("in addProject ", LDEBUG);
       int lpid = -1;
-      int uid = c.getUid();
+      String uid = c.getUser();
       String gpid;
       try {
          logln("User " + uid + " adding project for " + hash, LINFO);
@@ -798,7 +801,7 @@ public class DatabaseConnectionManager extends ConnectionManagerBase {
                addProjectQuery.setString(1, hash);
                addProjectQuery.setString(2, gpid);
                addProjectQuery.setString(3, desc);
-               addProjectQuery.setInt(4, uid);
+               addProjectQuery.setString(4, uid);
                addProjectQuery.setLong(5, pub);
                addProjectQuery.setLong(6, sub);
                addProjectQuery.setInt(7, PROTOCOL_VERSION);

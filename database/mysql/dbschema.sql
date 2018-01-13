@@ -28,8 +28,8 @@ use collabDB;
 
 CREATE TABLE users (
    userid INT AUTO_INCREMENT UNIQUE,
-   username VARCHAR(32) UNIQUE,
-   pwhash VARCHAR(64),
+   username TEXT UNIQUE,
+   pwhash TEXT,
    -- some sort of general permissions (eg novice user)
    sub BIGINT,
    pub BIGINT,
@@ -39,12 +39,12 @@ CREATE TABLE users (
 
 CREATE TABLE projects (
    pid INT AUTO_INCREMENT UNIQUE NOT NULL, -- still want a local pid so that compares in update are fast
-   gpid VARCHAR(128) UNIQUE NOT NULL, -- global pid across all instances of collabreate servers
-   hash VARCHAR(64) NOT NULL, 
+   gpid TEXT UNIQUE NOT NULL, -- global pid across all instances of collabreate servers
+   hash TEXT NOT NULL, 
    description TEXT NOT NULL,
    created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
    touched TIMESTAMP,
-   owner INTEGER REFERENCES users(userid),
+   owner TEXT REFERENCES users(username),
    -- project permissions (initial creator of project is 'owner' - sets default perms)
    sub BIGINT,
    pub BIGINT,
@@ -74,20 +74,20 @@ delimiter ;
 
 CREATE TABLE updates (
    updateid BIGINT NOT NULL,    -- DOES NOT WORK! can't assign default as the result of a function
-   userid INTEGER REFERENCES users(userid),
+   username TEXT REFERENCES users(username),
    pid INTEGER REFERENCES projects(pid),  -- pid not gpid for faster comparison
-   cmd INTEGER,
-   data BLOB,
+   cmd TEXT NOT NULL,
+   json TEXT NOT NULL,
    created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
    PRIMARY KEY (updateid,pid)
 ) ENGINE=InnoDB;
 
 delimiter //
-CREATE FUNCTION insertUpdate(uid INTEGER, proj_id INTEGER, command INTEGER, value BLOB) RETURNS BIGINT
+CREATE FUNCTION insertUpdate(_user TEXT, proj_id INTEGER, command TEXT, value TEXT) RETURNS BIGINT
 BEGIN
    DECLARE temp BIGINT;
    SELECT nextid() INTO temp;
-   INSERT INTO updates (updateid,userid,pid,cmd,data) VALUES (temp, uid, proj_id, command, value);
+   INSERT INTO updates (updateid,username,pid,cmd,json) VALUES (temp, _user, proj_id, command, value);
    RETURN temp;
 END;
 //
@@ -113,28 +113,28 @@ CREATE TABLE forklist (
 ) ENGINE=InnoDB;
 
 delimiter //
-CREATE FUNCTION addUserQuery(user varchar(32), pw varchar(64), p BIGINT, s BIGINT) RETURNS INTEGER
+CREATE FUNCTION addUserQuery(user TEXT, pw TEXT, p BIGINT, s BIGINT) RETURNS INTEGER
 BEGIN
   insert into users (username,pwhash,pub,sub) values (user, pw, p, s);
   return LAST_INSERT_ID();
 END;
 //
 
-CREATE FUNCTION updateUserQuery(user varchar(32), pw varchar(64), p BIGINT, s BIGINT, uid INTEGER) RETURNS INTEGER
+CREATE FUNCTION updateUserQuery(user TEXT, pw TEXT, p BIGINT, s BIGINT, uid INTEGER) RETURNS INTEGER
 BEGIN
   update users set username=user,pwhash=pw,pub=p,sub=s where userid=uid;
   return LAST_INSERT_ID();
 END;
 //
 
-CREATE FUNCTION addProjectQuery(hash varchar(64), gpid varchar(128), descr text, owner int, p BIGINT, s BIGINT, protocol INTEGER) RETURNS INTEGER
+CREATE FUNCTION addProjectQuery(hash TEXT, gpid TEXT, descr text, owner int, p BIGINT, s BIGINT, protocol INTEGER) RETURNS INTEGER
 BEGIN
   insert into projects (hash,gpid,description,owner,pub,sub,protocol) values (hash, gpid, descr, owner, p, s, protocol);
   return LAST_INSERT_ID();
 END;
 //
 
-CREATE FUNCTION addProjectSnapQuery(hash varchar(64), gpid varchar(128), descr text, owner int, snapid BIGINT, protocol INTEGER) RETURNS INTEGER
+CREATE FUNCTION addProjectSnapQuery(hash TEXT, gpid TEXT, descr text, owner int, snapid BIGINT, protocol INTEGER) RETURNS INTEGER
 BEGIN
   insert into projects (hash,gpid,description,owner,snapupdateid,protocol) values (hash, gpid, descr, owner, snapid, protocol);
   return LAST_INSERT_ID();

@@ -1,7 +1,7 @@
 /*
    collabREate server_mgr.cpp
-   Copyright (C) 2012 Chris Eagle <cseagle at gmail d0t com>
-   Copyright (C) 2012 Tim Vidas <tvidas at gmail d0t com>
+   Copyright (C) 2018 Chris Eagle <cseagle at gmail d0t com>
+   Copyright (C) 2018 Tim Vidas <tvidas at gmail d0t com>
 
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the Free
@@ -26,6 +26,8 @@
 #include <string.h>
 #include <arpa/inet.h>
 #include <stdlib.h>
+#include <inttypes.h>
+#include <json-c/json.h>
 #include "client.h"
 #include "utils.h"
 #include "proj_info.h"
@@ -42,7 +44,7 @@ using namespace std;
  */
 
 #define DEFAULT_PORT 5043
-#define DEFAULT_HOST "::1"
+#define DEFAULT_HOST "localhost"
 
 char *readLine(char *buf, int sz) {
    if (fgets(buf, sz, stdin) == NULL) {
@@ -56,8 +58,7 @@ char *readLine(char *buf, int sz) {
 }
 
 /**
- * askyn requires the user to enter yes or no on the supplied BufferedReader
- * @param br the BufferedReader to force an answer on
+ * askyn requires the user to enter yes or no
  * @return true for yes, false for no
  */
 bool askyn() {
@@ -75,39 +76,41 @@ bool askyn() {
    return strcmp(resp, "yes") == 0;
 }
 
-ServerManager::ServerManager(map<string,string> *p) {
+ServerManager::ServerManager(json_object *p) {
    done = false;
-   props = p;
-   port = getShortOption(props, "MANAGE_PORT", 5043);
-   host = (*props)["MANAGE_HOST"];
-   mode = (*props)["SERVER_MODE"] == "database" ? MODE_DB : MODE_BASIC;
+   config = p;
+   dbConn = NULL;
+   port = getShortOption(config, "MANAGE_PORT", 5043);
+   host = getStringOption(config, "MANAGE_HOST", DEFAULT_HOST);
+   mode = getStringOption(config, "SERVER_MODE", "basic") == "database" ? MODE_DB : MODE_BASIC;
    if (mode == MODE_DB) {
-
-      vector<string> dbparms;
       map<string,string> dbkeys;
-      
-      for (map<string,string>::iterator i = (*p).begin(); i != (*p).end(); i++) {
-         const string &key = (*i).first;
-         if (key == "DB_HOST") {
-            dbkeys[key] = "hostaddr"; 
-         }
-         else if (key == "DB_NAME") {
-            dbkeys[key] = "dbname"; 
-         }
-         else if (key == "DB_USER") {
-            dbkeys[key] = "user"; 
-         }
-         else if (key == "DB_PASS") {
-            dbkeys[key] = "password"; 
-         }
+
+      string dbHost = getStringOption(config, "DB_HOST", "");
+      if (dbHost.length() > 0) {
+         dbkeys["hostaddr"] = dbHost; 
+      }
+      string dbName = getStringOption(config, "DB_NAME", "");
+      if (dbName.length() > 0) {
+         dbkeys["dbname"] = dbName; 
+      }
+      string dbUser = getStringOption(config, "DB_USER", "");
+      if (dbUser.length() > 0) {
+         dbkeys["user"] = dbUser; 
+      }
+      string dbPass = getStringOption(config, "DB_PASS", "");
+      if (dbPass.length() > 0) {
+         dbkeys["password"] = dbPass; 
       }
       
       char const **keywords = new char const *[dbkeys.size() + 1];
       char const **values = new char const *[dbkeys.size() + 1];
       int idx = 0;
       for (map<string,string>::iterator i = dbkeys.begin(); i != dbkeys.end(); i++, idx++) {
-         keywords[idx] = (*i).second.c_str();
-         values[idx] = ((*p)[(*i).first]).c_str();
+         fprintf(stderr, "%s:%s\n", (*i).first.c_str(), (*i).second.c_str());
+         keywords[idx] = (*i).first.c_str();
+         values[idx] = (*i).second.c_str();
+         fprintf(stderr, "%s:%s\n", (*i).first.c_str(), (*i).second.c_str());
       }
       keywords[idx] = values[idx] = NULL;
       dbConn = PQconnectdbParams(keywords, values, 0);
@@ -116,16 +119,20 @@ ServerManager::ServerManager(map<string,string> *p) {
       if (PQstatus(dbConn) != CONNECTION_OK) {
          fprintf(stderr, "Connection to database failed: %s\n", PQerrorMessage(dbConn));
          PQfinish(dbConn);
+         dbConn = NULL;
          mode = MODE_BASIC;
       }
       else {
          printf("Database connected.\n");
          initQueries();
       }
+      delete [] keywords;
+      delete [] values;
    }
    else {
       fprintf(stderr, "Starting in BASIC mode\n");
    }
+   s = NULL;
    connectToHelper();
 }
 
@@ -276,6 +283,7 @@ void ServerManager::terminate() {
    done = true;
    closeDB();
    s->close();
+   json_object_put(config);
 }
 
 /**
@@ -321,7 +329,7 @@ void ServerManager::initQueries() {
       }
       PQclear(res);
       res = PQprepare(dbConn, "getAllUpdates", 
-                      "select updateid,userid,pid,cmd,data,created from updates where pid=$1 order by updateid asc",
+                      "select updateid,username,pid,json,created from updates where pid=$1 order by updateid asc",
                       0, NULL);
       if (PQresultStatus(res) != PGRES_COMMAND_OK) {
          fprintf(stderr, "getAllUpdates: %s\n", PQerrorMessage(dbConn));
@@ -360,22 +368,26 @@ void ServerManager::initQueries() {
 
 
 /**
- * similar to post in Client, but does not check subscription status, and takes command as a arg
+ * similar to post in Client, but does not check subscription status, and takes command as an arg
  * This function should ONLY be called for message id >= MNG_CONTROL_FIRST
  * because these messages do not contain an updateid and send only management data
  * @param command the command to send
  * @param data the data associated with the command
  */
-void ServerManager::send_data(int command, uint8_t *data, int dlen) {
+void ServerManager::send_data(const char *command, json_object *obj) {
    try {
-      if (command >= MNG_CONTROL_FIRST) {
-         s->writeInt(8 + dlen);
-         s->writeInt(command);
-         s->write(data, dlen);
+      if (strncmp(command, "mng_", 4) == 0) {
+         if (obj == NULL) {
+            obj = json_object_new_object();
+         }
+         json_object_object_add_ex(obj, "type", json_object_new_string(command), JSON_NEW_CONST_KEY);
+
+         s->writeJson(obj);   //this will call json_object_put
          //fprintf(stderr, "send_data- cmd: " + command + " datasize: " + data.length);
+//         json_object_put(obj);
       }
       else {
-         fprintf(stderr, "post should be used for command %d, not send_data.  Data not sent.", command);
+         fprintf(stderr, "post should be used for command %s, not send_data.  Data not sent.", command);
       }
    } catch (IOException ex) {
    }
@@ -391,15 +403,15 @@ void ServerManager::dumpStats() {
    while (tries > 0) {
       try {
          tries--;
-         send_data(MNG_GET_STATS, NULL, 0);
+         send_data(MNG_GET_STATS);
+         json_object *obj = s->readJson();
+         json_object *stats = json_object_object_get(obj, "stats");
 
          //This requires that the server immediately replies !!!
          //otherwise we might get stuck here and have to kill the app
-         int len = s->readInt();
-         int cmd = s->readInt();
-         string thelist = s->readUTF();
          printf("\nCollabREate Stats\n");
-         printf("%s\n", thelist.c_str());
+         printf("%s\n", json_object_get_string(stats));
+         json_object_put(obj);
          break;
       } catch (IOException e) {
          connectToHelper();
@@ -418,7 +430,7 @@ void ServerManager::shutdownServer() {
       try {
          tries--;
          //sending shutdown request, there is no expected reply
-         send_data(MNG_SHUTDOWN, NULL, 0);
+         send_data(MNG_SHUTDOWN);
          break;
       } catch (IOException e) {
          connectToHelper();
@@ -448,6 +460,7 @@ int ServerManager::getProjectInfo(int lpid, ProjectInfo *pinfo) {
          pinfo->hash = pi->hash;
          pinfo->gpid = pi->gpid;
          rval = 0;
+         break;
       }
    }
    return rval;
@@ -471,7 +484,7 @@ static time_t PQ_to_time_t(double pqtime) {
 }
 
 /**
- * exportProject exports a project to a binary final
+ * exportProject exports a project to a binary file
  * @param lpid the local PID for the project to export
  * @param efile the filename to export to
  * @return 0 on success
@@ -490,16 +503,22 @@ int ServerManager::exportProject(int lpid, const char *efile) {
             fprintf(stderr, "This project was forked.  Note: lineage is not preserved with export.\n");
          }
          FILE *f = fopen(efile, "wb");
-         Buffer os;
+         fprintf(f, "%s\n", FILE_SIG);
 
-         os.write(FILE_SIG, strlen(FILE_SIG));
-         os.writeInt(FILE_VER);
-         os.write(toByteArray(pi.gpid), pi.gpid.length() / 2); //should probably garuntee GPID_SIZE write
-         os.write(toByteArray(pi.hash), pi.hash.length() / 2); //should probably garuntee MD5_SIZE write
-         os.writeLong(pi.sub);
-         os.writeLong(pi.pub);
-         os.writeUTF(pi.desc);  // at this point data is no longer at pre-known offsetsS
+         json_object *obj = json_object_new_object();
+         append_json_int32_val(obj, "version", FILE_VER);
+         append_json_string_val(obj, "gpid", pi.gpid);
+         append_json_string_val(obj, "hash", pi.hash);
+         append_json_uint64_val(obj, "subscribe", pi.sub);
+         append_json_uint64_val(obj, "publish", pi.pub);
+         append_json_string_val(obj, "description", pi.desc);
 
+         size_t jlen;
+         const char *json = json_object_to_json_string_length(obj, JSON_C_TO_STRING_PLAIN, &jlen);
+
+         fprintf(f, "%s\n", json);
+         json_object_put(obj);
+         
          static const int plens[1] = {4};
          static const int pformats[1] = {1};
          //insert into files values(stream_id, fname);
@@ -523,26 +542,24 @@ int ServerManager::exportProject(int lpid, const char *efile) {
                //printf("processing update %d...", (i + 1));
                printf(".");
                uint64_t updateid = *((uint64_t*)PQgetvalue(rset, i, 0));
-               int uid = ntohl(*(int*)PQgetvalue(rset, i, 1));
+               const char *uid = PQgetvalue(rset, i, 1);
                int pid = ntohl(*(int*)PQgetvalue(rset, i, 2));
-               int cmd = ntohl(*(int*)PQgetvalue(rset, i, 3));
-               uint8_t *data = (uint8_t*)PQgetvalue(rset, i, 4);
-               int dlen = PQgetlength(rset, i, 4);
+               const char *json = (const char*)PQgetvalue(rset, i, 3);
 
-               double created_d = *(double*)PQgetvalue(rset, i, 5);
+               double created_d = *(double*)PQgetvalue(rset, i, 4);
                time_t created = PQ_to_time_t(created_d);
 
-               os.writeInt(TAG);
-               os.writeLong(updateid);
-               os.writeInt(uid);
-               os.writeInt(pid);
-               os.writeInt(cmd);
-               os.writeInt(dlen);
-               os.write(data, dlen);
+               json_object *update = json_tokener_parse(json);
+               append_json_uint64_val(update, "updateid", updateid);
+               append_json_string_val(update, "uid", uid);
+               append_json_int32_val(update, "pid", pid);
+
                //write timestamp?
+               json = json_object_to_json_string_length(update, JSON_C_TO_STRING_PLAIN, &jlen);
+      
+               fprintf(f, "%s\n", json);
+               json_object_put(update);
             }
-            os.writeInt(ENDTAG);
-            fwrite(os.get_buf(), os.size(), 1, f);
             fclose(f);
             if (rows == 0 ) {
                printf("NO UPDATES FOUND FOR EXPORTING\n");
@@ -566,11 +583,11 @@ int ServerManager::exportProject(int lpid, const char *efile) {
 }
 
 /**
- * importProject imports a project from a binary final
+ * importProject imports a project from a binary file
  * @param ifile the filename to import from
  * @param newowner the local uid to be the owner of the new project
  */
-int ServerManager::importProject(FILE *ifile, int newowner) {
+int ServerManager::importProject(FILE *ifile, const char *newowner) {
    int rval = -1;
    if (mode == MODE_DB) {
       try {
@@ -579,96 +596,52 @@ int ServerManager::importProject(FILE *ifile, int newowner) {
          FileIO fdis;
          fdis.setFileDescriptor(fileno(ifile));
 
-         uint8_t sig[8];
-         fdis.readFully(sig, sizeof(sig));
-         if (memcmp(FILE_SIG, sig, sizeof(sig)) == 0) {
+         if (fdis.readLine() == FILE_SIG) {
             printf("Magic matched\n");
          }
          else {
-            printf("This doesn't appear to be a collabREate binary file\n");
+            printf("This doesn't appear to be a collabREate dump file\n");
             return -1;
          }
-         int ver = fdis.readInt();
-         printf("File format version %d\n", ver);
-         uint8_t gpid[GPID_SIZE];
-         fdis.readFully(gpid, sizeof(gpid));
-         printf("importing %s\n", toHexString(gpid, sizeof(gpid)).c_str());
-         uint8_t hash[MD5_SIZE];
-         fdis.readFully(hash, sizeof(hash));
-         printf("(%s)\n", toHexString(hash, sizeof(hash)).c_str());
-         uint64_t sub = ntohll(fdis.readLong());
-         uint64_t pub = ntohll(fdis.readLong());
-         printf("s 0x%llx, p 0x%llx\n", sub, pub);
-         string desc = fdis.readUTF();
-         printf("desc: %s\n", desc.c_str());
-
+         json_object *obj = fdis.readJson();
          //addproject
-         Buffer os;
-         os.writeInt(newowner);
-         os.write(gpid, sizeof(gpid));
-         os.write(hash, sizeof(hash));
-         os.writeUTF(desc);
-         os.writeLong(pub);
-         os.writeLong(sub);
-         send_data(MNG_PROJECT_MIGRATE, os.get_buf(), os.size());
-
-         //slightly dangerous to assume the next message, but hey, it's the managment app...
-         //(this could wait for this message forever)
+         //set the new project owner
+         append_json_string_val(obj, "newowner", newowner);
+         send_data(MNG_PROJECT_MIGRATE, obj);
 
          // this is really a throwaway, since we are expecting a specific message here
-         int messagesize = s->readInt();
-         if (messagesize != 12) {
-            fprintf(stderr, "protocol dictates 12 byte PROJECT_MIGRATE_REPLY, but recieved: %d\n", messagesize);
-            return rval;
-         }
+         obj = s->readJson();
+         const char *type = string_from_json(obj, "type");
 
-         int testcmd = s->readInt();
-         if (testcmd != MNG_PROJECT_MIGRATE_REPLY) {
-            fprintf(stderr, "protocol dictates PROJECT_MIGRATE_REPLY, but recieved: %d\n", testcmd);
+         if (strcmp(type, MNG_PROJECT_MIGRATE_REPLY)) {
+            fprintf(stderr, "protocol dictates PROJECT_MIGRATE_REPLY, but recieved: %s\n", type);
+            json_object_put(obj);
             return rval;
          }
-         int status = s->readInt();
-         if (status != MNG_MIGRATE_REPLY_SUCCESS) {
+         int status;
+         if (!int32_from_json(obj, "status", &status) || status != MNG_MIGRATE_REPLY_SUCCESS) {
             fprintf(stderr, "Project migrate did not succeed on server, check server logs for more info\n");
+            json_object_put(obj);
             return rval;
          }
          else {
             printf("Project creation succeeded on server\n");
          }
+         json_object_put(obj);
 
-         int tag = fdis.readInt();
-         while (tag == TAG) {
-            uint64_t updateid = fdis.readLong();
-            int uid = fdis.readInt();
-            int pid = fdis.readInt();
-            int cmd = fdis.readInt();
-            int datalen = fdis.readInt();
-            uint8_t *data = new uint8_t[datalen];
-            fdis.readFully(data, datalen);
-            //read timestamp?
-
+         string line;
+         while (fdis.readLine(line)) {
+            json_object *update = json_tokener_parse(line.c_str());
             //printf("update:" + updateid + " orig uid " + uid + " oldpid " + pid + " cmd " + cmd + " datalen " + datalen );
             printf(".");
-
-            //insertUpdate
-            Buffer cos;
-            cos.writeInt(newowner);  //this is required becuase the original uid may
-            //os.writeInt(uid);      //not be present on the new server (users aren't migrated yet)
-            //cos.writeInt(newpid);  //similary, we could specify the newly created project
-            cos.writeInt(pid);       //instead the Helper ignores pid and uses the last successfully migrated project from this session
-            cos.writeInt(cmd);
-            cos.writeInt(datalen);
-            cos.write(data, datalen);
-            send_data(MNG_MIGRATE_UPDATE, cos.get_buf(), cos.size());
-            delete [] data;
-            tag = fdis.readInt();
+            obj = json_object_new_object();
+            append_json_string_val(obj, "newowner", newowner);
+            size_t jlen;
+            append_json_string_val(obj, "update", json_object_to_json_string_length(update, JSON_C_TO_STRING_PLAIN, &jlen));
+            send_data(MNG_MIGRATE_UPDATE, obj);
+            json_object_put(update);
          }
-         if (tag != ENDTAG ) {
-            fprintf(stderr, "Error: didn't end update processing loop with ENDTAG\n");
-         }
-         else {
-            rval = 0;
-         }
+         rval = 0;
          fdis.close();
       } catch (IOException ex) {
          fprintf(stderr, "Error importing project\n");
@@ -682,11 +655,11 @@ int ServerManager::importProject(FILE *ifile, int newowner) {
 }
 
 /**
- * getProps is an inspector that gets the current operation mode of the connection manager
+ * getConfig is an inspector that gets the current operation mode of the connection manager
  * @return a Properites object
  */
-map<string,string> *ServerManager::getProps() {
-   return props;
+json_object *ServerManager::getConfig() {
+   return config;
 }
 
 /**
@@ -703,16 +676,17 @@ int ServerManager::getMode() {
  */
 void ServerManager::listConnections() {
    printf("\npre\n");
-   send_data(MNG_GET_CONNECTIONS, NULL, 0);
+   send_data(MNG_GET_CONNECTIONS);
    printf("\npost\n");
 
    //This requires that the server immediately replies !!!
    //otherwise we might get stuck here and have to kill the app
-   int len = s->readInt();
-   int cmd = s->readInt();
-   string thelist = s->readUTF();
+   json_object *obj = s->readJson();
+   json_object *conns = json_object_object_get(obj, "connections");
+
    printf("\nCollabREate Connections\n");
-   printf("%s\n", thelist.c_str());
+   printf("%s\n", json_object_get_string(conns));
+   json_object_put(obj);
 }
 
 /**
@@ -745,7 +719,7 @@ void ServerManager::listUsers() {
             const char *user = PQgetvalue(rset, i, 1);
             uint64_t pub = ntohll(*((uint64_t*)PQgetvalue(rset, i, 2)));
             uint64_t sub = ntohll(*((uint64_t*)PQgetvalue(rset, i, 3)));
-            printf("%-4d%-10s%-10llx%-10llx %s\n", uid, user, pub, sub, getPermRowString(pub, sub,8).c_str());
+            printf("%-4d%-10s%-10" PRIx64 "%-10" PRIx64 " %s\n", uid, user, pub, sub, getPermRowString(pub, sub,8).c_str());
          }
       }
       PQclear(rset);
@@ -799,13 +773,12 @@ void ServerManager::listProjects() {
             }
             ProjectInfo *temppi = new ProjectInfo(pid, desc);
             const char *isSnap = (snapupdateid > 0) ? " X " : "   ";
-            printf("%-4d %-4d %-4s %-10llx %-10llx %s %s\n", pid, ppid, isSnap, pub, sub, getPermRowString(pub, sub, 6).c_str(), desc);
+            printf("%-4d %-4d %-4s %-10" PRIx64 " %-10" PRIx64 " %s %s\n", pid, ppid, isSnap, pub, sub, getPermRowString(pub, sub, 6).c_str(), desc);
             temppi->parent = ppid;
             temppi->pdesc = PQgetvalue(rset, i, 7);
             temppi->snapupdateid = snapupdateid;
             temppi->pub = pub;
             temppi->sub = sub;
-            temppi->owner = 0;
             temppi->hash = PQgetvalue(rset, i, 2);
             temppi->gpid = PQgetvalue(rset, i, 1);
             plist.push_back(temppi);
@@ -822,7 +795,7 @@ void ServerManager::listProjects() {
  * closeDB closes all the database queries and the database connection
  */
 void ServerManager::closeDB() {
-   if (mode == MODE_DB) {
+   if (mode == MODE_DB && dbConn != NULL) {
       printf("Closing database connection\n");
       PGresult *res = PQexec(dbConn, "DEALLOCATE listUsers;");
       PQclear(res);
@@ -902,7 +875,7 @@ string ServerManager::getPermRowString(uint64_t p, uint64_t s, int colWidth) {
  */
 void ServerManager::exec(int argc, char **argv) {
    ServerManager *sm = NULL;
-   map<string,string> *p = NULL;
+   json_object *p = NULL;
    printf("Got %d args\n", argc);
    if (argc >= 2) {
       //user specified a config file
@@ -918,7 +891,6 @@ void ServerManager::exec(int argc, char **argv) {
       if (!strcmp("shutdown", argv[1]) || !strcmp("shutdown", argv[2])) {
          sm->shutdownServer();
          sm->terminate();
-         delete p;
          exit(0);
       }
    }
@@ -975,19 +947,19 @@ void ServerManager::exec(int argc, char **argv) {
             continue;
          }
 
-         printf("Subscribe permission bitfield (default: 0x%llx): ", (uint64_t)default_sub);
+         printf("Subscribe permission bitfield (default: 0x%" PRIx64 "): ", (uint64_t)default_sub);
          if (readLine(resp, sizeof(resp)) == NULL) {
             break;
          }
          uint64_t sub = parsePerms(resp, default_pub);
-         printf("Publish permission bitfield (default: 0x%llx): ", (uint64_t)default_pub);
+         printf("Publish permission bitfield (default: 0x%" PRIx64 "): ", (uint64_t)default_pub);
          if (readLine(resp, sizeof(resp)) == NULL) {
             break;
          }
          uint64_t pub = parsePerms(resp, default_pub);
 
          string md5 = getMD5(pass1);
-         printf("%s %s %s 0x%llx 0x%llx\n", username.c_str(), pass1.c_str(), md5.c_str(), pub, sub);
+         printf("%s %s %s 0x%" PRIx64 " 0x%" PRIx64 "\n", username.c_str(), pass1.c_str(), md5.c_str(), pub, sub);
          
          sm->addUser(username, md5, pub, sub);
       }
@@ -1093,12 +1065,12 @@ void ServerManager::exec(int argc, char **argv) {
             if (askyn()) {
                printf("Would you like to change the permissions by specifying numeric values? ");
                if (askyn()) {
-                  printf("Enter new publish permissions (0x%llx): ", pub);
+                  printf("Enter new publish permissions (0x%" PRIx64 "): ", pub);
                   if (readLine(resp, sizeof(resp)) == NULL) {
                      break;
                   }
                   pub = parsePerms(resp, pub);
-                  printf("Enter new subscribe permissions (0x%llx): ", sub);
+                  printf("Enter new subscribe permissions (0x%" PRIx64 "): ", sub);
                   if (readLine(resp, sizeof(resp)) == NULL) {
                      break;
                   }
@@ -1207,15 +1179,14 @@ void ServerManager::exec(int argc, char **argv) {
          }
          FILE *f = fopen(resp, "r");
          if (f != NULL) {
-            char userid[64];
+            char username[64];
             sm->listUsers();
-            int uid;
-            printf("Which user (uid) should be the new owner? ");
-            if (readLine(userid, sizeof(userid)) == NULL) {
+            printf("Which user (name) should be the new owner? ");
+            if (readLine(username, sizeof(username)) == NULL) {
                break;
             }
-            uid = strtoul(userid, NULL, 0);  //obviously doesn't check for valid uid
-            if (sm->importProject(f, uid) != 0) {
+            //obviously doesn't check for valid uid
+            if (sm->importProject(f, username) != 0) {
                fprintf(stderr, "import from %s did not complete successfully\n", resp);
             }
             fclose(f);
@@ -1257,7 +1228,6 @@ void ServerManager::exec(int argc, char **argv) {
          }
       }
    }
-   delete p;
 }
 
 int main(int argc, char **argv) {

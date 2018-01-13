@@ -1,7 +1,7 @@
 /*
-   collabREate db_support.h
-   Copyright (C) 2012 Chris Eagle <cseagle at gmail d0t com>
-   Copyright (C) 2012 Tim Vidas <tvidas at gmail d0t com>
+   collabREate db_mgr.h
+   Copyright (C) 2018 Chris Eagle <cseagle at gmail d0t com>
+   Copyright (C) 2018 Tim Vidas <tvidas at gmail d0t com>
 
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the Free
@@ -34,12 +34,12 @@ using namespace std;
 
 class DatabaseConnectionManager : public ConnectionManagerBase {
 public:
-   DatabaseConnectionManager(map<string,string> *p);
+   DatabaseConnectionManager(json_object *conf);
    ~DatabaseConnectionManager();
    
    int authenticate(Client *c, const char *user, const uint8_t *challenge, uint32_t clen, const uint8_t *response, uint32_t rlen);
-   void migrateUpdate(int newowner, int pid, int cmd, const uint8_t *data, int dlen);
-   void post(Client *src, int cmd, uint8_t *data, int dlen);
+   void migrateUpdate(const char *newowner, int pid, const char *cmd, json_object *obj);
+   void post(Client *src, const char *cmd, json_object *obj);
    void sendLatestUpdates(Client *c, uint64_t lastUpdate);
    ProjectInfo *getProjectInfo(int pid);
 
@@ -50,7 +50,7 @@ public:
    int forkProject(Client *c, uint64_t lastupdateid, const string &desc, uint64_t pub, uint64_t sub);
    void sendForkFollows(Client *originator, int oldlpid, uint64_t lastupdateid, const string &desc);
    int snapforkProject(Client *c, int spid, const string &desc, uint64_t pub, uint64_t sub);
-   int migrateProject(int owner, const string &gpid, const string &hash, const string &desc, uint64_t pub, uint64_t sub);
+   int migrateProject(const char *owner, const string &gpid, const string &hash, const string &desc, uint64_t pub, uint64_t sub);
    int addProject(Client *c, const string &hash, const string &desc, uint64_t pub, uint64_t sub);
    void updateProjectPerms(Client *c, uint64_t pub, uint64_t sub);
    int gpid2lpid(const string &gpid);
