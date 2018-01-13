@@ -1,3 +1,8 @@
+* 01/13/18
+  Migrate to json based protocol. Old protocol and database form no longer supported.
+  Supporting IDA versions 6.5-7.0
+  Binaries now land in bin directory
+
 * 01/02/17
   Conversion to protocol version 4, a JSON based messaging protocol
   Only the C++ server has been updated at this point

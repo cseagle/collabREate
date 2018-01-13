@@ -1,5 +1,5 @@
 #Set this variable to point to your SDK directory
-IDA_SDK=../../../
+IDA_SDK=../../
 
 SDKVER=$(shell pwd | grep -o -E "idasdk[0-9]{2,3}" | cut -c 7-)
 IDAVER=$(shell pwd | grep -o -E "idasdk[0-9]{2,3}" | cut -c 7- | sed 's/\(.\)\(.\)/\1\.\2/')
@@ -63,7 +63,7 @@ endif
 EXTRALIBS=-ljson-c
 
 # Destination directory for compiled plugins
-OUTDIR=$(IDA_SDK)bin/plugins/
+OUTDIR=./bin
 
 OBJDIR32=./obj32
 OBJDIR64=./obj64
@@ -132,6 +132,8 @@ $(BINARY64): $(OBJDIR64) $(OBJS64)
 
 endif
 
+$(OUTDIR):
+	-@mkdir -p $(OUTDIR)
 
 #$(OBJDIR32)/collabreate.o: collabreate.cpp
 #$(OBJDIR32)/collabreate_common.o: collabreate_common.cpp
