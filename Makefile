@@ -63,7 +63,7 @@ endif
 EXTRALIBS=-ljson-c
 
 # Destination directory for compiled plugins
-OUTDIR=./bin
+OUTDIR=./bin/
 
 OBJDIR32=./obj32
 OBJDIR64=./obj64
