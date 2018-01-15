@@ -463,7 +463,17 @@ int cmd_del_cref(json_object *json) {
    ea_from_json(json, "from", &from);
    ea_from_json(json, "to", &to);
    bool_from_json(json, "expand", &expand);
+#if 0
    del_cref(from, to, expand);
+#else
+   qstring a1, a2;
+   format_llx(from, a1);
+   format_llx(to, a2);
+   const char *user = string_from_json(json, "user");
+   char tmsg[128];
+   ::qsnprintf(tmsg, sizeof(tmsg), "<%s> del_cref from 0x%s to 0x%s", user, a1.c_str(), a2.c_str());
+   postCollabMessage(tmsg);
+#endif
    return 0;
 }
 
