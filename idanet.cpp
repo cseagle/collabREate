@@ -57,7 +57,7 @@ extern int stats[2][MSG_IDA_MAX + 1];
 #endif
 
 struct disp_request_t : public exec_request_t {
-   disp_request_t(Dispatcher disp) : d(disp) {mtx = qmutex_create();};
+   disp_request_t(Dispatcher disp) : _disp(disp) {mtx = qmutex_create();};
    ~disp_request_t();
    virtual int idaapi execute(void);
 
@@ -69,12 +69,12 @@ struct disp_request_t : public exec_request_t {
 
    qvector<qstring*> lines;
    qmutex_t mtx;
-   Dispatcher d;
+   Dispatcher _disp;
 };
 
-class AsyncSocket {
+class CollabSocket {
 public:
-   AsyncSocket(Dispatcher disp);
+   CollabSocket(Dispatcher disp);
    bool isConnected();
    bool connect(const char *host, short port);
    bool close();
@@ -90,14 +90,14 @@ private:
    pthread_t thread;
    static void *recvHandler(void *sock);
 #endif
-   Dispatcher d;
+   Dispatcher _disp;
    disp_request_t *drt;
    _SOCKET conn;
    bool connected;
    static bool initNetwork();
 };
 
-static AsyncSocket *comm;
+static CollabSocket *comm;
 
 bool init_network() {
    static bool isInit = false;
@@ -192,8 +192,8 @@ int idaapi disp_request_t::execute(void) {
       qstring *s = *i;
       lines.erase(i);
       qmutex_unlock(mtx);
-      msg("dequeued: %s\n", s->c_str());
-      bool res = (*d)(s->c_str());
+//      msg("dequeued: %s\n", s->c_str());
+      bool res = (*_disp)(s->c_str());
       delete s;
       if (!res) {  //not sure we really care what is returned here
 //         msg(PLUGIN_NAME": connection to server severed at dispatch.\n");
@@ -233,8 +233,8 @@ void disp_request_t::flush() {
    qmutex_unlock(mtx);
 }
 
-bool connect_to(const char *host, short port, Dispatcher d) {
-   comm = new AsyncSocket(d);
+bool connect_to(const char *host, short port, Dispatcher disp) {
+   comm = new CollabSocket(disp);
    if (!comm->connect(host, port)) {
       delete comm;
       comm = NULL;
@@ -246,7 +246,7 @@ bool is_connected() {
    return comm != NULL ? comm->isConnected() : false;
 }
 
-bool AsyncSocket::isConnected() {
+bool CollabSocket::isConnected() {
    return connected;
 }
 
@@ -258,7 +258,7 @@ bool AsyncSocket::isConnected() {
 //arguments: warn true displays a warning that cleanup is being called, false no warning
 //returns:   none.
 //
-void AsyncSocket::cleanup(bool warn) {
+void CollabSocket::cleanup(bool warn) {
    //cancel all notifications. if we don't do this ida will crash on exit.
    msg(PLUGIN_NAME": cleanup called.\n");
    if (connected) {
@@ -305,7 +305,7 @@ void cleanup(bool warn) {
 
 //connect to a remote host as specified by host and port
 //host may be wither an ip address or a host name
-bool AsyncSocket::connect(const char *host, short port) {
+bool CollabSocket::connect(const char *host, short port) {
    //create a socket.
    if (connect_to(host, port, &conn)) {
       //socket is connected create thread to handle receive data
@@ -328,7 +328,7 @@ bool AsyncSocket::connect(const char *host, short port) {
    return connected;
 }
 
-bool AsyncSocket::sendAll(const qstring &s) {
+bool CollabSocket::sendAll(const qstring &s) {
    qstring buf = s;
    while (true) {
 //      msg("sending new buffer\n");
@@ -355,21 +355,21 @@ bool AsyncSocket::sendAll(const qstring &s) {
    return true;
 }
 
-AsyncSocket::AsyncSocket(Dispatcher disp) {
-   d = disp;
+CollabSocket::CollabSocket(Dispatcher disp) {
+   _disp = disp;
    thread = 0;
    init_network();
    conn = (_SOCKET)INVALID_SOCKET;
    connected = false;
-   drt = new disp_request_t(d);
+   drt = new disp_request_t(_disp);
 }
 
-bool AsyncSocket::close() {
+bool CollabSocket::close() {
    cleanup();
    return true;
 }
 
-int AsyncSocket::recv(unsigned char *buf, unsigned int len) {
+int CollabSocket::recv(unsigned char *buf, unsigned int len) {
    return ::recv(conn, (char*)buf, len, 0);
 }
 
@@ -377,13 +377,13 @@ int AsyncSocket::recv(unsigned char *buf, unsigned int len) {
 //and we don't want to do anything other than execute_sync (which happens in
 //queueBuffer
 #ifdef _WIN32
-DWORD WINAPI AsyncSocket::recvHandler(void *_sock) {
+DWORD WINAPI CollabSocket::recvHandler(void *_sock) {
 #else
-void *AsyncSocket::recvHandler(void *_sock) {
+void *CollabSocket::recvHandler(void *_sock) {
 #endif
    static qstring b;
    unsigned char buf[2048];  //read a large chunk, we'll be notified if there is more
-   AsyncSocket *sock = (AsyncSocket*)_sock;
+   CollabSocket *sock = (CollabSocket*)_sock;
 
    while (sock->isConnected()) {
       int len = sock->recv(buf, sizeof(buf) - 1);
@@ -402,16 +402,17 @@ void *AsyncSocket::recvHandler(void *_sock) {
 //       assumption is that socket is borked and next send will fail also
 //       maybe should close socket here at a minimum.
 //       in any case thread is exiting
+//       reconnecting is a better strategy
          break;
       }
       buf[len] = 0;
-      if (sock->d) {
+      if (sock->_disp) {
          size_t lf;
-         msg("recv: %s\n", buf);
+//         msg("recv: %s\n", buf);
          b.append((char*)buf, len);   //append new data into static buffer
          while ((lf = b.find('\n')) != b.npos) {
             qstring *line = new qstring(b.c_str(), lf);
-            msg("line: %s\n", line->c_str());
+//            msg("line: %s\n", line->c_str());
             sock->drt->queueLine(line);
             b.remove(0, lf + 1); //shift any remaining portions of the buffer to the front
          }
@@ -440,6 +441,3 @@ int send_msg(const qstring &s) {
    }
    return 0;
 }
-
-
-
