@@ -41,6 +41,7 @@
 #include "utils.h"
 #include "basic_mgr.h"
 #include "db_mgr.h"
+#include "debug_mgr.h"
 #include "mgr_helper.h"
 #include "client.h"
 
@@ -91,13 +92,17 @@ void loop(NetworkService *svc) {
    }
    else {
       const char *mode = string_from_json(conf, "SERVER_MODE");
-      if (mode == NULL || strcmp(mode, "database")) {
+      if (mode != NULL && strcmp(mode, "database") == 0) {
+         fprintf(stderr, "Creating database mode manager\n");
+         mgr = new DatabaseConnectionManager(conf);
+      }
+      else if (mode != NULL && strcmp(mode, "basic") == 0) {
          fprintf(stderr, "Creating basic mode manager\n");
          mgr = new BasicConnectionManager(conf);
       }
       else {
-         fprintf(stderr, "Creating database mode manager\n");
-         mgr = new DatabaseConnectionManager(conf);
+         fprintf(stderr, "Creating debug mode manager\n");
+         mgr = new DebugConnectionManager(conf);
       }
    }
    //should choose between Basic and Database connection managers here
@@ -207,6 +212,7 @@ void writePidFile() {
  * then calls a function to accept incoming connections in a loop.
  */
 int main(int argc, char **argv, char **envp) {
+   const char *mode;
    Tcp6Service *svc;
    srand(time(NULL));
    if (signal(SIGCHLD, sigchld) == SIG_ERR) {
@@ -252,7 +258,11 @@ int main(int argc, char **argv, char **envp) {
    if (svc_user != NULL) {
       drop_privs_user(svc_user);
    }
-   daemon(1, 0);
+
+   mode = string_from_json(conf, "SERVER_MODE");
+   if (mode != NULL && strcmp(mode, "debug")) {
+      daemon(1, 0);
+   }
    writePidFile();
    loop(svc);
    return 0;

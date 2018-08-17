@@ -1,4 +1,4 @@
-SERVER_OBJS=server.o proj_info.o utils.o db_mgr.o client.o cli_mgr.o basic_mgr.o clientset.o projectmap.o mgr_helper.o
+SERVER_OBJS=server.o proj_info.o utils.o db_mgr.o client.o cli_mgr.o basic_mgr.o clientset.o projectmap.o mgr_helper.o debug_mgr.o
 MGR_OBJS=server_mgr.o proj_info.o utils.o
 
 CC=g++

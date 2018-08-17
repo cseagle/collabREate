@@ -217,7 +217,7 @@ const char * const FILE_SIG = "collabRE";
  */
 #define INVALID_USER -1
 /**
- * Constant to use for uid when in BASIC_MODE 
+ * Constant to use for uid when in BASIC_MODE or DEBUG_MODE
  */
 #define BASIC_USER 0
 

@@ -12,7 +12,7 @@
   "SERVER_PORT" : 5042,
 
   "SERVER_MODE" : "database",
-  "#SERVER_MODE" : "basic",
+  "#SERVER_MODE" : "datbase, basic, or none",
 
   "JDBC_DRIVER" : "org.postgresql.Driver",
   "JDBC_NAME" : "postgresql",
