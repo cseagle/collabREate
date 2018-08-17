@@ -326,7 +326,7 @@ ssize_t idaapi idp_hook(void * /*user_data*/, int notification_code, va_list va)
 //Collabreate messaging
 void build_handler_map();
 int handle_idp_msg(json_object *json, const char *msg_type);
-bool msg_dispatcher(const char *json_in);
+bool msg_dispatcher(json_object *json);
 
 //help with the transition to IDA 7.0
 
