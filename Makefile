@@ -132,9 +132,6 @@ $(BINARY64): $(OBJDIR64) $(OBJS64)
 
 endif
 
-$(OUTDIR):
-	-@mkdir -p $(OUTDIR)
-
 #$(OBJDIR32)/collabreate.o: collabreate.cpp
 #$(OBJDIR32)/collabreate_common.o: collabreate_common.cpp
 #$(OBJDIR32)/ida_ui.o: ida_ui.cpp
