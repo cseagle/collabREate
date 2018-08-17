@@ -209,7 +209,7 @@ json_object *IOBase::readJson() {
 bool IOBase::writeJson(json_object *obj) {
    size_t jlen;
    const char *json = json_object_to_json_string_length(obj, JSON_C_TO_STRING_PLAIN, &jlen);
-   *this << json << "\n";
+   *this << json;
    json_object_put(obj);   //release the object
    return true;
 }

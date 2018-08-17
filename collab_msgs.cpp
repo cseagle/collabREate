@@ -907,7 +907,7 @@ int cmd_create_struc_member_struct(json_object *json) {
    return 0;
 }
 
-int cmd_crete_struc_member_str(json_object *json) {
+int cmd_create_struc_member_str(json_object *json) {
    opinfo_t ti;
    ea_t soff;
    uint64_t tmp;
@@ -1160,7 +1160,9 @@ int cmd_tail_owner_changed(json_object *json) {
    }
    func_t *tail = get_func(tailea);
    if (tail) {
+#ifndef __IDAFW__
       set_tail_owner(tail, owner);
+#endif
    }
    return 0;
 }
@@ -1529,7 +1531,7 @@ int project_fork_follow(json_object *json) {
       msg(PLUGIN_NAME": user %s forked at 0x%s to new project: %s\n", user, formatLongLong(lastupdateid), desc);
       //msg(PLUGIN_NAME": would you like to follow the forked project? Y/N");
 #endif
-      if (askbuttons_c("Yes","No","",0,"User %s forked to a new project: %s, would you like to follow?",user,desc) == 1) {
+      if (askbuttons_c("Yes", "No", "", 0, "User %s forked to a new project: %s, would you like to follow?", user, desc) == 1) {
          msg(PLUGIN_NAME": join new project\n");
          do_project_leave();
          setGpid(gpid, GPID_SIZE);
@@ -1616,8 +1618,7 @@ int collab_fatal(json_object *json) {
 /*
  * Main dispatch routine for received remote notifications
  */
-bool msg_dispatcher(const char *json_in) {
-   json_object *json = json_tokener_parse(json_in);
+bool msg_dispatcher(json_object *json) {
    bool result = true;   
    if (json == NULL) {
       return false;
@@ -1745,7 +1746,7 @@ void build_handler_map() {
    ida_handlers[COMMAND_STRUC_CMT_CHANGED] = cmd_struc_cmt_changed;
    ida_handlers[COMMAND_CREATE_STRUC_MEMBER_DATA] = cmd_create_struc_member_data;
    ida_handlers[COMMAND_CREATE_STRUC_MEMBER_STRUCT] = cmd_create_struc_member_struct;
-   ida_handlers[COMMAND_CREATE_STRUC_MEMBER_STR] = cmd_crete_struc_member_str;
+   ida_handlers[COMMAND_CREATE_STRUC_MEMBER_STR] = cmd_create_struc_member_str;
    ida_handlers[COMMAND_CREATE_STRUC_MEMBER_ENUM] = cmd_create_struc_member_enum;
    ida_handlers[COMMAND_CREATE_STRUC_MEMBER_OFFSET] = cmd_create_struc_member_offset;
    ida_handlers[COMMAND_STRUC_MEMBER_DELETED] = cmd_struc_member_deleted;

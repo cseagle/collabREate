@@ -36,6 +36,8 @@
 #include <md5.h>
 #include <stdint.h>
 
+#include <json-c/json.h>
+
 #include "collabreate.h"
 #include "idanet.h"
 
@@ -63,11 +65,11 @@ struct disp_request_t : public exec_request_t {
 
    //disp_requst_t takes ownership of the buffer
    //it will be deleted eventually in execute
-   void queueLine(qstring *line);
+   void queueObject(json_object *obj);
 
    void flush(void);
 
-   qvector<qstring*> lines;
+   qvector<json_object*> objects;
    qmutex_t mtx;
    Dispatcher _disp;
 };
@@ -90,6 +92,8 @@ private:
    pthread_t thread;
    static void *recvHandler(void *sock);
 #endif
+   qstring host;
+   short port;
    Dispatcher _disp;
    disp_request_t *drt;
    _SOCKET conn;
@@ -186,15 +190,14 @@ disp_request_t::~disp_request_t() {
 //place within the StringList
 int idaapi disp_request_t::execute(void) {
 //   msg("execute called\n");
-   while (lines.size() > 0) {
+   while (objects.size() > 0) {
       qmutex_lock(mtx);
-      qvector<qstring*>::iterator i = lines.begin();
-      qstring *s = *i;
-      lines.erase(i);
+      qvector<json_object*>::iterator i = objects.begin();
+      json_object *obj = *i;
+      objects.erase(i);
       qmutex_unlock(mtx);
 //      msg("dequeued: %s\n", s->c_str());
-      bool res = (*_disp)(s->c_str());
-      delete s;
+      bool res = (*_disp)(obj);
       if (!res) {  //not sure we really care what is returned here
 //         msg(PLUGIN_NAME": connection to server severed at dispatch.\n");
          comm->cleanup(true);
@@ -209,11 +212,11 @@ int idaapi disp_request_t::execute(void) {
 
 //queue up a received datagram for eventual handlng via IDA's execute_sync mechanism
 //call no sdk functions other than execute_sync
-void disp_request_t::queueLine(qstring *line) {
+void disp_request_t::queueObject(json_object *obj) {
    bool call_exec = false;
    qmutex_lock(mtx);
-   lines.push_back(line);
-   call_exec = lines.size() == 1;
+   objects.push_back(obj);
+   call_exec = objects.size() == 1;
    qmutex_unlock(mtx);
 
    if (call_exec) {
@@ -226,10 +229,10 @@ void disp_request_t::queueLine(qstring *line) {
 
 void disp_request_t::flush() {
    qmutex_lock(mtx);
-   for (qvector<qstring*>::iterator i = lines.begin(); i != lines.end(); i++) {
+   for (qvector<json_object*>::iterator i = objects.begin(); i != objects.end(); i++) {
       delete *i;
    }
-   lines.clear();
+   objects.clear();
    qmutex_unlock(mtx);
 }
 
@@ -307,6 +310,9 @@ void cleanup(bool warn) {
 //host may be wither an ip address or a host name
 bool CollabSocket::connect(const char *host, short port) {
    //create a socket.
+   //remember these values if we need to reconnect
+   this->host = host;
+   this->port = port;
    if (connect_to(host, port, &conn)) {
       //socket is connected create thread to handle receive data
 #ifdef _WIN32
@@ -384,6 +390,7 @@ void *CollabSocket::recvHandler(void *_sock) {
    static qstring b;
    unsigned char buf[2048];  //read a large chunk, we'll be notified if there is more
    CollabSocket *sock = (CollabSocket*)_sock;
+   json_tokener *tok = json_tokener_new();
 
    while (sock->isConnected()) {
       int len = sock->recv(buf, sizeof(buf) - 1);
@@ -405,19 +412,40 @@ void *CollabSocket::recvHandler(void *_sock) {
 //       reconnecting is a better strategy
          break;
       }
-      buf[len] = 0;
       if (sock->_disp) {
-         size_t lf;
-//         msg("recv: %s\n", buf);
+         json_object *jobj = NULL;
+         enum json_tokener_error jerr;
+         buf[len] = 0;
          b.append((char*)buf, len);   //append new data into static buffer
-         while ((lf = b.find('\n')) != b.npos) {
-            qstring *line = new qstring(b.c_str(), lf);
-//            msg("line: %s\n", line->c_str());
-            sock->drt->queueLine(line);
-            b.remove(0, lf + 1); //shift any remaining portions of the buffer to the front
+
+         while (1) {
+            jobj = json_tokener_parse_ex(tok, b.c_str(), b.length());
+            jerr = json_tokener_get_error(tok);
+            if (jerr == json_tokener_continue) {
+//               msg("json_tokener_continue for %s\n", b.c_str());
+               break;
+            }
+            else if (jerr != json_tokener_success) {
+               //need to reconnect socket and in the meantime start caching event locally
+//               msg("jerr != json_tokener_success for %s\n", b.c_str());
+               break;
+            }
+            else if (jobj != NULL) {
+               msg("json_tokener_success for %s\n", b.c_str());
+               if (tok->char_offset < b.length()) {
+                  //shift any remaining portions of the buffer to the front
+                  b.remove(0, tok->char_offset); 
+               }
+               else {
+                  b.clear();
+               }
+               sock->drt->queueObject(jobj);
+            }
          }
+         json_tokener_reset(tok);
       }
    }
+   json_tokener_free(tok);
    return 0;
 }
 

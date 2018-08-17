@@ -138,7 +138,8 @@ public:
 
    /**
     * post is the function that actually posts updates to clients (if subscribing)
-    * @param data the bytearray containing the update to send
+    * @param msg message being sent
+    * @param obj message with associated parameters expressed as a json object
     */
    void post(const char *msg, json_object *obj);
    
@@ -147,7 +148,7 @@ public:
     * This function should ONLY be called for message id >= MSG_CONTROL_FIRST
     * because these messages do not contain an updateid
     * @param command the command to send
-    * @param data the data associated with the command
+    * @param obj message with associated parameters expressed as a json object
     */
    void send_data(const char *command, json_object *obj);
 

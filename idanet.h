@@ -21,7 +21,9 @@
 #ifndef __IDACONNECTOR_H__
 #define __IDACONNECTOR_H__
 
-typedef bool (*Dispatcher)(const char *json_in);
+#include <json-c/json.h>
+
+typedef bool (*Dispatcher)(json_object *obj);
 
 #ifndef __NT__
 #define _SOCKET int
