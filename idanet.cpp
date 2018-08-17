@@ -422,6 +422,7 @@ void *CollabSocket::recvHandler(void *_sock) {
             jobj = json_tokener_parse_ex(tok, b.c_str(), b.length());
             jerr = json_tokener_get_error(tok);
             if (jerr == json_tokener_continue) {
+               //json object is syntactically correct, but incomplete
 //               msg("json_tokener_continue for %s\n", b.c_str());
                break;
             }
@@ -431,7 +432,9 @@ void *CollabSocket::recvHandler(void *_sock) {
                break;
             }
             else if (jobj != NULL) {
-               msg("json_tokener_success for %s\n", b.c_str());
+               //we extracted a json object from the front of the string
+               //queue it and trim the string
+//               msg("json_tokener_success for %s\n", b.c_str());
                if (tok->char_offset < b.length()) {
                   //shift any remaining portions of the buffer to the front
                   b.remove(0, tok->char_offset); 
