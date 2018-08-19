@@ -41,7 +41,6 @@
 #include "utils.h"
 #include "basic_mgr.h"
 #include "db_mgr.h"
-#include "debug_mgr.h"
 #include "mgr_helper.h"
 #include "client.h"
 
@@ -96,13 +95,9 @@ void loop(NetworkService *svc) {
          fprintf(stderr, "Creating database mode manager\n");
          mgr = new DatabaseConnectionManager(conf);
       }
-      else if (mode != NULL && strcmp(mode, "basic") == 0) {
+      else {
          fprintf(stderr, "Creating basic mode manager\n");
          mgr = new BasicConnectionManager(conf);
-      }
-      else {
-         fprintf(stderr, "Creating debug mode manager\n");
-         mgr = new DebugConnectionManager(conf);
       }
    }
    //should choose between Basic and Database connection managers here

@@ -27,6 +27,8 @@
 #include <arpa/inet.h>
 #include <stdlib.h>
 #include <inttypes.h>
+#include <unistd.h>
+#include <fcntl.h>
 #include <json-c/json.h>
 #include "client.h"
 #include "utils.h"
@@ -587,23 +589,25 @@ int ServerManager::exportProject(int lpid, const char *efile) {
  * @param ifile the filename to import from
  * @param newowner the local uid to be the owner of the new project
  */
-int ServerManager::importProject(FILE *ifile, const char *newowner) {
+int ServerManager::importProject(int ifile, const char *newowner) {
    int rval = -1;
    if (mode == MODE_DB) {
       try {
+         char sig[9];
          ProjectInfo pi(1, "none");
 
-         FileIO fdis;
-         fdis.setFileDescriptor(fileno(ifile));
-
-         if (fdis.readLine() == FILE_SIG) {
+         if (read(ifile, sig, 9) == 9 && memcmp(sig, FILE_SIG, 9) == 0) {
             printf("Magic matched\n");
          }
          else {
             printf("This doesn't appear to be a collabREate dump file\n");
             return -1;
          }
-         json_object *obj = fdis.readJson();
+         json_object *obj = json_object_from_fd(ifile);
+         if (obj == NULL) {
+            printf("This doesn't appear to be a collabREate dump file\n");
+            return -1;
+         }
          //addproject
          //set the new project owner
          append_json_string_val(obj, "newowner", newowner);
@@ -629,9 +633,8 @@ int ServerManager::importProject(FILE *ifile, const char *newowner) {
          }
          json_object_put(obj);
 
-         string line;
-         while (fdis.readLine(line)) {
-            json_object *update = json_tokener_parse(line.c_str());
+         json_object *update;
+         while ((update = json_object_from_fd(ifile)) != NULL) {
             //printf("update:" + updateid + " orig uid " + uid + " oldpid " + pid + " cmd " + cmd + " datalen " + datalen );
             printf(".");
             obj = json_object_new_object();
@@ -642,7 +645,6 @@ int ServerManager::importProject(FILE *ifile, const char *newowner) {
             json_object_put(update);
          }
          rval = 0;
-         fdis.close();
       } catch (IOException ex) {
          fprintf(stderr, "Error importing project\n");
       }
@@ -1177,8 +1179,8 @@ void ServerManager::exec(int argc, char **argv) {
          if (readLine(resp, sizeof(resp)) == NULL) {
             break;
          }
-         FILE *f = fopen(resp, "r");
-         if (f != NULL) {
+         int f = open(resp, O_RDONLY);
+         if (f >= 0) {
             char username[64];
             sm->listUsers();
             printf("Which user (name) should be the new owner? ");
@@ -1189,7 +1191,7 @@ void ServerManager::exec(int argc, char **argv) {
             if (sm->importProject(f, username) != 0) {
                fprintf(stderr, "import from %s did not complete successfully\n", resp);
             }
-            fclose(f);
+            close(f);
          }
          else {
             printf("file %s not found.\n", resp);

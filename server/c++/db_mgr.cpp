@@ -266,7 +266,8 @@ int DatabaseConnectionManager::authenticate(Client *c, const char *user, const u
       //userid,pwhash,pub,sub
       uint32_t uid = ntohl(*(uint32_t*)PQgetvalue(rset, 0, 0));
       char *pwhash = PQgetvalue(rset, 0, 1);
-      uint8_t *key = toByteArray(pwhash);
+      uint32_t hashlen;
+      uint8_t *key = toByteArray(pwhash, &hashlen);
       int hlen = PQgetlength(rset, 0, 1);
       uint8_t *hmac = HmacMD5(challenge, clen, key, hlen / 2);
       delete [] key;

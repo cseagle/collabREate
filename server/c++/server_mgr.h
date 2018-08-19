@@ -141,10 +141,10 @@ private:
 
    /**
     * importProject imports a project from a binary final
-    * @param ifile the filename to import from
+    * @param ifile the file descriptor to import from
     * @param newowner the local uid to be the owner of the new project
     */
-   int importProject(FILE *ifile, const char *newowner);
+   int importProject(int ifile, const char *newowner);
 
    /**
     * getconfig is an inspector that gets the current operation mode of the connection manager

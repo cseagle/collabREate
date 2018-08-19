@@ -39,15 +39,12 @@
 
 #include "utils.h"
 
+using std::string;
+
 #define ERROR_CREATE_SOCK "Unable to create socket"
 #define ERROR_REUSE_SOCK "Unable to set reuse"
 #define ERROR_BIND_SOCK "Unable to bind socket"
 #define ERROR_LISTEN_SOCK "Unable to listen on socket"
-
-#define _FILE_STATE_OPEN  1
-#define _FILE_STATE_ERROR 2
-#define _FILE_STATE_EOF   4
-#define _FILE_HAVE_LAST   8
 
 const char *permStrings[] = {
       "Undefine",
@@ -74,6 +71,8 @@ union uLongLong {
    uint32_t ii[2];
 };
 
+static FILE *logger = stderr;
+
 uint64_t htonll(uint64_t val) {
    uLongLong ull;
    ull.ll = val;
@@ -89,21 +88,19 @@ uint64_t htonll(uint64_t val) {
  * @param hexString The string to convert
  * @return The byte array representation of the given string
  */
-uint8_t *toByteArray(string hexString) {
+uint8_t *toByteArray(string hexString, uint32_t *rlen) {
+   char buf[4];
    if ((hexString.length() % 2) == 1) {
       //invalid hex string
       return NULL;
    }
    int idx = 0;
    uint8_t *result = new uint8_t[hexString.length() / 2];
-   const char *hbuf = hexString.c_str();
+   buf[2] = 0;
    for (int i = 0; i < hexString.length(); i += 2) {
-      char buf[4];
-      memcpy(buf, hbuf + i, 2);
-      buf[2] = 0;
-      uint32_t val;
-      sscanf(buf, "%x", &val);
-      result[idx++] = (uint8_t)val;
+      buf[0] = hexString[i];
+      buf[1] = hexString[i + 1];
+      sscanf(buf, "%hhx", &result[idx++]);
    }
    return result;
 }
@@ -198,12 +195,8 @@ const string &IOException::getMessage() {
    return msg;
 }
 
-json_object *IOBase::readJson() {
-   string line;
-   if (readLine(line)) {
-      return json_tokener_parse(line.c_str());
-   }
-   return NULL;
+json_object *FileIO::readJson() {
+   return json_object_from_fd(fd);
 }
 
 bool IOBase::writeJson(json_object *obj) {
@@ -215,12 +208,59 @@ bool IOBase::writeJson(json_object *obj) {
 }
 
 FileIO::FileIO() {
-   state = curr = max = 0;
+   fd = -1;
+}
+
+FileIO::FileIO(int fd) {
+   this->fd = fd;
 }
 
 IOBase &FileIO::operator<<(const string &s) {
    this->sendMsg(s.c_str(), 0);
    return *this;
+}
+
+json_object *NetworkIO::readJson() {
+   char buf[2048];
+   json_tokener *tok = json_tokener_new();
+   json_object *obj = NULL;
+   enum json_tokener_error jerr;
+   while (1) {
+      ssize_t len = recv(fd, buf, sizeof(buf), 0);
+      if (len <= 0) {
+         break;
+      }
+      json_buffer.append(buf, len);   //append new data into json buffer
+
+      obj = json_tokener_parse_ex(tok, json_buffer.c_str(), json_buffer.length());
+      jerr = json_tokener_get_error(tok);
+      if (jerr == json_tokener_continue) {
+         //json object is syntactically correct, but incomplete
+         //fprintf(stderr, "json_tokener_continue for %s\n", json_buffer.c_str());
+         continue;
+      }
+      else if (jerr != json_tokener_success) {
+         //need to reconnect socket and in the meantime start caching event locally
+         //fprintf(stderr, "jerr != json_tokener_success for %s\n", json_buffer.c_str());
+         break;
+      }
+      if (obj != NULL && jerr == json_tokener_success) {
+         //we extracted a json object from the front of the string
+         //queue it and trim the string
+         //fprintf(stderr, "jerr == json_tokener_success for %s\n", json_buffer.c_str());
+         if (tok->char_offset < json_buffer.length()) {
+            //shift any remaining portions of the buffer to the front
+            json_buffer.erase(0, tok->char_offset); 
+         }
+         else {
+            json_buffer.clear();
+         }
+         break;
+      }
+      json_tokener_reset(tok);
+   }
+   json_tokener_free(tok);
+   return obj;
 }
 
 Tcp6IO::Tcp6IO(int fd, sockaddr_in6 &peer) {
@@ -236,83 +276,6 @@ void FileIO::setFileDescriptor(int fd) {
    this->fd = fd;
 }
 
-int FileIO::fillbuf() {
-/*
-   fd_set rds;
-   FD_ZERO(&rds);
-   FD_SET(fd, &rds);
-*/
-   curr = max = 0;
-   max = ::read(fd, buf, sizeof(buf));
-   if (max < 0) {
-      state |= _FILE_STATE_ERROR;
-      return EOF;
-   }
-   else if (max == 0) {
-      state |= _FILE_STATE_EOF;
-      return EOF;
-   }
-   return max;
-}
-
-int FileIO::read() {
-   if (curr < max) {
-/*
-      if (buf[curr] == '\n') {
-         fprintf(stderr, "read returning: \\n\n");
-      }
-      else {
-         fprintf(stderr, "read returning: %c\n", buf[curr]);
-      }
-*/
-      return buf[curr++];
-   }
-   //buffer empty get some more
-   int res = fillbuf();
-   if (res > 0) {
-      res = (uint32_t)buf[curr++];
-   }
-   return res;
-}
-
-uint32_t FileIO::get_avail(void *ubuf, uint32_t size) {
-   uint32_t result = 0;
-   if (curr < max) {
-      uint32_t avail = max - curr;
-      if (avail >= size) {
-         memcpy(ubuf, buf, size);
-         curr += size;
-         result = size;
-      }
-      else {
-         memcpy(ubuf, buf, avail);
-         curr += avail;
-         result = avail;
-      }
-   }
-   return result;
-}
-
-int FileIO::read(void *ubuf, uint32_t size) {
-   int fb;
-   uint32_t have = get_avail(ubuf, size);
-   if (have != size) {
-      do {
-         fb = fillbuf();
-         if (fb > 0) {
-            have += get_avail(have + (char*)ubuf, size - have);
-            if (have == size) {
-               return have;
-            }
-         }
-         else if (have > 0) {
-            return have;
-         }
-      } while (fb == sizeof(buf));
-   }
-   return fb;
-}
-
 /*
  * This reads up to size bytes into a user supplied buffer
  * Returns the number of bytes read or -1 if size bytes
@@ -324,81 +287,13 @@ int FileIO::readAll(void *ubuf, unsigned int size) {
    unsigned int total = 0;
    int nbytes;
    while (total < size) {
-      nbytes = read(total +(char*)ubuf, size - total);
+      nbytes = ::read(fd, total +(char*)ubuf, size - total);
       if (nbytes <= 0) {
          return -1;
       }
       total += nbytes;
    }
    return (int)total;
-}
-
-/*
- * This reads up to size bytes into a user supplied buffer
- * Returns the number of bytes read or -1 if size bytes
- * could not be read.
- * This function is really only useful for reading fixed 
- * size fields.
- */
-/*
-int NetworkIO::readAll(void *buf, unsigned int size) {
-   unsigned int total = 0;
-   unsigned char *b = (unsigned char *)buf;
-   int nbytes;
-   while (total < size) {
-      nbytes = recv(fd, b + total, size - total, 0);
-      if (nbytes <= 0) {
-         return -1;
-      }
-      total += nbytes;
-   }
-   return (int)total;
-}
-*/
-
-/*
- * Read characters into buf until endchar is found. Stop reading when
- * endchar is read.  Returns the total number of chars read EXCLUDING
- * endchar.  endchar is NEVER copied into the buffer.  Note that it
- * is possible to perform size+1 reads as long as the last char read
- * is endchar.
- */
-int FileIO::read_until_delim(char *ubuf, unsigned int size, char endchar) {
-   int ch;
-   unsigned int total = 0;
-   while (1) {
-      ch = read();
-      if (ch == EOF) {
-         return -1;
-      }
-      if (ch == endchar) break;
-      if (total >= size) return -1;
-      ubuf[total++] = (char)ch;
-   }
-   return (int)total;
-}
-
-bool FileIO::readLine(string &s) {
-   int ch;
-   while ((ch = read()) >= 0) {
-      if (ch == '\n') {
-         return true;
-      }
-      s += (char)ch;
-   }
-   return false;
-}
-
-string FileIO::readLine() {
-   int ch;
-   string res;
-   while ((ch = read()) >= 0) {
-      res += (char)ch;
-      if (ch == '\n') {
-         break;
-      }
-   }
-   return res;
 }
 
 NetworkIO::NetworkIO(const char *host, int port) {
@@ -440,52 +335,6 @@ NetworkIO::NetworkIO(const char *host, int port) {
 
    freeaddrinfo(addr);
 }
-
-/*
- * Read characters into buf until endchar is found. Stop reading when
- * endchar is read.  Returns the total number of chars read EXCLUDING
- * endchar.  endchar is NEVER copied into the buffer.  Note that it
- * is possible to perform size+1 reads as long as the last char read
- * is endchar.
- */
-/*
-int NetworkIO::read_until_delim(char *buf, unsigned int size, char endchar) {
-   char ch;
-   unsigned int total = 0;
-   while (1) {
-      if (recv(fd, &ch, 1, 0) <= 0) {
-         return -1;
-      }
-      if (ch == endchar) break;
-      if (total >= size) return -1;
-      buf[total++] = ch;
-   }
-   return (int)total;
-}
-
-bool NetworkIO::readLine(string &s) {
-   unsigned char ch;
-   while (recv(fd, &ch, 1, 0) == 1) {
-      if (ch == '\n') {
-         return true;
-      }
-      s += ch;
-   }
-   return false;
-}
-
-string NetworkIO::readLine() {
-   string res;
-   unsigned char ch;
-   while (recv(fd, &ch, 1, 0) == 1) {
-      res += ch;
-      if (ch == '\n') {
-         break;
-      }
-   }
-   return res;
-}
-*/
 
 int NetworkIO::getPeerPort() {
    sockaddr_in sa;
@@ -536,26 +385,8 @@ int FileIO::sendMsg(const char *buf, bool nullflag) {
 int FileIO::sendAll(const void *buf, unsigned int size) {
    unsigned int total = 0;
    const unsigned char *b = (const unsigned char *)buf;
-   fprintf(stderr, "FileIO::sendAll\n");
-   fwrite(buf, size, 1, stderr);
    while (total < size) {
       int nbytes = ::write(fd, b + total, size - total);
-      if (nbytes == 0) return -1;
-      total += nbytes;
-   }
-   return (int)total;
-}
-
-/*
- * write size characters from buf to the client socket
- * returns -1 on error or size if all chars were 
- * written.
- */
-int NetworkIO::sendAll(const void *buf, unsigned int size) {
-   unsigned int total = 0;
-   const unsigned char *b = (const unsigned char *)buf;
-   while (total < size) {
-      int nbytes = send(fd, b + total, size - total, 0);
       if (nbytes == 0) return -1;
       total += nbytes;
    }
@@ -736,7 +567,7 @@ NetworkIO *Tcp6Service::accept() {
             }
          }
       }
-      //no pending accepts to use select to wait for a socket to accept on
+      //no pending accepts so use select to wait for a socket to accept on
       FD_ZERO(&aset);
       for (vector<int>::iterator i = fds.begin(); i != fds.end(); i++) {
          FD_SET(*i, &aset);
@@ -803,16 +634,10 @@ int fill_random(unsigned char *buf, unsigned int size) {
       return 0;
    }
    else {
-      FileIO f;
-      f.setFileDescriptor(urand);
+      FileIO f(urand);
       f.readAll(buf, size);
-      f.close();
       return 1;
    }
-}
-
-json_object *parseConf(const char *fname) {
-   return json_object_from_file(fname);
 }
 
 short getShortOption(json_object *conf, const string &opt, short defaultValue) {
@@ -862,6 +687,23 @@ const char *getCstringOption(json_object *conf, const string &opt, const char *d
    else {
       return json_object_get_string(val);
    }
+}
+
+json_object *parseConf(const char *fname) {
+   json_object *conf = json_object_from_file(fname);
+   
+   if (conf) {
+      const char *logfile = getCstringOption(conf, "LOG_FILE", NULL);
+      if (logfile) {
+         FILE *f = fopen(logfile, "a");
+         if (f) {
+            setvbuf(f, NULL, _IONBF, 0);
+            logger = f;
+         }
+      }
+   }
+   
+   return conf;
 }
 
 const char *hex_encode(const void *bin, uint32_t len) {

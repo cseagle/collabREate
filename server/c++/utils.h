@@ -203,7 +203,7 @@ using namespace std;
 #define LSQL     10
 #define LDEBUG   15
  
-const char * const FILE_SIG = "collabRE";
+const char * const FILE_SIG = "collabRE\n";
 #define FILE_VER 2
 #define TAG      0xC077ABE8
 #define ENDTAG   0xDEADBEEF
@@ -228,7 +228,7 @@ class NetworkIO;
 uint64_t htonll(uint64_t val);
 #define ntohll(x) htonll(x)
 
-uint8_t *toByteArray(string hexString);
+uint8_t *toByteArray(string hexString, uint32_t *rlen);
 bool isNumeric(string s);
 bool isHex(string s);
 bool isAlphaNumeric(string s);
@@ -253,14 +253,9 @@ private:
 class IOBase {
 public:
    virtual ~IOBase() {};
-   virtual int read() = 0;
-   virtual int read(void *buf, uint32_t size) = 0;
    virtual int readAll(void *buf, uint32_t size) = 0;
-   virtual bool readLine(string &s) = 0;
-   virtual string readLine() = 0;
-   virtual json_object *readJson();
+   virtual json_object *readJson() = 0;
    virtual bool writeJson(json_object *obj);
-   virtual int read_until_delim(char *buf, uint32_t size, char endchar) = 0;
    virtual int sendMsg(const char *buf, bool nullflag = 0) = 0;
    virtual int sendAll(const void *buf, uint32_t len) = 0;
    virtual int sendFormat(const char *format, ...) = 0;
@@ -274,14 +269,11 @@ public:
 class FileIO : public IOBase {
 public:
    FileIO();
+   FileIO(int fd);
    virtual ~FileIO();
-   int read();
-   int read(void *buf, uint32_t size);
    void setFileDescriptor(int fd);
    int readAll(void *buf, uint32_t size);
-   int read_until_delim(char *buf, uint32_t size, char endchar);
-   bool readLine(string &s);
-   string readLine();
+   json_object *readJson();
    int sendMsg(const char *buf, bool nullflag = 0);
    int sendAll(const void *buf, uint32_t len);
    int sendFormat(const char *format, ...);
@@ -293,16 +285,8 @@ public:
    //output the string with no null terminator
    IOBase &operator<<(const string &s);
 
-private:
-   int fillbuf();
-   uint32_t get_avail(void *buf, uint32_t size);
-
 protected:
    int fd;
-   int state;
-   int curr;
-   int max;
-   unsigned char buf[4096];
 };
 
 class NetworkIO : public FileIO {
@@ -310,13 +294,11 @@ public:
    NetworkIO() {};
    NetworkIO(const char *host, int port);
    virtual ~NetworkIO() {};
-//   int readAll(void *buf, uint32_t size);
-//   int read_until_delim(char *buf, uint32_t size, char endchar);
-//   bool readLine(string &s);
-//   string readLine();
-   int sendAll(const void *buf, uint32_t len);
+   json_object *readJson();
    int getPeerPort();
    string getPeerAddr();   
+private:
+   string json_buffer;
 };
 
 class NetworkService {
