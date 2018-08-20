@@ -40,7 +40,7 @@ using namespace std;
  */
 
 
-BasicConnectionManager::BasicConnectionManager(json_object *conf) : ConnectionManagerBase(conf, true) {
+BasicConnectionManager::BasicConnectionManager(json_object *conf) : ConnectionManagerBase(conf) {
    basicmodepid = 500;
    sem_init(&pidLock, 0, 1);
 }
@@ -53,6 +53,16 @@ BasicConnectionManager::~BasicConnectionManager() {
       }
       delete v;
    }
+}
+
+void BasicConnectionManager::beginAuth(Client *c) {
+   //these are used only for the 'auto auth' in BASIC mode
+   log(LDEBUG, "BasicConnectionManager sending MSG_AUTH_REPLY\n");
+   authenticate(c, NULL, NULL, 0, NULL, 0);
+   c->setAuthenticated(true);
+   json_object *auth = json_object_new_object();
+   append_json_int32_val(auth, "reply", AUTH_REPLY_SUCCESS);
+   c->send_data(MSG_AUTH_REPLY, auth);
 }
 
 /**
@@ -151,9 +161,9 @@ vector<ProjectInfo*> *BasicConnectionManager::getProjectList(const string &phash
  */
 int BasicConnectionManager::joinProject(Client *c, uint32_t lpid) {
    int rval = -1;
-   ::logln("in join");
+   log(LDEBUG, "in join\n");
    bool foundPid = false;
-   ::logln("joining in basic mode");
+   log(LDEBUG, "joining in basic mode\n");
    Basic_it bi = basicProjects.find(c->getHash());
    if (bi != basicProjects.end()) {
       vector<ProjectInfo*> *plist = (*bi).second;
@@ -162,7 +172,7 @@ int BasicConnectionManager::joinProject(Client *c, uint32_t lpid) {
             foundPid = true;
             c->setGpid(EMPTY_GPID);
             c->setPid(lpid);
-            ::logln("BASIC mode has no notion of users, setting permissions based on REQ");
+           log(LDEBUG, "BASIC mode has no notion of users, setting permissions based on REQ\n");
             //c->setPub(c.getReqPub());
             //c->setSub(c.getReqSub());
             c->setPub(FULL_PERMISSIONS);
@@ -170,19 +180,19 @@ int BasicConnectionManager::joinProject(Client *c, uint32_t lpid) {
             break;
          }
          else {
-            ::logln("couldn't find current project");
+           log(LERROR, "couldn't find current project\n");
          }
       }
    }
    else {
-      ::logln("plist is NULL");
+     log(LINFO, "plist is NULL\n");
    }
    if (foundPid) {
       projects.addClient(c);
       rval = 0;
    }
    else {
-//            ::logln("ERROR: attempt to join a non-existant project: " + lpid, LERROR);
+//           log(LERROR, "ERROR: attempt to join a non-existant project: %u\n", lpid);
    }
 
    return rval;
@@ -277,7 +287,7 @@ int BasicConnectionManager::snapforkProject(Client *c, int spid, const string &d
 
 int BasicConnectionManager::migrateProject(const char *owner, const string &gpid, const string &hash, const string &desc, uint64_t pub, uint64_t sub) {
 
-   ::logln("migrating in BASIC mode doesn't make sense!", LERROR);
+  log(LERROR, "migrating in BASIC mode doesn't make sense!\n");
    return -1;
 }
 
@@ -292,11 +302,11 @@ int BasicConnectionManager::migrateProject(const char *owner, const string &gpid
  */
 
 int BasicConnectionManager::addProject(Client *c, const string &hash, const string &desc, uint64_t pub, uint64_t sub) {
-   ::logln("in addProject ", LDEBUG);
+  log(LDEBUG, "in addProject\n");
    int lpid = -1;
 //   int uid = c->getUid();
    string gpid;
-   //logln("incrementing basic mode pid to : " + basicmodepid, LINFO1);
+   //log(LINFO1, "incrementing basic mode pid to : %u\n", basicmodepid);
    sem_wait(&pidLock);
    lpid = basicmodepid++;
    Basic_it bi = basicProjects.find(hash);
@@ -316,7 +326,7 @@ int BasicConnectionManager::addProject(Client *c, const string &hash, const stri
    c->setPid(lpid);
    //basic mode has no Gpid?
    c->setGpid(EMPTY_GPID);
-   ::logln("BASIC mode has no notion of users, setting permissions based on REQ");
+  log(LINFO, "BASIC mode has no notion of users, setting permissions based on REQ\n");
    //c.setPub(c.getReqPub());
    //c.setSub(c.getReqSub());
    c->setPub(FULL_PERMISSIONS);

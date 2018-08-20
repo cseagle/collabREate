@@ -19,6 +19,7 @@
  */
 
 #include <stdio.h>
+#include <stdarg.h>
 #include <arpa/inet.h>
 #include <string.h>
 #include <ctype.h>
@@ -45,7 +46,7 @@ map<string,uint32_t> perms_map;
  * @version 0.4.0, August 2012
  */
 
-Client::Client(ConnectionManagerBase *mgr, NetworkIO *s, bool basic) {
+Client::Client(ConnectionManagerBase *mgr, NetworkIO *s) {
    if (handlers == NULL) {
       init_handlers();
    }
@@ -71,41 +72,39 @@ Client::Client(ConnectionManagerBase *mgr, NetworkIO *s, bool basic) {
 
    cm = mgr;
    conn = s;
-   basicMode = basic;
-   fprintf(stderr, "basicMode is: %u\n", basicMode);
 
-//   ::logln("New Connection", LINFO);
+   log(LINFO, "New Connection\n");
 
-   if (!basicMode) {
-     fill_random(challenge, CHALLENGE_SIZE);
-     json_object *obj = json_object_new_object();
-     append_json_hex_val(obj, "challenge", challenge, CHALLENGE_SIZE);
-     fprintf(stderr, "Sending initial challenge\n");
-     send_data(MSG_INITIAL_CHALLENGE, obj);
-   }
-   else {
-      //these are used only for the 'auto auth' in BASIC mode
-//      ::logln("sending AUTH_CONNECTED");
-      cm->authenticate(this, NULL, NULL, 0, NULL, 0);
-      authenticated = true;
-      json_object *auth = json_object_new_object();
-      append_json_int32_val(auth, "reply", AUTH_REPLY_SUCCESS);
-      send_data(MSG_AUTH_REPLY, auth);
-   }
+   //initiate the authentication process
+   cm->beginAuth(this);
+
    //the dummy gpid need to consist entirely of hex values.
    gpid = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
 }
 
+void Client::setChallenge(const uint8_t *data, uint32_t len) {
+   memcpy(challenge, data, len < CHALLENGE_SIZE ? len : CHALLENGE_SIZE);
+}
 
+/**
+ * logs a message to the configured log file (in the ConnectionManager)
+ * @param verbosity apply a verbosity level to the msg
+ * @param msg the string to log
+ */
+void Client::log(int verbosity, const char *format, ...) {
+   va_list va;
+   va_start(va, format);
+   ::log(verbosity, format, va);
+   va_end(va);
+}
+   
 /**
  * logs a message to the configured log file (in the ConnectionManager)
  * @param msg the string to log
  * @param v apply a verbosity level to the msg
  */
-void Client::log(const string &msg, int v) {
-   char buf[256];
-   snprintf(buf, sizeof(buf), "[%s:%d (%s:%u)] %s", conn->getPeerAddr().c_str(), conn->getPeerPort(), username.c_str(), uid, msg.c_str());
-   cm->log(buf, v);
+void Client::log(int verbosity, const string &msg) {
+   log(verbosity, "[%s:%d (%s:%u)] %s", conn->getPeerAddr().c_str(), conn->getPeerPort(), username.c_str(), uid, msg.c_str());
 }
 
 /**
@@ -115,16 +114,14 @@ void Client::log(const string &msg, int v) {
 void Client::post(const char *msg, json_object *obj) {
    if (checkPermissions(msg, subscribe)) {
       //only post if client is subscribing and is allowed to recieve that particular command
+      log(LDEBUG, "post- %s\n", json_object_to_json_string(obj));
       conn->writeJson(obj);
-      //::logln("post- datasize: " + data.length);
 //      stats[0][data[7] & 0xff]++;
    }
    else {
 /*
-      ::logln("Client " + hash + ":" + conn->getInetAddress().getHostAddress()
-                         + ":" + conn->getPeerPort() + " failed to post data. "
-                         + " (probably subscribe permission: "
-                         + parseCommand(data) + ")", LINFO3);
+      log(LINFO3, "Client %s:%s:%d failed to post data. (probably subscribe permission: "
+                         + parseCommand(data) + ")", hash.c_str(), conn->getInetAddress().getHostAddress(), conn->getPeerPort());
 */
    }
 }
@@ -146,7 +143,7 @@ void Client::send_data(const char *command, json_object *obj) {
       }
       json_object_object_add_ex(obj, "type", json_object_new_string(command), JSON_NEW_CONST_KEY);
 
-      fprintf(stderr, "Client::send_data calling conn->writeJson\n");
+      log(LDEBUG, "Client::send_data calling conn->writeJson\n");
       conn->writeJson(obj);  //calls json_object_put
       //fprintf(stderr, "send_data- cmd: %s\n");
 //      json_object_put(obj);
@@ -154,7 +151,7 @@ void Client::send_data(const char *command, json_object *obj) {
 /*
    }
    else {
-      fprintf(stderr, "post should be used for command %s, not send_data.  Data not sent.\n", command);
+      log(LINFO, "post should be used for command %s, not send_data.  Data not sent.\n", command);
    }
 */
 }
@@ -170,7 +167,7 @@ void Client::send_data(const char *command, json_object *obj) {
  */
 void Client::sendForkFollow(string fuser, string gpid, uint64_t lastupdateid, string desc) {
    json_object *obj = json_object_new_object();
-//   ::logln("Sending forkfollow for " + gpid + " initiated by " + fuser + " at updateid " + lastupdateid, LINFO2);
+//   log(LINFO2, "Sending forkfollow for %s initiated by %s at updateid %llu\n", gpid.c_str(), fuser.c_str(), lastupdateid);
    append_json_string_val(obj, "user", fuser);
    append_json_string_val(obj, "gpid", gpid);
    append_json_uint64_val(obj, "lastupdateid", lastupdateid);
@@ -180,7 +177,7 @@ void Client::sendForkFollow(string fuser, string gpid, uint64_t lastupdateid, st
 
 void Client::send_error_msg(string theerror, const char *type) {
    json_object *obj = json_object_new_object();
-//   ::logln("Protocol error detected: " + theerror, LERROR);
+//   log(LERROR, "Protocol error detected: %s\n", theerror.c_str());
    append_json_string_val(obj, "error", theerror);
    send_data(type, obj);
 }
@@ -189,8 +186,7 @@ void Client::send_error_msg(string theerror, const char *type) {
  * terminate closes the client's connection, removes this client from the connection manager
  */
 void Client::terminate() {
-//   ::logln("Client " + hash + ":" + conn->getPeerAddr()
-//                      + ":" + conn->getPeerPort() + " terminating", LINFO);
+//   log(LINFO, "Client %s:%s:%d terminating\n", hash.c_str(), conn->getPeerAddr().c_str(), conn->getPeerPort());
    conn->close();
    cm->remove(this);
 }
@@ -212,8 +208,6 @@ string Client::dumpStats() {
    return sb;
 }
 
-
-
 /**
  * checkPermissions checks to see if the current client has permissions to perform an operation
  * @param command the command to check permissions on
@@ -225,7 +219,7 @@ string Client::dumpStats() {
  */
 bool Client::checkPermissions(const char *command, uint64_t permType) {
    bool isallowed = false;
-//   ::logln("checking for permission " + command, LDEBUG);
+//   log(LDEBUG, "checking for permission %n", command);
    map<string,uint32_t>::iterator mi = perms_map.find(command);
    
    if (mi != perms_map.end()) {
@@ -233,7 +227,7 @@ bool Client::checkPermissions(const char *command, uint64_t permType) {
       isallowed = ((permType & mask) > 0) ?  true : false;
    }  //end command switch
    else {
-      //logln("unmatched command " + command + " found in publish switch", LERROR);
+      log(LERROR, "unmatched command %s found in publish switch\n", command);
    }      
    return isallowed;
 }
@@ -292,23 +286,23 @@ void *Client::run(void *arg) {
                //only post if this client chose to publish,
                //(though they really shouldn't have sent any data if they are not publishing)
                if (client->checkPermissions(cmd, client->publish)) {
-   //               ::logln("posting command " + command + " (allowed to  publish) ", LDEBUG);
+   //               client->log(LDEBUG, "posting command %s (allowed to  publish)\n", cmd);
                   client->cm->post(client, cmd, obj);
                }
                else {
-                  fprintf(stderr, "Skipping update no permissions\n");
-   //               ::logln("not allowed to perform command: " + command, LINFO);
+                  client->log(LINFO, "Skipping update no permissions\n");
+   //              logln("not allowed to perform command: " + command, LINFO);
                       // if (errorAlreadySentMask
                       // send_error("you are not allowed to byte patch");
                       // errorAlreadySentMask |= MASK_BYTE_PATCHED;
-                      // ::logln("sent errors is " + errorAlreadySentMask);
+                      //logln("sent errors is " + errorAlreadySentMask);
                   json_object_put(obj);
                }
             }
             else {
-               fprintf(stderr, "Skipping update authenticated: %d, publish: 0x%X\n", client->authenticated, (uint32_t)client->publish);
+               client->log(LINFO, "Skipping update authenticated: %d, publish: 0x%X\n", client->authenticated, (uint32_t)client->publish);
    /*
-               ::logln("Client " + hash + ":" + conn.getInetAddress().getHostAddress()
+               logln("Client " + hash + ":" + conn.getInetAddress().getHostAddress()
                                   + ":" + conn.getPeerPort() + " skipping post command.", LINFO);
    */
                json_object_put(obj);
@@ -316,10 +310,8 @@ void *Client::run(void *arg) {
          }
 
 /*
-#ifdef DEBUG
-         fprintf(stderr, "received data len: %d, cmd: %d\n", len, command);
-#endif
-//      ::logln("received data len: " + len + ", cmd: " + command, LDEBUG);
+         client->log(LDEBUG, "received data len: %d, cmd: %d\n", len, command);
+//         client->logln(LDEBUG, "received data len: " + len + ", cmd: " + command);
          if (command < MAX_COMMAND && command > 0) {
             client->stats[1][command]++;
          }
@@ -328,9 +320,9 @@ void *Client::run(void *arg) {
 */
       }
    } catch (IOException ex) {
-      fprintf(stderr, "An IOException occurred: %s\n", ex.getMessage().c_str());
+      client->log(LERROR, "An IOException occurred: %s\n", ex.getMessage().c_str());
    }
-   fprintf(stderr, "Client loop has ended\n");
+   client->log(LINFO, "Client loop has ended\n");
    client->terminate();
    delete client;
    return NULL;
@@ -427,7 +419,7 @@ void Client::init_handlers() {
 }
 
 bool Client::msg_project_new_request(json_object *obj, Client *c) {
-//                  ::logln("in NEW PROJECT REQUEST", LDEBUG);
+//   c->log(LDEBUG, "in NEW PROJECT REQUEST\n");
    if (!c->authenticated) {
       //nice try!!
       return false;
@@ -440,16 +432,16 @@ bool Client::msg_project_new_request(json_object *obj, Client *c) {
    uint64_from_json(obj, "sub", &sub);
    sub &= 0x7FFFFFFF;
 
-//                  ::logln("desired new project pub " + pub + ", and sub " + sub);
+//   c->logln(LDEBUG, "desired new project pub " + pub + ", and sub " + sub);
    int lpid = c->cm->addProject(c, c->hash, desc, pub, sub);
    json_object *resp = json_object_new_object();
    if (lpid >= 0) {
-//                     ::logln("NEW PROJECT REQUEST success", LINFO);
+//      c->log(LDEBUG, "NEW PROJECT REQUEST success\n");
       append_json_int32_val(resp, "reply", JOIN_REPLY_SUCCESS);
       append_json_string_val(resp, "gpid", c->gpid);
    }
    else {
-//                     ::logln("NEW PROJECT REQUEST fail", LINFO);
+      c->log(LINFO, "NEW PROJECT REQUEST fail\n");
       append_json_int32_val(resp, "reply", JOIN_REPLY_FAIL);
    }
    c->send_data(MSG_PROJECT_JOIN_REPLY, resp);
@@ -469,23 +461,23 @@ bool Client::msg_project_join_request(json_object *obj, Client *c) {
    uint64_from_json(obj, "sub", &c->rsubscribe);
    c->rsubscribe &= 0x7FFFFFFF;
 
-//               ::logln("attempting to join project " + lpid, LINFO);
+//   c->log(LINFO, "attempting to join project " + lpid);
    json_object *resp = json_object_new_object();
    if (c->cm->joinProject(c, lpid) >= 0 ) {
       append_json_int32_val(resp, "reply", JOIN_REPLY_SUCCESS);
       append_json_string_val(resp, "gpid", c->gpid);
-//                  ::logln("...success" + lpid, LINFO);
+//      c->logln(LINFO, "...success" + lpid);
    }
    else {
       append_json_int32_val(resp, "reply", JOIN_REPLY_FAIL);
-//                  ::logln("...failed" + lpid, LINFO);
+//      c->logln(LINFO, "...failed" + lpid);
    }
    c->send_data(MSG_PROJECT_JOIN_REPLY, resp);
    return false;
 }
 
 bool Client::msg_project_rejoin_request(json_object *obj, Client *c) {
-//                  ::logln("in PROJECT_REJOIN_REQUEST", LDEBUG);
+//   c->log(LDEBUG, "in PROJECT_REJOIN_REQUEST\n");
    bool res = false;
 //   int rejoingbasic = 0;
    string gpid = string_from_json(obj, "gpid");
@@ -500,7 +492,7 @@ bool Client::msg_project_rejoin_request(json_object *obj, Client *c) {
    }
    int lpid = c->cm->gpid2lpid(gpid);
    if (lpid < 0) {
-      ::logln("Invalid gpid received for project rejoin request", LERROR);
+      c->log(LERROR, "Invalid gpid received for project rejoin request\n");
       c->send_error("Invalid gpid");      
       return false;
    }
@@ -511,13 +503,13 @@ bool Client::msg_project_rejoin_request(json_object *obj, Client *c) {
    tsub &= 0x7FFFFFFF;
 
    if (!c->authenticated) {
-      ::logln("unauthorized project rejoin request", LERROR);
+      c->log(LERROR, "unauthorized project rejoin request\n");
       c->send_error("Authenication required for this operation");
       return res;
    }
    c->rpublish = tpub;
    c->rsubscribe = tsub;
-//                  ::logln("plugin requested rpub: " + rpublish + " rsub: " + rsubscribe);
+//   c->log(LDEBUG, "plugin requested rpub: " + rpublish + " rsub: " + rsubscribe);
    json_object *resp = json_object_new_object();
    if (c->cm->joinProject(c, lpid) >= 0 ) {
       append_json_int32_val(resp, "reply", JOIN_REPLY_SUCCESS);
@@ -535,17 +527,17 @@ bool Client::msg_project_rejoin_request(json_object *obj, Client *c) {
 }
 
 bool Client::msg_project_snapshot_request(json_object *obj, Client *c) {
-//                  ::logln("in SNAPSHOT REQ", LDEBUG);
+//   c->log(LDEBUG, "in SNAPSHOT REQ\n");
    string desc = string_from_json(obj, "description");
    int response = PROJECT_SNAPSHOT_FAIL;
    uint64_t lastupdateid;
    uint64_from_json(obj, "last_update", &lastupdateid);
    if (!c->authenticated) {
-      ::logln("unauthorized project snapshot request", LERROR);
+      c->log(LERROR, "unauthorized project snapshot request\n");
       c->send_error("Authenication required for this operation");
    }
    else if (lastupdateid <= 0 ) {
-      ::logln("attempt to add snapshot with 0 or less updates applied", LINFO);
+      c->log(LINFO, "attempt to add snapshot with 0 or less updates applied\n");
       c->send_error("snapshots with 0 or less updates are not allowed - start a new project instead");
    }
    else if (c->cm->snapProject(c, lastupdateid, desc) >= 0) {
@@ -562,10 +554,10 @@ bool Client::msg_project_fork_request(json_object *obj, Client *c) {
    int response = JOIN_REPLY_FAIL;
    uint64_t lastupdateid;
    uint64_from_json(obj, "last_update", &lastupdateid);
-//                  ::logln("in FORK REQUEST", LDEBUG);
+//                 logln("in FORK REQUEST", LDEBUG);
    json_object *resp = json_object_new_object();
    if (!c->authenticated) {
-      ::logln("unauthorized project fork request", LERROR);
+      c->log(LERROR, "unauthorized project fork request\n");
       c->send_error("Authenication required for this operation");
    }
 
@@ -583,7 +575,7 @@ bool Client::msg_project_fork_request(json_object *obj, Client *c) {
 }
 
 bool Client::msg_project_snapfork_request(json_object *obj, Client *c) {
-//                  ::logln("in SNAPFORK REQUEST", LDEBUG);
+//   c->log(LDEBUG, "in SNAPFORK REQUEST\n");
    string desc = string_from_json(obj, "description");
    uint64_t pub, sub;
    uint64_from_json(obj, "pub", &pub);
@@ -591,16 +583,16 @@ bool Client::msg_project_snapfork_request(json_object *obj, Client *c) {
    uint64_from_json(obj, "sub", &sub);
    sub &= 0x7FFFFFFF;
    int response = JOIN_REPLY_FAIL;
-//                  ::logln("in FORK REQUEST", LDEBUG);
+//                 logln("in FORK REQUEST", LDEBUG);
    json_object *resp = json_object_new_object();
 
    int lpid;
    int32_from_json(obj, "lpid", &lpid);
    if (!c->authenticated) {
-      ::logln("unauthorized project snapfork request", LERROR);
+      c->log(LERROR, "unauthorized project snapfork request\n");
       c->send_error("Authenication required for this operation");
    }
-//               ::logln("got " + lpid + ": " + desc, LDEBUG);
+//              logln("got " + lpid + ": " + desc, LDEBUG);
    else if (c->cm->snapforkProject(c, lpid, desc, pub, sub) >= 0) {
       //on successfull fork from snapshop, join the 'new' project automatically
       response = JOIN_REPLY_SUCCESS;
@@ -612,9 +604,9 @@ bool Client::msg_project_snapfork_request(json_object *obj, Client *c) {
 }
 
 bool Client::msg_project_leave(json_object *obj, Client *c) {
-//                  ::logln("in PROJECT LEAVE", LDEBUG);
+   c->log(LDEBUG, "in PROJECT LEAVE\n");
    if (!c->authenticated) {
-      ::logln("unauthorized project leave request", LERROR);
+      c->log(LERROR, "unauthorized project leave request\n");
       c->send_error("Authenication required for this operation");
    }
    else {
@@ -628,26 +620,24 @@ bool Client::msg_project_join_reply(json_object *obj, Client *c) {
 }
 
 bool Client::msg_auth_request(json_object *obj, Client *c) {
-//                  ::logln("in AUTH REQUEST", LDEBUG);
+   c->log(LDEBUG, "in AUTH REQUEST\n");
    int pluginversion;
    int32_from_json(obj, "protocol", &pluginversion);
    if (pluginversion != PROTOCOL_VERSION) {
       char buf[256];
       snprintf(buf, sizeof(buf), "Version mismatch. plugin: %d server: %d", pluginversion, PROTOCOL_VERSION);
-#ifdef DEBUG
-      fprintf(stderr, "%s\n", buf);
-#endif
+      c->log(LDEBUG, "%s\n", buf);
       c->send_error(buf);
-//                  ::logln("Version mismatch. plugin: " + pluginversion + " server: " + PROTOCOL_VERSION, LERROR);
+//      c->logln(LERROR, "Version mismatch. plugin: " + pluginversion + " server: " + PROTOCOL_VERSION);
       return true;
    }
    if (!c->authenticated) {
       uint32_t rsize;
       uint8_t *hmac = hex_from_json(obj, "hmac", &rsize);
       c->username = string_from_json(obj, "user");
-//                     ::logln("got user: " + client->username, LDEBUG);
+//      logln("got user: " + client->username, LDEBUG);
       if (rsize != MD5_SIZE) {
-         ::logln("Malformed AUTH REQUEST - failed to read hmac response", LERROR);
+         c->log(LERROR, "Malformed AUTH REQUEST - failed to read hmac response\n");
          c->send_error("Malformed AUTH_REQUEST");
          return true;  //disconnect
       }
@@ -659,26 +649,26 @@ bool Client::msg_auth_request(json_object *obj, Client *c) {
       if (c->uid != INVALID_UID) {
          c->authenticated = true;
 #ifdef DEBUG
-         fprintf(stderr, "uid set to %u\n", c->uid);
+         c->logln(LDEBUG, "uid set to " + c->uid);
 #endif
-         //::logln("uid set to "+ uid);
+         //c->log(LINFO4, "uid set to "+ uid);
          reply = AUTH_REPLY_SUCCESS;
       }
       else {
 #ifdef DEBUG
-         ::logln("AUTH_REPLY_FAIL");
+         c->log(LDEBUG, "AUTH_REPLY_FAIL\n");
 #endif
          c->authTries--;
       }
       append_json_int32_val(response, "reply", reply);
       c->send_data(MSG_AUTH_REPLY, response);
       if (c->authTries == 0) {
-         ::logln("too many auth attempts for " + c->getUser(), LERROR);
+         c->logln(LERROR, "too many auth attempts for " + c->getUser());
          return true;
       }
    }
    else {
-      ::logln("recv AUTH REQUEST when already authenticated", LERROR);
+      c->log(LERROR, "recv AUTH REQUEST when already authenticated\n");
       c->send_error("Attempt to Authenticate, when already authenticated");
    }
    return false;
@@ -690,14 +680,14 @@ bool Client::msg_project_list(json_object *obj, Client *c) {
       return false;
    }
    c->hash = string_from_json(obj, "md5");
-//                     ::logln("project hash: " + c->hash, LINFO4);
+//   c->log(LINFO4, "project hash: %s\n", c->hash.c_str());
    vector<ProjectInfo*> *plist = c->cm->getProjectList(c->hash);
 //   int nump = plist->size();
    json_object *projects = json_object_new_array();
-//                  ::logln(" Found  " + nump + " projects", LINFO3);
+//   c->log(LINFO3, " Found %u projects\n", nump);
    //create list of projects
    for (vector<ProjectInfo*>::iterator pi = plist->begin(); pi != plist->end(); pi++) {
-//                     log(" " + pi.lpid + " "+ pi.desc, LINFO4);
+//      c->log(LINFO4, " " + pi.lpid + " "+ pi.desc, LINFO4);
       char buf[256];
       json_object *proj = json_object_new_object();
       append_json_int32_val(proj, "id", (*pi)->lpid);
@@ -705,11 +695,11 @@ bool Client::msg_project_list(json_object *obj, Client *c) {
       if ((*pi)->parent > 0) {
          if ((*pi)->snapupdateid > 0) {
             snprintf(buf, sizeof(buf), "[-] %s (SNAP of '%s'@%" PRIu64 " updates])", (*pi)->desc.c_str(), (*pi)->pdesc.c_str(), (*pi)->snapupdateid);
-//                           log("[-] " + pi.desc + " (snapshot of (" + pi.parent + ")'" + pi.pdesc+"' ["+ pi.snapupdateid + " updates]) ", LDEBUG);
+//            log("[-] " + pi.desc + " (snapshot of (" + pi.parent + ")'" + pi.pdesc+"' ["+ pi.snapupdateid + " updates]) ", LDEBUG);
          }
          else {
             snprintf(buf, sizeof(buf), "[%d] %s (FORK of '%s')", (*pi)->connected, (*pi)->desc.c_str(), (*pi)->pdesc.c_str());
-//                           log("[" + pi.connected + "] " + pi.desc + " (forked from (" + pi.parent + ") '" + pi.pdesc +"')", LDEBUG);
+//            log("[" + pi.connected + "] " + pi.desc + " (forked from (" + pi.parent + ") '" + pi.pdesc +"')", LDEBUG);
          }
       }
       else {
@@ -723,9 +713,9 @@ bool Client::msg_project_list(json_object *obj, Client *c) {
       append_json_uint64_val(proj, "sub_mask", (*pi)->sub & c->usubscribe);
 
       json_object_array_add(projects, proj);
-//                     ::logln("", LDEBUG);
-//                     ::logln("pP " + (*pi)->pub + " pS " + (*pi)->sub, LINFO4);
-//                     ::logln("uP " + c->upublish + " uS " + c->usubscribe, LINFO4);
+//                    logln("", LDEBUG);
+//                    logln("pP " + (*pi)->pub + " pS " + (*pi)->sub, LINFO4);
+//                    logln("uP " + c->upublish + " uS " + c->usubscribe, LINFO4);
       delete *pi;
    }
    delete plist;
@@ -746,18 +736,18 @@ bool Client::msg_project_list(json_object *obj, Client *c) {
 
 bool Client::msg_send_updates(json_object *obj, Client *c) {
    if (c->authenticated) {
-//      ::logln("Received client->send_UPDATES request for " + lastupdate + " to current", LINFO1);
       uint64_t lastupdate;
       uint64_from_json(obj, "last_update", &lastupdate);
+//      c->logln(LINFO1, "Received client->send_UPDATES request for %llu to current", lastupdate);
       c->cm->sendLatestUpdates(c, lastupdate);
    }
    return false;
 }
 
 bool Client::msg_set_req_perms(json_object *obj, Client *c) {
-//                  ::logln("Received SET_REQ_PERMS request", LINFO1);
+//                 logln("Received SET_REQ_PERMS request", LINFO1);
    if (!c->authenticated) {
-      ::logln("unauthorized get req perms request",LERROR);
+      c->log(LERROR, "unauthorized get req perms request");
       c->send_error("Authenication required for this operation");
       return false;
    }
@@ -769,12 +759,12 @@ bool Client::msg_set_req_perms(json_object *obj, Client *c) {
 
    ProjectInfo *pi = c->cm->getProjectInfo(c->pid);
 /*
-   ::logln("effective publish  : " +
+  logln("effective publish  : " +
          uint64_t.toHexString(pi.pub) + " & " +
          uint64_t.toHexString(rpublish) + " & " +
          uint64_t.toHexString(upublish) + " = " +
          uint64_t.toHexString(pi.pub & upublish & rpublish),LINFO1);
-   ::logln("effective subscribe: " +
+  logln("effective subscribe: " +
          uint64_t.toHexString(pi.sub) + " & " +
          uint64_t.toHexString(rsubscribe) + " & " +
          uint64_t.toHexString(usubscribe) + " = " +
@@ -785,7 +775,7 @@ bool Client::msg_set_req_perms(json_object *obj, Client *c) {
       c->setSub(pi->sub & c->usubscribe & c->rsubscribe);
    }
    else {
-      ::logln("not honoring SET_REQ_PERMS for owner", LINFO1);
+      c->log(LINFO, "not honoring SET_REQ_PERMS for owner\n");
       c->send_error("You are the owner.  FULL permissions granted.");
    }
    delete pi;
@@ -793,9 +783,9 @@ bool Client::msg_set_req_perms(json_object *obj, Client *c) {
 }
 
 bool Client::msg_get_req_perms(json_object *obj, Client *c) {
-//                  ::logln("Received GET_REQ_PERMS request", LINFO1);
+//                 logln("Received GET_REQ_PERMS request", LINFO1);
    if (!c->authenticated) {
-      ::logln("unauthorized get req perms request",LERROR);
+      c->log(LERROR, "unauthorized get req perms request\n");
       c->send_error("Authenication required for this operation");
       return false;
    }
@@ -824,9 +814,9 @@ bool Client::msg_get_req_perms(json_object *obj, Client *c) {
 }
 
 bool Client::msg_get_proj_perms(json_object *obj, Client *c) {
-//                  ::logln("Received GET_PROJ_PERMS request", LINFO1);
+//                 logln("Received GET_PROJ_PERMS request", LINFO1);
    if (!c->authenticated) {
-      ::logln("unauthorized get project perms request",LERROR);
+      c->log(LERROR, "unauthorized get project perms request\n");
       c->send_error("Authenication required for this operation");
       return false;
    }
@@ -858,9 +848,9 @@ bool Client::msg_get_proj_perms(json_object *obj, Client *c) {
 }
 
 bool Client::msg_set_proj_perms(json_object *obj, Client *c) {
-//                  ::logln("Received GET_PROJ_PERMS request", LINFO1);
+//                 logln("Received GET_PROJ_PERMS request", LINFO1);
    if (!c->authenticated) {
-      ::logln("unauthorized get project perms request",LERROR);
+      c->log(LERROR, "unauthorized get project perms request\n");
       c->send_error("Authenication required for this operation");
       return false;
    }

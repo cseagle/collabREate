@@ -70,7 +70,7 @@ protected:
    sem_t queueMutex;
 
 public:
-   ConnectionManagerBase(json_object *conf, bool mode);
+   ConnectionManagerBase(json_object *conf);
    virtual ~ConnectionManagerBase() {};
    
    void start();
@@ -88,20 +88,6 @@ public:
    void remove(Client *c);
 
    /**
-    * logs a message to the configured log file (see server.conf)
-    * @param msg the string to log
-    * @param verbosity apply a verbosity level to the msg
-    */
-   void log(const string &msg, int verbosity = 0);
-
-   /**
-    * logs a message to the configured log file (see server.conf) (with newline)
-    * @param msg the string to log
-    * @param verbosity apply a verbosity level to the msg
-    */
-   void logln(const string &msg, int verbosity = 0);
-
-   /**
     * terminate terminates the connection manager
     * terminates all clients connected to all projects 
     */
@@ -114,6 +100,8 @@ public:
    void Shutdown() {
       terminate();
    }
+
+   virtual void beginAuth(Client *c) = 0;
 
    /**
     * authenticate authenticates a user (for use in database mode)
@@ -302,8 +290,6 @@ protected:
 
 private:
    json_object *conf;
-
-   bool basicMode;
 
 };
 

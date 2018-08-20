@@ -7,7 +7,7 @@ LD=g++
 CFLAGS = -fno-rtti -g
 
 #Print error messages
-CFLAGS += -DDEBUG
+CFLAGS += -DDEBUG -Wall
 #NDEBUG=-D DEBUG
 
 #need the following when using threads

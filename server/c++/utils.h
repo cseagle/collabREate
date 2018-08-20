@@ -22,6 +22,7 @@
 #define __COLLAB_UTILS_H
 
 #include <stdint.h>
+#include <stdarg.h>
 #include <sys/select.h>
 #include <string>
 #include <vector>
@@ -242,8 +243,11 @@ string toHexString(const uint8_t *buf, int len);
 string getMD5(const void *tohash, int len);
 string getMD5(const string &s);
 
-void log(const string &msg, int verbosity = 0);
-void logln(const string &msg, int verbosity = 0);
+void log(const char *format, ...);
+void log(int verbosity, const char *format, va_list va);
+void log(int verbosity, const char *format, ...);
+void log(int verbosity, const string &msg);
+void logln(int verbosity, const string &msg);
 
 extern const char *permStrings[];
 extern size_t permStringsLength;

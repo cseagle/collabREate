@@ -72,6 +72,7 @@ union uLongLong {
 };
 
 static FILE *logger = stderr;
+static int log_level = 0;
 
 uint64_t htonll(uint64_t val) {
    uLongLong ull;
@@ -180,12 +181,36 @@ string getMD5(const string &s) {
    return getMD5(s.c_str(), s.length());
 }
 
-void log(const string &msg , int verbosity) {
-   fprintf(logger, "%s", msg.c_str());
+void log(const char *format, va_list va) {
+   vfprintf(logger, format, va);
 }
 
-void logln(const string &msg , int verbosity) {
-   log(msg + "\n", verbosity);
+void log(int verbosity, const char *format, va_list va) {
+   if (verbosity <= log_level) {
+      log(format, va);
+   }
+}
+
+void log(const char *format, ...) {
+   va_list va;
+   va_start(va, format);
+   log(format, va);
+   va_end(va);
+}
+
+void log(int verbosity, const char *format, ...) {
+   va_list va;
+   va_start(va, format);
+   log(verbosity, format, va);
+   va_end(va);
+}
+
+void log(int verbosity, const string &msg) {
+   log(verbosity, "%s", msg.c_str());
+}
+
+void logln(int verbosity, const string &msg) {
+   log(verbosity, "%s\n", msg.c_str());
 }
 
 IOException::IOException(const string &msg) {
@@ -684,6 +709,7 @@ json_object *parseConf(const char *fname) {
             logger = f;
          }
       }
+      log_level = getIntOption(conf, "LOG_VERBOSITY", 0);
    }
    
    return conf;

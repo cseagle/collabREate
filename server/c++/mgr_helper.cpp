@@ -108,10 +108,10 @@ void ManagerHelper::send_data(const char *command, json_object *obj) {
 
       nio->writeJson(obj);   //calls json_object_put
 //      json_object_put(obj);
-//         logln("send_data- cmd: " + command + " datasize: " + data.length, LDEBUG);
+//         log(LDEBUG, "send_data- cmd: %s\n", command);
    }
    else {
-//         logln("post should be used for command " + command + ", not send_data.  Data not sent.", LERROR);
+//      log(LERROR, "post should be used for command %s, not send_data.  Data not sent.", command);
    }
 }
 
@@ -121,11 +121,11 @@ void ManagerHelper::send_data(const char *command, json_object *obj) {
  */
 void *ManagerHelper::run(void *arg) {
    ManagerHelper *mh = (ManagerHelper*)arg;
-   mh->logln("ManagerHelper running...", LINFO);
+   log(LINFO, "ManagerHelper running...\n");
    //just accept a single connection, loop back if the connection drops
    while (!mh->done) {
       mh->nio = mh->ss->accept();
-//         logln("New Management connection: " + s.getInetAddress().getHostAddress() + ":" + s.getPort(), LINFO);
+//      log(LINFO, "New Management connection: %s:%u\n", s.getInetAddress().getHostAddress(), s.getPort());
       try {
          while (!mh->done) {
             json_object *obj = mh->nio->readJson();
@@ -140,7 +140,7 @@ void *ManagerHelper::run(void *arg) {
                (*h)(obj, mh);
             }
             else {
-               mh->logln("unkown command", LERROR);
+               log(LERROR, "unkown command\n");
 //The ServerManager has no means of processing this message as it is very much
 //a synchronous protocol: Send Command -> Process Reply.  If we don't recognize
 //their command we can easily drop it, but they are not likely to be looking
@@ -165,24 +165,6 @@ void ManagerHelper::terminate() {
    ss->close();
 }
 
-/**
- * logs a message to the configured log file (in the ConnectionManager)
- * @param msg the string to log
- * @param v apply a verbosity level to the msg
- */
-void ManagerHelper::log(const string &msg, int v) {
-   cm->log("[MNG]" +  msg, v);
-}
-
-/**
- * logs a message using log() (with newline)
- * @param msg the string to log
- * @param v apply a verbosity level to the msg
- */
-void ManagerHelper::logln(const string &msg, int v) {
-   log(msg + "\n", v);
-}
-
 void ManagerHelper::start() {
    pthread_attr_t attr;
    pthread_attr_init(&attr);
@@ -201,7 +183,7 @@ void ManagerHelper::init_handlers() {
 }
 
 void ManagerHelper::mng_get_connections(json_object *obj, ManagerHelper *mh) {
-   mh->logln("sending connections", LINFO3);
+   log(LINFO3, "sending connections");
    string c = mh->cm->listConnections();
    json_object *out = json_object_new_object();
    json_object_object_add_ex(out, "connections", json_object_new_string(c.c_str()), JSON_NEW_CONST_KEY);
@@ -209,7 +191,7 @@ void ManagerHelper::mng_get_connections(json_object *obj, ManagerHelper *mh) {
 }
 
 void ManagerHelper::mng_get_stats(json_object *obj, ManagerHelper *mh) {
-   mh->logln("sending stats", LINFO3);
+   log(LINFO3, "sending stats\n");
    string c = mh->cm->dumpStats();
    json_object *out = json_object_new_object();
    json_object_object_add_ex(out, "stats", json_object_new_string(c.c_str()), JSON_NEW_CONST_KEY);
@@ -218,7 +200,7 @@ void ManagerHelper::mng_get_stats(json_object *obj, ManagerHelper *mh) {
 
 void ManagerHelper::shutdown() {
    done = true;
-   logln("client requested server shutdown", LINFO);
+   log(LINFO, "client requested server shutdown\n");
    cm->Shutdown();
    delete cm;
    cm = NULL;
@@ -232,7 +214,7 @@ void ManagerHelper::mng_shutdown(json_object *obj, ManagerHelper *mh) {
 }
 
 void ManagerHelper::mng_project_migrate(json_object *obj, ManagerHelper *mh) {
-   mh->logln("client requested a project migrate", LINFO);
+   log(LINFO, "client requested a project migrate\n");
    int status = MNG_MIGRATE_REPLY_FAIL;
    
    const char *uid = string_from_json(obj, "newowner");
@@ -245,12 +227,12 @@ void ManagerHelper::mng_project_migrate(json_object *obj, ManagerHelper *mh) {
 
    int newpid = mh->cm->migrateProject(uid, gpid, hash, desc, pub, sub);
    if (newpid > 0) {
-//                        logln("Added new project " + newpid + " via project migration from another server");
+//      log(LINFO4, "Added new project %d via project migration from another server\n", newpid);
       status = MNG_MIGRATE_REPLY_SUCCESS;
       mh->pidForUpdates = newpid;  //store globally for any updates that may come in
    }
    else {
-//                        logln("migrate project failed for gpid " + gpid + " hash " + hash);
+//      log("migrate project failed for gpid %s hash %s\n", gpid, hash);
       status = MNG_MIGRATE_REPLY_FAIL;
    }
    json_object *resp = json_object_new_object();
@@ -259,12 +241,12 @@ void ManagerHelper::mng_project_migrate(json_object *obj, ManagerHelper *mh) {
 }
 
 void ManagerHelper::mng_migrate_update(json_object *obj, ManagerHelper *mh) {
-   mh->logln("in MNG_MIGRATE_UPDATE", LERROR);
+   log(LDEBUG, "in MNG_MIGRATE_UPDATE\n");
    const char *uid = string_from_json(obj, "newowner");
    const char *inner_json = string_from_json(obj, "update");
    json_object *inner = json_tokener_parse(inner_json);
    const char *cmd = string_from_json(inner, "type");
-   mh->logln("... got data", LERROR);
+   log(LDEBUG, "... got data\n", LERROR);
    mh->cm->migrateUpdate(uid, mh->pidForUpdates, cmd, inner);
    json_object_put(inner);
 }

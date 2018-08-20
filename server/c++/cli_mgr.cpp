@@ -42,9 +42,8 @@ Packet::Packet(Client *src, const char *cmd, json_object *obj, uint64_t updateid
  */
 const char * const ConnectionManagerBase::EMPTY_GPID = "0000000000000000000000000000000000000000000000000000000000000000";
 
-ConnectionManagerBase::ConnectionManagerBase(json_object *conf, bool mode) {
+ConnectionManagerBase::ConnectionManagerBase(json_object *conf) {
    this->conf = conf;
-   basicMode = mode;
    done = false;
    sem_init(&pidLock, 0, 1);
    sem_init(&queueSem, 0, 0);
@@ -65,29 +64,11 @@ static bool termClients(Client *c, void *user) {
 }
 
 /**
- * logs a message to the configured log file (server.conf)
- * @param msg the string to log
- * @param verbosity apply a verbosity level to the msg
- */
-void ConnectionManagerBase::log(const string &msg, int verbosity) {
-   ::log(msg, verbosity);
-}
-
-/**
- * logs a message to the configured log file (server.conf) (with newline)
- * @param msg the string to log
- * @param verbosity apply a verbosity level to the msg
- */
-void ConnectionManagerBase::logln(const string &msg, int verbosity) {
-   ::logln(msg, verbosity);
-}
-
-/**
  * terminate terminates the connection manager
  * it terminates all clients connected to all projects 
  */
 void ConnectionManagerBase::terminate() {
-   ::logln("ConnectionManager terminating", LINFO);
+   log(LINFO, "ConnectionManager terminating\n");
    done = true;
    projects.loopClients(termClients, NULL);
    if (conf != NULL) {
@@ -100,7 +81,7 @@ void ConnectionManagerBase::terminate() {
  * @param s the socket to create new client for
  */
 void ConnectionManagerBase::add(NetworkIO *s) {
-   Client *c = new Client(this, s, basicMode);
+   Client *c = new Client(this, s);
    c->start();
 }
 
@@ -109,7 +90,7 @@ void ConnectionManagerBase::add(NetworkIO *s) {
  * @param c the client to remove (from whatever project it is already connected to)
  */
 void ConnectionManagerBase::remove(Client *c) {
-//   ::logln("Removing client from " + c->getGpid() + " chain", LINFO1);
+//  logln("Removing client from " + c->getGpid() + " chain", LINFO1);
    projects.removeClient(c);
 }
 

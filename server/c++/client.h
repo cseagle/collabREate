@@ -48,7 +48,7 @@ typedef bool (*ClientMsgHandler)(json_object *obj, Client *c);
 class Client {
 public:
 
-   Client(ConnectionManagerBase *mgr, NetworkIO *s, bool basic);
+   Client(ConnectionManagerBase *mgr, NetworkIO *s);
 
    void start();
    
@@ -56,18 +56,25 @@ public:
 
    /**
     * logs a message to the configured log file (in the ConnectionManager)
+    * @param verbosity apply a verbosity level to the msg
     * @param msg the string to log
-    * @param v apply a verbosity level to the msg
     */
-   void log(const string &msg, int v = 0);
+   void log(int verbosity, const char *format, ...);
+   
+   /**
+    * logs a message to the configured log file (in the ConnectionManager)
+    * @param verbosity apply a verbosity level to the msg
+    * @param msg the string to log
+    */
+   void log(int verbosity, const string &msg);
    
    /**
     * logs a message using log() (with newline)
+    * @param verbosity apply a verbosity level to the msg
     * @param msg the string to log
-    * @param v apply a verbosity level to the msg
     */
-   void logln(const string &msg, int v = 0) {
-      log(msg + "\n", v);
+   void logln(int verbosity, const string &msg) {
+      log(verbosity, msg + "\n");
    }
 
    /**
@@ -304,6 +311,11 @@ public:
       return username;
    }
 
+   void setAuthenticated(bool auth = true) {authenticated = auth;};
+   bool getAuthenticated() {return authenticated;};
+   void setChallenge(const uint8_t *data, uint32_t len);
+   const uint8_t *getChallenge(uint32_t &len) {len = CHALLENGE_SIZE; return challenge;};
+
 private:
    /**
     * checkPermissions checks to see if the current client has permissions to perform an operation
@@ -342,8 +354,6 @@ private:
 
    int stats[2][MAX_COMMAND];
    
-   bool basicMode;
-
    static map<string,ClientMsgHandler> *handlers;
 
    static bool msg_project_new_request(json_object *obj, Client *c);

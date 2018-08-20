@@ -51,6 +51,8 @@ public:
    BasicConnectionManager(json_object *conf);
    virtual ~BasicConnectionManager();
 
+   virtual void beginAuth(Client *c);
+
    /**
     * authenticate authenticates a user (for use in database mode)
     * bacially this is standard CHAP with HMAC (md5)

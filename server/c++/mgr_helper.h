@@ -93,20 +93,6 @@ private:
     */
    void terminate();
 
-   /**
-    * logs a message to the configured log file (in the ConnectionManager)
-    * @param msg the string to log
-    * @param v apply a verbosity level to the msg
-    */
-   void log(const string &msg, int v = 0);
-
-   /**
-    * logs a message using log() (with newline)
-    * @param msg the string to log
-    * @param v apply a verbosity level to the msg
-    */
-   void logln(const string &msg, int v = 0);
-
    static void mng_get_connections(json_object *obj, ManagerHelper *mh);
    static void mng_get_stats(json_object *obj, ManagerHelper *mh);
    static void mng_shutdown(json_object *obj, ManagerHelper *mh);

@@ -72,7 +72,7 @@ void DatabaseConnectionManager::init_queries() {
                        "insert into updates (username,pid,cmd,json) values ($1,$2,$3,$4) returning updateid;",
                        0, NULL);
    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-      fprintf(stderr, "postUpdate: %s\n", PQerrorMessage(dbConn));
+      log(LSQL, "postUpdate: %s\n", PQerrorMessage(dbConn));
    }
    PQclear(res);
    sem_init(&ap_sem, 0, 1);
@@ -80,7 +80,7 @@ void DatabaseConnectionManager::init_queries() {
                    "insert into projects (hash,gpid,description,owner,pub,sub,protocol) values ($1,$2,$3,$4,$5,$6,$7) returning pid;",
                    0, NULL);
    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-      fprintf(stderr, "addProject: %s\n", PQerrorMessage(dbConn));
+      log(LSQL, "addProject: %s\n", PQerrorMessage(dbConn));
    }
    PQclear(res);
    sem_init(&aps_sem, 0, 1);
@@ -88,7 +88,7 @@ void DatabaseConnectionManager::init_queries() {
                    "insert into projects (hash,gpid,description,owner,snapupdateid,protocol) values ($1,$2,$3,$4,$5,$6) returning pid;",
                    0, NULL);
    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-      fprintf(stderr, "addProjectSnap: %s\n", PQerrorMessage(dbConn));
+      log(LSQL, "addProjectSnap: %s\n", PQerrorMessage(dbConn));
    }
    PQclear(res);
    sem_init(&apf_sem, 0, 1);
@@ -96,7 +96,7 @@ void DatabaseConnectionManager::init_queries() {
                    "insert into forklist (child,parent) values ($1,$2) returning fid;",
                    0, NULL);
    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-      fprintf(stderr, "addProjectFork: %s\n", PQerrorMessage(dbConn));
+      log(LSQL, "addProjectFork: %s\n", PQerrorMessage(dbConn));
    }
    PQclear(res);
    sem_init(&fpbh_sem, 0, 1);
@@ -104,7 +104,7 @@ void DatabaseConnectionManager::init_queries() {
                    "select p.pid,p.hash,p.gpid,p.description,f.parent,p.snapupdateid,q.description,p.pub,p.sub,p.owner,p.protocol from projects p left join (forklist f left join projects q on f.parent=q.pid) on p.pid = f.child where p.hash = $1 order by p.pid asc;",
                    0, NULL);
    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-      fprintf(stderr, "findProjectsByHash: %s\n", PQerrorMessage(dbConn));
+      log(LSQL, "findProjectsByHash: %s\n", PQerrorMessage(dbConn));
    }
    PQclear(res);
    sem_init(&fpbp_sem, 0, 1);
@@ -112,7 +112,7 @@ void DatabaseConnectionManager::init_queries() {
                    "select p.pid,p.hash,p.gpid,p.snapupdateid,p.description,f.parent,q.description,p.pub,p.sub,p.owner,p.protocol from projects p left join (forklist f left join projects q on f.parent=q.pid) on p.pid=f.child where p.pid = $1 order by p.pid asc;",
                    0, NULL);
    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-      fprintf(stderr, "findProjectByPid: %s\n", PQerrorMessage(dbConn));
+      log(LSQL, "findProjectByPid: %s\n", PQerrorMessage(dbConn));
    }
    PQclear(res);
    sem_init(&fpbg_sem, 0, 1);
@@ -120,7 +120,7 @@ void DatabaseConnectionManager::init_queries() {
                    "select pid,hash,gpid,protocol from projects where gpid = $1 order by pid asc;",
                    0, NULL);
    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-      fprintf(stderr, "findProjectByGpid: %s\n", PQerrorMessage(dbConn));
+      log(LSQL, "findProjectByGpid: %s\n", PQerrorMessage(dbConn));
    }
    PQclear(res);
    sem_init(&gui_sem, 0, 1);
@@ -128,7 +128,7 @@ void DatabaseConnectionManager::init_queries() {
                    "select userid,pwhash,pub,sub from users where username = $1 order by userid asc;",
                    0, NULL);
    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-      fprintf(stderr, "getUserInfo: %s\n", PQerrorMessage(dbConn));
+      log(LSQL, "getUserInfo: %s\n", PQerrorMessage(dbConn));
    }
    PQclear(res);
    sem_init(&glu_sem, 0, 1);
@@ -136,7 +136,7 @@ void DatabaseConnectionManager::init_queries() {
                    "select updateid,cmd,json from updates where updateid > $1 and pid = $2 order by updateid asc;",
                    0, NULL);
    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-      fprintf(stderr, "getLatestUpdates: %s\n", PQerrorMessage(dbConn));
+      log(LSQL, "getLatestUpdates: %s\n", PQerrorMessage(dbConn));
    }
    PQclear(res);
    sem_init(&cu_sem, 0, 1);
@@ -145,7 +145,7 @@ void DatabaseConnectionManager::init_queries() {
 //                   "begin; create temporary table tmptable (like updates) on commit drop; insert into tmptable select * from updates where pid = $1 and updateid <= $2; update only tmptable set pid=$3; insert into updates (select * from tmptable); commit;",
                    0, NULL);
    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-      fprintf(stderr, "copyUpdates: %s\n", PQerrorMessage(dbConn));
+      log(LSQL, "copyUpdates: %s\n", PQerrorMessage(dbConn));
    }
    PQclear(res);
    sem_init(&ppu_sem, 0, 1);
@@ -153,12 +153,12 @@ void DatabaseConnectionManager::init_queries() {
                    "update projects set pub=$1,sub=$2 where pid=$3",
                    0, NULL);
    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-      fprintf(stderr, "projectPermsUpdate: %s\n", PQerrorMessage(dbConn));
+      log(LSQL, "projectPermsUpdate: %s\n", PQerrorMessage(dbConn));
    }
    PQclear(res);
 }
 
-DatabaseConnectionManager::DatabaseConnectionManager(json_object *conf) : ConnectionManagerBase(conf, false) {
+DatabaseConnectionManager::DatabaseConnectionManager(json_object *conf) : ConnectionManagerBase(conf) {
 //   if (dbConn) return;
    map<string,string> dbkeys;
    
@@ -183,10 +183,10 @@ DatabaseConnectionManager::DatabaseConnectionManager(json_object *conf) : Connec
    char const **values = new char const *[dbkeys.size() + 1];
    int idx = 0;
    for (map<string,string>::iterator i = dbkeys.begin(); i != dbkeys.end(); i++, idx++) {
-      fprintf(stderr, "%s:%s\n", (*i).first.c_str(), (*i).second.c_str());
+      log(LDEBUG, "%s:%s\n", (*i).first.c_str(), (*i).second.c_str());
       keywords[idx] = (*i).first.c_str();
       values[idx] = (*i).second.c_str();
-      fprintf(stderr, "%s:%s\n", (*i).first.c_str(), (*i).second.c_str());
+      log(LDEBUG, "%s:%s\n", (*i).first.c_str(), (*i).second.c_str());
    }
    keywords[idx] = values[idx] = NULL;
    dbConn = PQconnectdbParams(keywords, values, 0);
@@ -194,7 +194,7 @@ DatabaseConnectionManager::DatabaseConnectionManager(json_object *conf) : Connec
 
    /* Check to see that the backend connection was successfully made */
    if (PQstatus(dbConn) != CONNECTION_OK) {
-      fprintf(stderr, "Connection to database failed: %s\n", PQerrorMessage(dbConn));
+      log(LSQL, "Connection to database failed: %s\n", PQerrorMessage(dbConn));
       PQfinish(dbConn);
    }
    else {
@@ -233,6 +233,16 @@ DatabaseConnectionManager::~DatabaseConnectionManager() {
    dbConn = NULL;
 }
 
+void DatabaseConnectionManager::beginAuth(Client *c) {
+   uint8_t challenge[CHALLENGE_SIZE];
+   fill_random(challenge, CHALLENGE_SIZE);
+   c->setChallenge(challenge, CHALLENGE_SIZE);
+   json_object *obj = json_object_new_object();
+   append_json_hex_val(obj, "challenge", challenge, CHALLENGE_SIZE);
+   log(LINFO4, "Sending initial challenge\n");
+   c->send_data(MSG_INITIAL_CHALLENGE, obj);
+}
+
 /**
  * authenticate authenticates a user (for use in database mode)
  * bacially this is standard CHAP with HMAC (md5)
@@ -259,10 +269,10 @@ uint32_t DatabaseConnectionManager::authenticate(Client *c, const char *user, co
 
    ExecStatusType qres = PQresultStatus(rset);
    if (qres != PGRES_TUPLES_OK || PQntuples(rset) != 1) {
-      fprintf(stderr, "authenticate: %s (%s), %d\n", PQerrorMessage(dbConn), user, qres);
+      log(LSQL, "authenticate: %s (%s), %d\n", PQerrorMessage(dbConn), user, qres);
    }
    else {
-//         fprintf(stderr, "authenticate: good add file for %d\n", htonl(id));
+//         log(LSQL, "authenticate: good add file for %d\n", htonl(id));
       //userid,pwhash,pub,sub
       uint32_t uid = ntohl(*(uint32_t*)PQgetvalue(rset, 0, 0));
       char *pwhash = PQgetvalue(rset, 0, 1);
@@ -272,9 +282,9 @@ uint32_t DatabaseConnectionManager::authenticate(Client *c, const char *user, co
       uint8_t *hmac = HmacMD5(challenge, clen, key, hlen / 2);
       delete [] key;
 #ifdef DEBUG
-      fprintf(stderr, "Trying to authenticate uid: %d, pwhash %s, hashlen: %d\n", uid, pwhash, hlen);
-      fprintf(stderr, "   challenge: %s, hmac: %s\n", toHexString(challenge, clen).c_str(), toHexString(hmac, 16).c_str());
-      fprintf(stderr, "    response: %s, rlen: %d\n", toHexString(response, 16).c_str(), rlen);
+      log(LDEBUG, "Trying to authenticate uid: %d, pwhash %s, hashlen: %d\n", uid, pwhash, hlen);
+      log(LDEBUG, "   challenge: %s, hmac: %s\n", toHexString(challenge, clen).c_str(), toHexString(hmac, 16).c_str());
+      log(LDEBUG, "    response: %s, rlen: %d\n", toHexString(response, 16).c_str(), rlen);
 #endif
 
       if (response != NULL && memcmp(response, hmac, 16) == 0) {
@@ -285,7 +295,7 @@ uint32_t DatabaseConnectionManager::authenticate(Client *c, const char *user, co
       }
       else {
 #ifdef DEBUG
-         fprintf(stderr, "authenticate failure\n");
+         log(LDEBUG, "authenticate failure\n");
 #endif
          userid = INVALID_UID;
       }
@@ -304,7 +314,7 @@ uint32_t DatabaseConnectionManager::authenticate(Client *c, const char *user, co
  * @param data the 'data' portion of the command (the comment text, etc)
  */
 void DatabaseConnectionManager::migrateUpdate(const char *newowner, int pid, const char *cmd, json_object *obj) {
-   logln("in migrateUpdate", LINFO4);
+   logln(LINFO4, "in migrateUpdate");
 
    const int plens[4] = {0, 4, 0, 0};
    static const int pformats[4] = {0, 1, 0, 0};
@@ -325,11 +335,11 @@ void DatabaseConnectionManager::migrateUpdate(const char *newowner, int pid, con
    sem_post(&pu_sem);
    ExecStatusType qres = PQresultStatus(rset);
    if (qres != PGRES_TUPLES_OK && qres != PGRES_COMMAND_OK) {
-      fprintf(stderr, "postUpdate: %s\n", PQerrorMessage(dbConn));
+      log(LSQL, "postUpdate: %s\n", PQerrorMessage(dbConn));
    }
    else {
 //      uint64_t updateid = ntohll(*(uint64_t*)PQgetvalue(rset, 0, 0));
-//      logln("migrated update: " + updateid + "cmd: " + cmd + "pid: " + pid + " size: " + dlen, LINFO4);
+//      logln(LINFO4, "migrated update: " + updateid + "cmd: " + cmd + "pid: " + pid + " size: " + dlen);
    }
    PQclear(rset);
 }
@@ -366,14 +376,14 @@ void DatabaseConnectionManager::post(Client *c, const char *cmd, json_object *ob
    sem_post(&pu_sem);
    ExecStatusType qres = PQresultStatus(rset);
    if (qres != PGRES_TUPLES_OK && qres != PGRES_COMMAND_OK) {
-      fprintf(stderr, "postUpdate: %s\n", PQerrorMessage(dbConn));
+      log(LSQL, "postUpdate: %s\n", PQerrorMessage(dbConn));
    }
    else {
       //postgres integers are big endian so swap if necessary
       updateid = ntohll(*(uint64_t*)PQgetvalue(rset, 0, 0));
-//      fprintf(stderr, "Added update: %lld\n", updateid);
-//      fprintf(stderr, "Added update: %lld, cmd: %d, pid: %d, size: %d\n", updateid, cmd, pid, dlen);
-//      logln("Added update: " + updateid + ", cmd: " + cmd + ", pid: " + pid + ", size: " + data.length, LINFO4);
+//      log(LDEBUG, "Added update: %lld\n", updateid);
+//      log(LDEBUG, "Added update: %lld, cmd: %d, pid: %d, size: %d\n", updateid, cmd, pid, dlen);
+//      logln(LINFO4, "Added update: " + updateid + ", cmd: " + cmd + ", pid: " + pid + ", size: " + data.length);
       sem_wait(&queueMutex);
       queue.push_back(new Packet(c, cmd, obj, updateid));   //add a new packet with the binary data to the queue
       sem_post(&queueMutex);
@@ -410,7 +420,7 @@ void DatabaseConnectionManager::sendLatestUpdates(Client *c, uint64_t lastUpdate
    sem_post(&glu_sem);
    ExecStatusType qres = PQresultStatus(rset);
    if (qres != PGRES_TUPLES_OK) {
-      fprintf(stderr, "getLatestUpdates: %s\n", PQerrorMessage(dbConn));
+      log(LSQL, "getLatestUpdates: %s\n", PQerrorMessage(dbConn));
    }
    else {
       int rows = PQntuples(rset);
@@ -424,8 +434,8 @@ void DatabaseConnectionManager::sendLatestUpdates(Client *c, uint64_t lastUpdate
 
 //         int dlen = PQgetlength(rset, i, 2);
 
-//         fprintf(stderr, "posting %lld (cmd %d)\n", ntohll(updateid), cmd);
-//         logln("posting " + updateid + " (cmd " + cmd + ")");
+//         log(LDEBUG, "posting %lld (cmd %d)\n", ntohll(updateid), cmd);
+//         logln(LDEBUG, "posting " + updateid + " (cmd " + cmd + ")");
 
          json_object_object_del(obj, "updateid");  //make sure key doesn't exist from old update
          append_json_uint64_val(obj, "updateid", updateid);
@@ -462,7 +472,7 @@ ProjectInfo *DatabaseConnectionManager::getProjectInfo(uint32_t pid) {
    ExecStatusType qres = PQresultStatus(rset);
    //expecting a single row returned
    if (qres != PGRES_TUPLES_OK || PQntuples(rset) != 1) {
-      fprintf(stderr, "findProjectByPid: %s\n", PQerrorMessage(dbConn));
+      log(LSQL, "findProjectByPid: %s\n", PQerrorMessage(dbConn));
    }
    else {
       uint32_t proto = ntohl(*(uint32_t*)PQgetvalue(rset, 0, 10));
@@ -522,7 +532,7 @@ vector<ProjectInfo*> *DatabaseConnectionManager::getProjectList(const string &ph
 
    ExecStatusType qres = PQresultStatus(rset);
    if (qres != PGRES_TUPLES_OK) {
-      fprintf(stderr, "findProjectsByHash: %s\n", PQerrorMessage(dbConn));
+      log(LSQL, "findProjectsByHash: %s\n", PQerrorMessage(dbConn));
    }
    else {
       int rows = PQntuples(rset);
@@ -582,7 +592,7 @@ int DatabaseConnectionManager::joinProject(Client *c, uint32_t lpid) {
    const char * const parms[1] = {(char*)&tpid};
 
 #ifdef DEBUG
-   fprintf(stderr, "trying to join project %u\n", lpid);
+   log(LINFO4, "trying to join project %u\n", lpid);
 #endif
    sem_wait(&fpbp_sem);
    PGresult *rset = PQexecPrepared(dbConn, "findProjectByPid",
@@ -596,7 +606,7 @@ int DatabaseConnectionManager::joinProject(Client *c, uint32_t lpid) {
    ExecStatusType qres = PQresultStatus(rset);
    //expecting a single row returned
    if (qres != PGRES_TUPLES_OK || PQntuples(rset) != 1) {
-      fprintf(stderr, "findProjectByPid: %s\n", PQerrorMessage(dbConn));
+      log(LSQL, "findProjectByPid: %s\n", PQerrorMessage(dbConn));
    }
    else {
       uint32_t proto = ntohl(*(uint32_t*)PQgetvalue(rset, 0, 10));
@@ -604,14 +614,14 @@ int DatabaseConnectionManager::joinProject(Client *c, uint32_t lpid) {
          const char *hash = PQgetvalue(rset, 0, 1);
    
          uint64_t snapupdateid = ntohll(*(uint64_t*)PQgetvalue(rset, 0, 3));
-   //      logln("in joinProject: " + lpid + " " + hash + " " + snapupdateid + " " + rs.getString(5) + " " + rs.getString(7), LDEBUG);
+   //      logln(LDEBUG, "in joinProject: " + lpid + " " + hash + " " + snapupdateid + " " + rs.getString(5) + " " + rs.getString(7));
          if (snapupdateid > 0) {  //pid is a snapshot pid
             //this should now be an error condition
             
-            //logln("Attempt to join snapshot " + lpid + " forking instead");
+            //logln(LINFO4, "Attempt to join snapshot " + lpid + " forking instead");
             //return forkProject(c, rs.getLong(4), rs.getString(7) + " + " + rs.getString(5));
             c->send_error("can't join a snapshot, you MUST fork a snapshot");
-            logln("attempted to join a snapshop instead of forking", LERROR);
+            log(LERROR, "attempted to join a snapshop instead of forking\n");
             return -1;
          }
          c->setPid(lpid);
@@ -623,26 +633,26 @@ int DatabaseConnectionManager::joinProject(Client *c, uint32_t lpid) {
          const char *owner = PQgetvalue(rset, 0, 9);
    
          if (c->getUser() == owner) { //project owner gets full perms, regardless of user, project, or requested perms
-            logln("Project Owner joined! yay!", LINFO3);
+            log(LINFO3, "Project Owner joined! yay!");
             c->setPub(FULL_PERMISSIONS);
             c->setSub(FULL_PERMISSIONS);
          }
          else { //effective permissions are user perms ANDed with project perms ANDed with the perms requested by the user
             uint64_t pub = ntohll(*(uint64_t*)PQgetvalue(rset, 0, 7));
    /*
-            logln("effective publish  : " + 
+            logln(LINFO1, "effective publish  : " + 
                   Long.toHexString(pub)) + " & " + 
                   Long.toHexString(c->getReqPub()) + " & " + 
                   Long.toHexString(c->getUserPub()) + " = " + 
-                  Long.toHexString(pub & c->getUserPub() & c->getReqPub()),LINFO1);
+                  Long.toHexString(pub & c->getUserPub() & c->getReqPub()));
    */
             uint64_t sub = ntohll(*(uint64_t*)PQgetvalue(rset, 0, 8));
    /*
-            logln("effective subscribe: " + 
+            logln(LINFO1, "effective subscribe: " + 
                   Long.toHexString(sub) + " & " + 
                   Long.toHexString(c->getReqSub()) + " & " + 
                   Long.toHexString(c->getUserSub()) + " = " + 
-                  Long.toHexString(sub & c->getUserSub() & c->getReqSub()),LINFO1);
+                  Long.toHexString(sub & c->getUserSub() & c->getReqSub()));
    */
             c->setPub(pub & c->getUserPub() & c->getReqPub());
             c->setSub(sub & c->getUserSub() & c->getReqSub());
@@ -658,7 +668,7 @@ int DatabaseConnectionManager::joinProject(Client *c, uint32_t lpid) {
       rval = 0;
    }
    else {
-//      logln("ERROR: attempt to join a non-existant project: " + lpid, LERROR);
+//      log(LERROR, "ERROR: attempt to join a non-existant project: %u\n", lpid);
    }
 
    return rval;
@@ -678,7 +688,7 @@ int DatabaseConnectionManager::snapProject(Client *c, uint64_t lastupdateid, con
    int oldpid = htonl(c->getPid());
    string gpid;
 
-//   logln("User " + uid + " adding snapshot for " + c->getHash(), LINFO);
+//   log(LINFO, "User %u adding snapshot for %s\n", uid, c->getHash());
    while (true) {
       //generate a new GPID; We optimistically insert, assuming
       //this gpid is unique, and catch the SQLException if the
@@ -686,7 +696,7 @@ int DatabaseConnectionManager::snapProject(Client *c, uint64_t lastupdateid, con
       uint8_t gpid_bytes[32];
       fill_random(gpid_bytes, sizeof(gpid_bytes));
       gpid = toHexString(gpid_bytes, sizeof(gpid_bytes));
-//      logln(" ... with gpid: " + gpid, LINFO2);
+//      log(LINFO2, " ... with gpid: %s\n", gpid.c_str());
 
       const int plens[6] = {0, 0, 0, 0, 8, 4};
       static const int pformats[6] = {0, 0, 0, 0, 1, 1};
@@ -707,7 +717,7 @@ int DatabaseConnectionManager::snapProject(Client *c, uint64_t lastupdateid, con
 
       ExecStatusType qres = PQresultStatus(rset);
       if (qres != PGRES_TUPLES_OK && qres != PGRES_COMMAND_OK) {
-         fprintf(stderr, "addProjectSnap: %s\n", PQerrorMessage(dbConn));
+         log(LSQL, "addProjectSnap: %s\n", PQerrorMessage(dbConn));
       }
       else {
          spid = *(int*)PQgetvalue(rset, 0, 0);  //leave in network byte order for now
@@ -733,7 +743,7 @@ int DatabaseConnectionManager::snapProject(Client *c, uint64_t lastupdateid, con
 
    ExecStatusType qres = PQresultStatus(rset);
    if (qres != PGRES_TUPLES_OK && qres != PGRES_COMMAND_OK) {
-      fprintf(stderr, "addProjectFork: %s\n", PQerrorMessage(dbConn));
+      log(LSQL, "addProjectFork: %s\n", PQerrorMessage(dbConn));
    }
    else {
       int fid = ntohl(*(int*)PQgetvalue(rset, 0, 0));
@@ -741,7 +751,7 @@ int DatabaseConnectionManager::snapProject(Client *c, uint64_t lastupdateid, con
 //         logln("Snapshot id for project " + oldpid + " at updateid " + lastupdateid + " is: " + spid, LINFO);
       }
       else {
-         logln("project snap failed forklist insert", LERROR);
+         log(LERROR, "project snap failed forklist insert\n");
       }
    }
    PQclear(rset);
@@ -779,7 +789,7 @@ int DatabaseConnectionManager::forkProject(Client *c, uint64_t lastupdateid, con
    ExecStatusType qres = PQresultStatus(rset);
    //expecting a single row returned
    if (qres != PGRES_TUPLES_OK || PQntuples(rset) != 1) {
-      fprintf(stderr, "findProjectByPid: %s\n", PQerrorMessage(dbConn));
+      log(LSQL, "findProjectByPid: %s\n", PQerrorMessage(dbConn));
    }
    else {
       uint64_t pub = ntohll(*(uint64_t*)PQgetvalue(rset, 0, 7));
@@ -804,7 +814,7 @@ int DatabaseConnectionManager::forkProject(Client *c, uint64_t lastupdateid, con
  * @return the new projectid on success, -1 on failure
  */
 int DatabaseConnectionManager::forkProject(Client *c, uint64_t lastupdateid, const string &desc, uint64_t pub, uint64_t sub) {
-   logln("in forkProject ", LDEBUG);
+   log(LDEBUG, "in forkProject\n");
    int rval = -1;
 
    int oldlpid = c->getPid();
@@ -832,7 +842,7 @@ int DatabaseConnectionManager::forkProject(Client *c, uint64_t lastupdateid, con
    
       ExecStatusType qres = PQresultStatus(rset);
       if (qres != PGRES_TUPLES_OK && qres != PGRES_COMMAND_OK) {
-         fprintf(stderr, "addProjectFork: %s\n", PQerrorMessage(dbConn));
+         log(LSQL, "addProjectFork: %s\n", PQerrorMessage(dbConn));
       }
       else {
 //         int fid  = ntohl(*(int*)PQgetvalue(rset, 0, 0));    
@@ -858,7 +868,7 @@ int DatabaseConnectionManager::forkProject(Client *c, uint64_t lastupdateid, con
    
       qres = PQresultStatus(rset);
       if (qres != PGRES_TUPLES_OK && qres != PGRES_COMMAND_OK) {
-         fprintf(stderr, "copyUpdates: %s\n", PQerrorMessage(dbConn));
+         log(LSQL, "copyUpdates: %s\n", PQerrorMessage(dbConn));
       }
       else {
 //         uint64_t lastinserted = *(uint64_t*)PQgetvalue(rset, 0, 0); 
@@ -871,7 +881,7 @@ int DatabaseConnectionManager::forkProject(Client *c, uint64_t lastupdateid, con
       
       //allow anyone else on the project (w/ exactly the same updates) to follow the fork
       string gpid = lpid2gpid(lpid);
-      logln("sending fork follows", LINFO);
+      log(LINFO, "sending fork follows\n");
       sendForkFollows(c, oldlpid, lastupdateid, desc);
    }
    else {
@@ -908,7 +918,7 @@ static bool offerFork(Client *c, void *user) {
  * @param desc the description of the new project, so the user can make a more educated descision
  */
 void DatabaseConnectionManager::sendForkFollows(Client *originator, int oldlpid, uint64_t lastupdateid, const string &desc) {
-   ::logln("in sendForkFollows");
+  log(LDEBUG, "in sendForkFollows\n");
 //   logln("pid " + oldlpid, LINFO3);
    ForkArgs fa = {originator, lastupdateid, desc};
    projects.loopProject(oldlpid, offerFork, &fa);
@@ -953,7 +963,7 @@ int DatabaseConnectionManager::snapforkProject(Client *c, int spid, const string
    ExecStatusType qres = PQresultStatus(rset);
    //expecting a single row returned
    if (qres != PGRES_TUPLES_OK || PQntuples(rset) != 1) {
-      fprintf(stderr, "findProjectByPid: %s\n", PQerrorMessage(dbConn));
+      log(LSQL, "findProjectByPid: %s\n", PQerrorMessage(dbConn));
    }
    else {
       if (!PQgetisnull(rset, 0, 5)) {
@@ -986,7 +996,7 @@ int DatabaseConnectionManager::snapforkProject(Client *c, int spid, const string
       
          ExecStatusType qres = PQresultStatus(rset);
          if (qres != PGRES_TUPLES_OK && qres != PGRES_COMMAND_OK) {
-            fprintf(stderr, "addProjectFork: %s\n", PQerrorMessage(dbConn));
+            log(LSQL, "addProjectFork: %s\n", PQerrorMessage(dbConn));
          }
          else {
 //            int fid = ntohl(*(int*)PQgetvalue(rset, 0, 0));
@@ -1013,7 +1023,7 @@ int DatabaseConnectionManager::snapforkProject(Client *c, int spid, const string
       
          qres = PQresultStatus(rset);
          if (qres != PGRES_TUPLES_OK && qres != PGRES_COMMAND_OK) {
-            fprintf(stderr, "copyUpdates: %s\n", PQerrorMessage(dbConn));
+            log(LSQL, "copyUpdates: %s\n", PQerrorMessage(dbConn));
          }
          else {
 //            uint64_t lastinserted = *(uint64_t*)PQgetvalue(rset, 0, 0); 
@@ -1042,7 +1052,7 @@ int DatabaseConnectionManager::snapforkProject(Client *c, int spid, const string
  */
 
 int DatabaseConnectionManager::migrateProject(const char *owner, const string &gpid, const string &hash, const string &desc, uint64_t pub, uint64_t sub) {
-   logln("in migrateProject ", LDEBUG);
+   log(LDEBUG, "in migrateProject\n");
    int lpid = -1;
 
 //   logln("Owner " + owner + " migrating project for " + hash, LINFO);
@@ -1068,7 +1078,7 @@ int DatabaseConnectionManager::migrateProject(const char *owner, const string &g
 
    ExecStatusType qres = PQresultStatus(rset);
    if (qres != PGRES_TUPLES_OK && qres != PGRES_COMMAND_OK) {
-      fprintf(stderr, "addProject: %s\n", PQerrorMessage(dbConn));
+      log(LSQL, "addProject: %s\n", PQerrorMessage(dbConn));
    }
    else {
       lpid = ntohl(*(int*)PQgetvalue(rset, 0, 0));
@@ -1091,7 +1101,7 @@ int DatabaseConnectionManager::migrateProject(const char *owner, const string &g
 int DatabaseConnectionManager::addProject(Client *c, const string &hash, const string &desc, uint64_t pub, uint64_t sub) {
    static const int pformats[7] = {0, 0, 0, 0, 1, 1, 1};
 
-   logln("in addProject ", LDEBUG);
+   log(LDEBUG, "in addProject\n");
    int lpid = -1;
    string gpid;
 
@@ -1127,7 +1137,7 @@ int DatabaseConnectionManager::addProject(Client *c, const string &hash, const s
 
       ExecStatusType qres = PQresultStatus(rset);
       if (qres != PGRES_TUPLES_OK && qres != PGRES_COMMAND_OK) {
-         fprintf(stderr, "addProject: %s\n", PQerrorMessage(dbConn));
+         log(LSQL, "addProject: %s\n", PQerrorMessage(dbConn));
       }
       else {
          lpid = ntohl(*(int*)PQgetvalue(rset, 0, 0));
@@ -1202,11 +1212,11 @@ void DatabaseConnectionManager::updateProjectPerms(Client *c, uint64_t pub, uint
 
    ExecStatusType qres = PQresultStatus(rset);
    if (qres != PGRES_COMMAND_OK) {
-      fprintf(stderr, "projectPermsUpdate: %s\n", PQerrorMessage(dbConn));
+      log(LSQL, "projectPermsUpdate: %s\n", PQerrorMessage(dbConn));
    }
    PQclear(rset);
          
-   logln("recalculating effective permissions for connected clients", LINFO3);
+   log(LINFO3, "recalculating effective permissions for connected clients\n");
 
    UpdateArgs args = {c, pub, sub};
    projects.loopProject(c->getPid(), updatePerms, &args);
@@ -1239,7 +1249,7 @@ int DatabaseConnectionManager::gpid2lpid(const string &gpid) {
    ExecStatusType qres = PQresultStatus(rset);
    //expecting exactly 1 row
    if (qres != PGRES_TUPLES_OK || PQntuples(rset) != 1) {
-      fprintf(stderr, "findProjectByGpid: %s\n", PQerrorMessage(dbConn));
+      log(LSQL, "findProjectByGpid: %s\n", PQerrorMessage(dbConn));
    }
    else {
       lpid = ntohl(*(int*)PQgetvalue(rset, 0, 0));
@@ -1277,7 +1287,7 @@ string DatabaseConnectionManager::lpid2gpid(int lpid) {
    ExecStatusType qres = PQresultStatus(rset);
    //expecting exactly 1 result row
    if (qres != PGRES_TUPLES_OK || PQntuples(rset) != 1) {
-      fprintf(stderr, "findProjectByPid: %s\n", PQerrorMessage(dbConn));
+      log(LSQL, "findProjectByPid: %s\n", PQerrorMessage(dbConn));
    }
    else {
       rval = PQgetvalue(rset, 0, 2);

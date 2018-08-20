@@ -37,6 +37,7 @@ public:
    DatabaseConnectionManager(json_object *conf);
    virtual ~DatabaseConnectionManager();
    
+   virtual void beginAuth(Client *c);
    uint32_t authenticate(Client *c, const char *user, const uint8_t *challenge, uint32_t clen, const uint8_t *response, uint32_t rlen);
    void migrateUpdate(const char *newowner, int pid, const char *cmd, json_object *obj);
    void post(Client *src, const char *cmd, json_object *obj);
