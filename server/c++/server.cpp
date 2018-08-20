@@ -124,9 +124,8 @@ void loop(NetworkService *svc) {
  */
 int drop_privs(struct passwd *pw) {
    char *dir;
-   int uid = getuid();
-   int gid = getgid();
-   int result = -1;
+   uid_t uid = getuid();
+   gid_t gid = getgid();
 #if defined DO_CHROOT
    dir = "/";
    if (chroot(pw->pw_dir) == -1) {;

@@ -76,7 +76,6 @@ void ManagerHelper::initCommon() {
    done = false;
    quit = false;
    bool localonly = DEFAULT_LOCAL;
-   bool dbMode = false;
    int port = DEFAULT_PORT;
    const char *mgr_host = NULL;
    if (conf) {
@@ -156,6 +155,7 @@ void *ManagerHelper::run(void *arg) {
          mh->nio->close();
       }
    }
+   return NULL;
 }
 
 /**

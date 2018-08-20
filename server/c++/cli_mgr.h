@@ -71,6 +71,8 @@ protected:
 
 public:
    ConnectionManagerBase(json_object *conf, bool mode);
+   virtual ~ConnectionManagerBase() {};
+   
    void start();
 
    /**
@@ -119,9 +121,9 @@ public:
     * @param user the user to authenticate
     * @param challenge the randomly generated challenge sent to the plugin
     * @param response the calculated response from the plugin to check 
-    * @return the user id of an authenticated user, or INVALID_USER
+    * @return the user id of an authenticated user, or INVALID_UID
     */
-   virtual int authenticate(Client *c, const char *user, const uint8_t *challenge, uint32_t clen, const uint8_t *response, uint32_t rlen) = 0;
+   virtual uint32_t authenticate(Client *c, const char *user, const uint8_t *challenge, uint32_t clen, const uint8_t *response, uint32_t rlen) = 0;
 
    /**
     * migrateUpdate is very similar to 'post', migrateUpdate only 
@@ -162,7 +164,7 @@ public:
     * @param pid the local pid of a project to get info on
     * @return a  project info object for the provided pid, caller needs to delete this
     */
-   virtual ProjectInfo *getProjectInfo(int pid) = 0;
+   virtual ProjectInfo *getProjectInfo(uint32_t pid) = 0;
 
    /**
     * getProjectList generates a list of projects on this server, each list (vector) item is 
@@ -184,7 +186,7 @@ public:
     * @param lpid the local project id of the project on this server 
     * @return 0 on success, negative value on failure
     */
-   virtual int joinProject(Client *c, int lpid) = 0;
+   virtual int joinProject(Client *c, uint32_t lpid) = 0;
  
    /**
     * snapProject adds a snapshop for a project, this does not change the client's 

@@ -215,7 +215,13 @@ const char * const FILE_SIG = "collabRE\n";
 /**
  * Constant to check for an invalid uid
  */
-#define INVALID_USER -1
+#define INVALID_UID ((uint32_t)-1)
+
+/**
+ * Constant to check for an invalid pid
+ */
+#define INVALID_PID ((uint32_t)-1)
+
 /**
  * Constant to use for uid when in BASIC_MODE or DEBUG_MODE
  */
@@ -240,7 +246,7 @@ void log(const string &msg, int verbosity = 0);
 void logln(const string &msg, int verbosity = 0);
 
 extern const char *permStrings[];
-extern int permStringsLength;
+extern size_t permStringsLength;
 
 class IOException {
 public:
@@ -253,12 +259,12 @@ private:
 class IOBase {
 public:
    virtual ~IOBase() {};
-   virtual int readAll(void *buf, uint32_t size) = 0;
+   virtual ssize_t readAll(void *buf, ssize_t size) = 0;
    virtual json_object *readJson() = 0;
    virtual bool writeJson(json_object *obj);
-   virtual int sendMsg(const char *buf, bool nullflag = 0) = 0;
-   virtual int sendAll(const void *buf, uint32_t len) = 0;
-   virtual int sendFormat(const char *format, ...) = 0;
+   virtual ssize_t sendMsg(const char *buf, bool nullflag = 0) = 0;
+   virtual ssize_t sendAll(const void *buf, ssize_t len) = 0;
+   virtual ssize_t sendFormat(const char *format, ...) = 0;
    virtual bool close() = 0;
 
    //output the string with no null terminator
@@ -272,15 +278,15 @@ public:
    FileIO(int fd);
    virtual ~FileIO();
    void setFileDescriptor(int fd);
-   int readAll(void *buf, uint32_t size);
+   ssize_t readAll(void *buf, ssize_t size);
    json_object *readJson();
-   int sendMsg(const char *buf, bool nullflag = 0);
-   int sendAll(const void *buf, uint32_t len);
-   int sendFormat(const char *format, ...);
+   ssize_t sendMsg(const char *buf, bool nullflag = 0);
+   ssize_t sendAll(const void *buf, ssize_t len);
+   ssize_t sendFormat(const char *format, ...);
    int getFileDescriptor() {return fd;};
    bool close();
 
-   bool write(const void *buf, uint32_t len);
+   bool write(const void *buf, ssize_t len);
 
    //output the string with no null terminator
    IOBase &operator<<(const string &s);

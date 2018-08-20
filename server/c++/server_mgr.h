@@ -129,7 +129,7 @@ private:
     * @param pinfo a project info object to populate with information
     * @return 0 on success
     */
-   int getProjectInfo(int lpid, ProjectInfo *pinfo);
+   int getProjectInfo(uint32_t lpid, ProjectInfo *pinfo);
 
    /**
     * exportProject exports a project to a binary final
@@ -137,7 +137,7 @@ private:
     * @param efile the filename to export to
     * @return 0 on success
     */
-   int exportProject(int lpid, const char *efile);
+   int exportProject(uint32_t lpid, const char *efile);
 
    /**
     * importProject imports a project from a binary final
@@ -179,11 +179,11 @@ private:
     */
    void closeDB();
 
-   string getPermHeaderString( int colWidth);
+   string getPermHeaderString(size_t colWidth);
    
-   string getPermHeaderString(int colWidth, bool number);
+   string getPermHeaderString(size_t colWidth, bool number);
 
-   string getPermRowString(uint64_t p, uint64_t s, int colWidth);
+   string getPermRowString(uint64_t p, uint64_t s, size_t colWidth);
 
 public:
    /**

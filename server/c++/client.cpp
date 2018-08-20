@@ -61,8 +61,8 @@ Client::Client(ConnectionManagerBase *mgr, NetworkIO *s, bool basic) {
    rsubscribe = 0;
    authenticated = false;
 
-   uid = -1;  //user id associated with this connection
-   pid = -1;
+   uid = INVALID_UID;  //user id associated with this connection
+   pid = INVALID_PID;
    authTries = 3;
    gpid = "";  //project id associated with this connection
 
@@ -104,7 +104,7 @@ Client::Client(ConnectionManagerBase *mgr, NetworkIO *s, bool basic) {
  */
 void Client::log(const string &msg, int v) {
    char buf[256];
-   snprintf(buf, sizeof(buf), "[%s:%d (%s:%d)] %s", conn->getPeerAddr().c_str(), conn->getPeerPort(), username.c_str(), uid, msg.c_str());
+   snprintf(buf, sizeof(buf), "[%s:%d (%s:%u)] %s", conn->getPeerAddr().c_str(), conn->getPeerPort(), username.c_str(), uid, msg.c_str());
    cm->log(buf, v);
 }
 
@@ -330,7 +330,6 @@ void *Client::run(void *arg) {
    } catch (IOException ex) {
       fprintf(stderr, "An IOException occurred: %s\n", ex.getMessage().c_str());
    }
-end_loop:
    fprintf(stderr, "Client loop has ended\n");
    client->terminate();
    delete client;
@@ -488,7 +487,7 @@ bool Client::msg_project_join_request(json_object *obj, Client *c) {
 bool Client::msg_project_rejoin_request(json_object *obj, Client *c) {
 //                  ::logln("in PROJECT_REJOIN_REQUEST", LDEBUG);
    bool res = false;
-   int rejoingbasic = 0;
+//   int rejoingbasic = 0;
    string gpid = string_from_json(obj, "gpid");
    if ( isNumeric(gpid) ) {
       uint32_t gpi = -1;
@@ -657,10 +656,10 @@ bool Client::msg_auth_request(json_object *obj, Client *c) {
       delete [] hmac;
       json_object *response = json_object_new_object();
       int reply = AUTH_REPLY_FAIL;
-      if (c->uid != INVALID_USER) {
+      if (c->uid != INVALID_UID) {
          c->authenticated = true;
 #ifdef DEBUG
-         fprintf(stderr, "uid set to %d\n", c->uid);
+         fprintf(stderr, "uid set to %u\n", c->uid);
 #endif
          //::logln("uid set to "+ uid);
          reply = AUTH_REPLY_SUCCESS;
@@ -693,7 +692,7 @@ bool Client::msg_project_list(json_object *obj, Client *c) {
    c->hash = string_from_json(obj, "md5");
 //                     ::logln("project hash: " + c->hash, LINFO4);
    vector<ProjectInfo*> *plist = c->cm->getProjectList(c->hash);
-   int nump = plist->size();
+//   int nump = plist->size();
    json_object *projects = json_object_new_array();
 //                  ::logln(" Found  " + nump + " projects", LINFO3);
    //create list of projects

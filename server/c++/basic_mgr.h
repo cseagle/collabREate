@@ -49,7 +49,7 @@ private:
 
 public:
    BasicConnectionManager(json_object *conf);
-   ~BasicConnectionManager();
+   virtual ~BasicConnectionManager();
 
    /**
     * authenticate authenticates a user (for use in database mode)
@@ -57,9 +57,9 @@ public:
     * @param user the user to authenticate
     * @param challenge the randomly generated challenge send to the plugin
     * @param response the calculated response from the plugin to check 
-    * @return the user id of an authenticated user, or INVALID_USER
+    * @return the user id of an authenticated user, or INVALID_UID
     */
-   int authenticate(Client *c, const char *user, const uint8_t *challenge, uint32_t clen, const uint8_t *response, uint32_t rlen);
+   uint32_t authenticate(Client *c, const char *user, const uint8_t *challenge, uint32_t clen, const uint8_t *response, uint32_t rlen);
    /**
     * migrateUpdate is very similar to 'post', migrateUpdate only 
     * archives the udpate in the database so that future clients can receive it 
@@ -94,7 +94,7 @@ public:
     * @param pid the local pid of a project to get info on
     * @return a  project info object for the provided pid, caller needs to delete this
     */
-   ProjectInfo *getProjectInfo(int pid);
+   ProjectInfo *getProjectInfo(uint32_t pid);
    
    /**
     * getProjectList generates a list of projects on this server, each list (vector) item is 
@@ -111,7 +111,7 @@ public:
     * @param lpid the local project id of the project on this server 
     * @return 0 on success, negative value on failure
     */
-   int joinProject(Client *c, int lpid);
+   int joinProject(Client *c, uint32_t lpid);
  
    /**
     * snapProject adds a snapshop for a project, this does not change the client's 

@@ -45,7 +45,7 @@ uint8_t *HmacMD5(const uint8_t *msg, int mlen, const uint8_t *key, int klen) {
    memcpy(opad, ipad, sizeof(ipad));
    
    /* XOR key with ipad and opad values */
-   for (int i = 0; i < sizeof(ipad); i++) {
+   for (size_t i = 0; i < sizeof(ipad); i++) {
       ipad[i] ^= 0x36;
       opad[i] ^= 0x5c;
    }
@@ -239,10 +239,10 @@ DatabaseConnectionManager::~DatabaseConnectionManager() {
  * @param user the user to authenticate
  * @param challenge the randomly generated challenge send to the plugin
  * @param response the calculated response from the plugin to check 
- * @return the user id of an authenticated user, or INVALID_USER
+ * @return the user id of an authenticated user, or INVALID_UID
  */
-int DatabaseConnectionManager::authenticate(Client *c, const char *user, const uint8_t *challenge, uint32_t clen, const uint8_t *response, uint32_t rlen) {
-   int userid = -1; //INVALID_USER;
+uint32_t DatabaseConnectionManager::authenticate(Client *c, const char *user, const uint8_t *challenge, uint32_t clen, const uint8_t *response, uint32_t rlen) {
+   uint32_t userid = INVALID_UID;
    static const int plens[1] = {0};
    static const int pformats[1] = {0};
    //insert into files values(stream_id, fname);
@@ -287,7 +287,7 @@ int DatabaseConnectionManager::authenticate(Client *c, const char *user, const u
 #ifdef DEBUG
          fprintf(stderr, "authenticate failure\n");
 #endif
-         userid = -1; //INVALID_USER;
+         userid = INVALID_UID;
       }
       delete [] hmac;
    }
@@ -305,7 +305,6 @@ int DatabaseConnectionManager::authenticate(Client *c, const char *user, const u
  */
 void DatabaseConnectionManager::migrateUpdate(const char *newowner, int pid, const char *cmd, json_object *obj) {
    logln("in migrateUpdate", LINFO4);
-   uint64_t updateid = 0;
 
    const int plens[4] = {0, 4, 0, 0};
    static const int pformats[4] = {0, 1, 0, 0};
@@ -329,7 +328,7 @@ void DatabaseConnectionManager::migrateUpdate(const char *newowner, int pid, con
       fprintf(stderr, "postUpdate: %s\n", PQerrorMessage(dbConn));
    }
    else {
-      updateid = ntohll(*(uint64_t*)PQgetvalue(rset, 0, 0));
+//      uint64_t updateid = ntohll(*(uint64_t*)PQgetvalue(rset, 0, 0));
 //      logln("migrated update: " + updateid + "cmd: " + cmd + "pid: " + pid + " size: " + dlen, LINFO4);
    }
    PQclear(rset);
@@ -423,7 +422,7 @@ void DatabaseConnectionManager::sendLatestUpdates(Client *c, uint64_t lastUpdate
          const char *json = (const char*)PQgetvalue(rset, i, 2);
          json_object *obj = json_tokener_parse(json);
 
-         int dlen = PQgetlength(rset, i, 2);
+//         int dlen = PQgetlength(rset, i, 2);
 
 //         fprintf(stderr, "posting %lld (cmd %d)\n", ntohll(updateid), cmd);
 //         logln("posting " + updateid + " (cmd " + cmd + ")");
@@ -442,7 +441,7 @@ void DatabaseConnectionManager::sendLatestUpdates(Client *c, uint64_t lastUpdate
  * @param pid the local pid of a project to get info on
  * @return a  project info object for the provided pid
  */
-ProjectInfo *DatabaseConnectionManager::getProjectInfo(int pid) {
+ProjectInfo *DatabaseConnectionManager::getProjectInfo(uint32_t pid) {
    ProjectInfo *pinfo = NULL;
 
    static const int plens[1] = {4};
@@ -571,19 +570,19 @@ vector<ProjectInfo*> *DatabaseConnectionManager::getProjectList(const string &ph
  * @param lpid the local project id of the project on this server 
  * @return 0 on success, negative value on failure
  */
-int DatabaseConnectionManager::joinProject(Client *c, int lpid) {
+int DatabaseConnectionManager::joinProject(Client *c, uint32_t lpid) {
    int rval = -1;
 
    bool foundPid = false;
 
-   int tpid = htonl(lpid);
+   uint32_t tpid = htonl(lpid);
    static const int plens[1] = {sizeof(tpid)};
    static const int pformats[1] = {1};
 
    const char * const parms[1] = {(char*)&tpid};
 
 #ifdef DEBUG
-   fprintf(stderr, "trying to join project %d\n", lpid);
+   fprintf(stderr, "trying to join project %u\n", lpid);
 #endif
    sem_wait(&fpbp_sem);
    PGresult *rset = PQexecPrepared(dbConn, "findProjectByPid",
@@ -836,7 +835,7 @@ int DatabaseConnectionManager::forkProject(Client *c, uint64_t lastupdateid, con
          fprintf(stderr, "addProjectFork: %s\n", PQerrorMessage(dbConn));
       }
       else {
-         int fid  = ntohl(*(int*)PQgetvalue(rset, 0, 0));    
+//         int fid  = ntohl(*(int*)PQgetvalue(rset, 0, 0));    
 //         logln("Forked (" + fid + "): Project " + lpid + " forked from " + oldlpid, LINFO);
       }
       PQclear(rset);
@@ -851,9 +850,9 @@ int DatabaseConnectionManager::forkProject(Client *c, uint64_t lastupdateid, con
       sem_wait(&cu_sem);
       rset = PQexecPrepared(dbConn, "copyUpdates",
                           3, //int nParams,   size of arrays that follow
-                          parms, //parms,  //const char * const *paramValues, array of string values
-                          plens, //const int *paramLengths,
-                          pformats, //const int *paramFormats,
+                          parms2, //parms,  //const char * const *paramValues, array of string values
+                          plens2, //const int *paramLengths,
+                          pformats2, //const int *paramFormats,
                           1); //int resultFormat); 0 == text, 1 == binary
       sem_post(&cu_sem);
    
@@ -990,7 +989,7 @@ int DatabaseConnectionManager::snapforkProject(Client *c, int spid, const string
             fprintf(stderr, "addProjectFork: %s\n", PQerrorMessage(dbConn));
          }
          else {
-            int fid = ntohl(*(int*)PQgetvalue(rset, 0, 0));
+//            int fid = ntohl(*(int*)PQgetvalue(rset, 0, 0));
 //            logln("Forked (" + fid + "): Project " + lpid + " forked from snapshot " + oldlpid + "(original project " + parentlpid + ")", LINFO);
          }
          PQclear(rset);
@@ -1006,9 +1005,9 @@ int DatabaseConnectionManager::snapforkProject(Client *c, int spid, const string
          sem_wait(&cu_sem);
          rset = PQexecPrepared(dbConn, "copyUpdates",
                              3, //int nParams,   size of arrays that follow
-                             parms, //parms,  //const char * const *paramValues, array of string values
-                             plens, //const int *paramLengths,
-                             pformats, //const int *paramFormats,
+                             parms2, //parms,  //const char * const *paramValues, array of string values
+                             plens2, //const int *paramLengths,
+                             pformats2, //const int *paramFormats,
                              1); //int resultFormat); 0 == text, 1 == binary
          sem_post(&cu_sem);
       
@@ -1160,7 +1159,7 @@ static bool updatePerms(Client *c, void *user) {
    if (c != owner) {
       uint64_t oldpperm = c->getPub(); 
       uint64_t newpperm = (c->getUserPub() & c->getReqPub() & args->pub);
-      uint64_t oldsperm = c->getSub(); 
+//      uint64_t oldsperm = c->getSub(); 
       uint64_t newsperm = (c->getUserSub() & c->getReqSub() & args->sub);
       if (oldpperm != newpperm) {
 /*

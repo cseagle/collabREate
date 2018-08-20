@@ -446,7 +446,7 @@ void ServerManager::shutdownServer() {
  * @param pinfo a project info object to populate with information
  * @return 0 on success
  */
-int ServerManager::getProjectInfo(int lpid, ProjectInfo *pinfo) {
+int ServerManager::getProjectInfo(uint32_t lpid, ProjectInfo *pinfo) {
    int rval = -1;
    for (vector<ProjectInfo*>::iterator it = plist.begin(); it != plist.end(); it++) {
       ProjectInfo *pi = *it;
@@ -469,21 +469,24 @@ int ServerManager::getProjectInfo(int lpid, ProjectInfo *pinfo) {
 }
 
 //C API value for 2000-01-01
-#define MILLENIUM 946713600
-static u_int32_t millenium = MILLENIUM;
+//#define MILLENIUM 946713600
+//static u_int32_t millenium = MILLENIUM;
 
 /* swap the order of the eight bytes at the given location */
+/*
 static void double_swap(double *d) {
    u_int32_t *p = (u_int32_t*)d;
    u_int32_t temp = ntohl(p[1]);
    p[1] = ntohl(p[0]);
    p[0] = temp;
 }
-
+*/
+/*
 static time_t PQ_to_time_t(double pqtime) {
    double_swap(&pqtime);              //convert to host order
    return millenium + (time_t)pqtime; //normalize to C API reference time
 }
+*/
 
 /**
  * exportProject exports a project to a binary file
@@ -491,7 +494,7 @@ static time_t PQ_to_time_t(double pqtime) {
  * @param efile the filename to export to
  * @return 0 on success
  */
-int ServerManager::exportProject(int lpid, const char *efile) {
+int ServerManager::exportProject(uint32_t lpid, const char *efile) {
    int rval = -1;
    if (mode == MODE_DB) {
       ProjectInfo pi(1, "none");
@@ -548,9 +551,11 @@ int ServerManager::exportProject(int lpid, const char *efile) {
                int pid = ntohl(*(int*)PQgetvalue(rset, i, 2));
                const char *json = (const char*)PQgetvalue(rset, i, 3);
 
+               /* available, but currently unused         
                double created_d = *(double*)PQgetvalue(rset, i, 4);
                time_t created = PQ_to_time_t(created_d);
-
+               */
+               
                json_object *update = json_tokener_parse(json);
                append_json_uint64_val(update, "updateid", updateid);
                append_json_string_val(update, "uid", uid);
@@ -820,23 +825,23 @@ void ServerManager::closeDB() {
    }
 }
 
-string ServerManager::getPermHeaderString(int colWidth) {
+string ServerManager::getPermHeaderString(size_t colWidth) {
    return getPermHeaderString(colWidth, false);
 }
 
-string ServerManager::getPermHeaderString(int colWidth, bool number) {
+string ServerManager::getPermHeaderString(size_t colWidth, bool number) {
    char buf[128];
    char rval[128];
    char *p = rval;
-   for (int i = 0; i < permStringsLength; i++) {
+   for (size_t i = 0; i < permStringsLength; i++) {
       if (number) {
-         snprintf(buf, sizeof(buf), "%d %s", i, permStrings[i]);
+         snprintf(buf, sizeof(buf), "%lu %s", i, permStrings[i]);
       }
       else {
          snprintf(buf, sizeof(buf), "%s", permStrings[i]);
       }
       if (strlen(buf) < colWidth) {
-         p += snprintf(p, sizeof(rval) - (p - rval), "%-*s|", colWidth, buf);
+         p += snprintf(p, sizeof(rval) - (p - rval), "%-*s|", (int)colWidth, buf);
       }
       else {
          buf[colWidth] = 0;  //truncate to colWidth
@@ -846,12 +851,12 @@ string ServerManager::getPermHeaderString(int colWidth, bool number) {
    return rval;
 }
 
-string ServerManager::getPermRowString(uint64_t p, uint64_t s, int colWidth) {
+string ServerManager::getPermRowString(uint64_t p, uint64_t s, size_t colWidth) {
    char rval[128];
    char buf[128];
    string fp = "";
    string fs = "";
-   for (int i = 0; i < permStringsLength; i++) {
+   for (size_t i = 0; i < permStringsLength; i++) {
       if ((p & 1) == 1) {
          fp = "P";
       }
@@ -865,7 +870,7 @@ string ServerManager::getPermRowString(uint64_t p, uint64_t s, int colWidth) {
          fs = " ";
       }
       snprintf(buf, sizeof(buf), " %s %s", fp.c_str(), fs.c_str());
-      snprintf(rval, sizeof(rval), "%-*s|", colWidth, buf);
+      snprintf(rval, sizeof(rval), "%-*s|", (int)colWidth, buf);
       p = p >> 1;
       s = s >> 1;
    }
@@ -1152,7 +1157,7 @@ void ServerManager::exec(int argc, char **argv) {
             break;
          }
          if (isNumeric(resp)) {
-            int lpid = strtoul(resp, NULL, 0);
+            uint32_t lpid = strtoul(resp, NULL, 0);
             printf("Enter the filename to export to: ");
             if (readLine(resp, sizeof(resp)) == NULL) {
                break;

@@ -106,7 +106,7 @@ public:
     * getPid inspector to get the pid (local project id, unigue to this server instance only) value
     * @return pid this local pid
     */
-   int getPid() {
+   uint32_t getPid() {
       return pid;
    }
 
@@ -114,7 +114,7 @@ public:
     * getPid mutator to set the pid (local project id, unigue to this server instance only) value
     * @param p the project pid
     */
-   void setPid(int p) {
+   void setPid(uint32_t p) {
 //      string msg = "set client pid to ";
 //      logln(msg + p, LINFO1);
       pid = p;
@@ -124,7 +124,7 @@ public:
     * getUid inspector to get the user id associated with this server
     * @return the user id
     */
-   int getUid() {
+   uint32_t getUid() {
       return uid;
    }
 
@@ -132,7 +132,7 @@ public:
     * getUid mutator to set the user id associated with this server
     * @param u the userid  
     */
-   void setUid(int u) {
+   void setUid(uint32_t u) {
       uid = u;
    }
 
@@ -332,8 +332,8 @@ private:
    uint64_t rsubscribe;
    bool authenticated;
 
-   int uid;  //user id associated with this connection
-   int pid;
+   uint32_t uid;  //user id associated with this connection
+   uint32_t pid;
    int authTries;
    string gpid;  //project id associated with this connection
    uint8_t challenge[CHALLENGE_SIZE];

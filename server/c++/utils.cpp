@@ -64,7 +64,7 @@ const char *permStrings[] = {
       NULL
 };
 
-int permStringsLength = sizeof(permStrings) / sizeof(char*) - 1;
+size_t permStringsLength = sizeof(permStrings) / sizeof(char*) - 1;
 
 union uLongLong {
    uint64_t ll;
@@ -97,7 +97,7 @@ uint8_t *toByteArray(string hexString, uint32_t *rlen) {
    int idx = 0;
    uint8_t *result = new uint8_t[hexString.length() / 2];
    buf[2] = 0;
-   for (int i = 0; i < hexString.length(); i += 2) {
+   for (size_t i = 0; i < hexString.length(); i += 2) {
       buf[0] = hexString[i];
       buf[1] = hexString[i + 1];
       sscanf(buf, "%hhx", &result[idx++]);
@@ -113,7 +113,7 @@ bool isNumeric(string s) {
    if (s.length() == 0) {
       return false;
    }
-   for (int i = 0; i < s.length(); i++) {
+   for (size_t i = 0; i < s.length(); i++) {
       if (!isdigit(s.at(i))) {
          return false;
       }
@@ -129,7 +129,7 @@ bool isHex(string s) {
    if (s.length() == 0) {
       return false;
    }
-   for (int i = 0; i < s.length(); i++) {
+   for (size_t i = 0; i < s.length(); i++) {
       if (!isxdigit(s.at(i))) {
          return false;
       }
@@ -145,7 +145,7 @@ bool isAlphaNumeric(string s) {
    if (s.length() == 0) {
       return false;
    }
-   for (int i = 0; i < s.length(); i++) {
+   for (size_t i = 0; i < s.length(); i++) {
       if (!isalnum(s.at(i))) {
          return false;
       }
@@ -181,7 +181,7 @@ string getMD5(const string &s) {
 }
 
 void log(const string &msg , int verbosity) {
-   fprintf(stderr, "%s\n", msg.c_str());
+   fprintf(logger, "%s", msg.c_str());
 }
 
 void logln(const string &msg , int verbosity) {
@@ -283,9 +283,9 @@ void FileIO::setFileDescriptor(int fd) {
  * This function is really only useful for reading fixed 
  * size fields.
  */
-int FileIO::readAll(void *ubuf, unsigned int size) {
-   unsigned int total = 0;
-   int nbytes;
+ssize_t FileIO::readAll(void *ubuf, ssize_t size) {
+   ssize_t total = 0;
+   ssize_t nbytes;
    while (total < size) {
       nbytes = ::read(fd, total +(char*)ubuf, size - total);
       if (nbytes <= 0) {
@@ -293,7 +293,7 @@ int FileIO::readAll(void *ubuf, unsigned int size) {
       }
       total += nbytes;
    }
-   return (int)total;
+   return total;
 }
 
 NetworkIO::NetworkIO(const char *host, int port) {
@@ -362,7 +362,7 @@ string NetworkIO::getPeerAddr() {
    return "???";
 }
 
-bool FileIO::write(const void *buf, uint32_t len) {
+bool FileIO::write(const void *buf, ssize_t len) {
    return sendAll(buf, len) == len;
 }
 
@@ -372,8 +372,8 @@ bool FileIO::write(const void *buf, uint32_t len) {
  * is non-zero, then the null terminator is also written to
  * the client.
  */
-int FileIO::sendMsg(const char *buf, bool nullflag) {
-   unsigned int len = strlen(buf);
+ssize_t FileIO::sendMsg(const char *buf, bool nullflag) {
+   size_t len = strlen(buf);
    return sendAll((const unsigned char *)buf, nullflag ? (len + 1) : len);
 }
 
@@ -382,19 +382,19 @@ int FileIO::sendMsg(const char *buf, bool nullflag) {
  * returns -1 on error or size if all chars were 
  * written.
  */
-int FileIO::sendAll(const void *buf, unsigned int size) {
-   unsigned int total = 0;
+ssize_t FileIO::sendAll(const void *buf, ssize_t size) {
+   ssize_t total = 0;
    const unsigned char *b = (const unsigned char *)buf;
    while (total < size) {
-      int nbytes = ::write(fd, b + total, size - total);
+      ssize_t nbytes = ::write(fd, b + total, size - total);
       if (nbytes == 0) return -1;
       total += nbytes;
    }
-   return (int)total;
+   return total;
 }
 
-int FileIO::sendFormat(const char *format, ...) {
-   int result = 0;
+ssize_t FileIO::sendFormat(const char *format, ...) {
+   ssize_t result = 0;
    char *ptr = NULL;
    va_list argp;
    va_start(argp, format);
@@ -545,41 +545,24 @@ Tcp6Service::~Tcp6Service() {
 }
 
 NetworkIO *Tcp6Service::accept() {
-   struct sockaddr_in6 peer;
-   socklen_t peer_len = sizeof(peer);
-   //with only one open fd, just block in accept
-   if (fds.size() == 1) {
-      int client = ::accept(fds[0], (struct sockaddr*)&peer, &peer_len);
-      if (client != -1) {
-         return new Tcp6IO(client, peer);
-      }
-      return NULL;
+   FD_ZERO(&aset);
+   for (vector<int>::iterator i = fds.begin(); i != fds.end(); i++) {
+      FD_SET(*i, &aset);
    }
-   else {
-      //with multiple open listening fd, we need to use select
-      //see if there are any pending accepts that we have not handled
+   //inifinite wait in select
+   if (select(nfds, &aset, NULL, NULL, NULL) > 0) {
       for (vector<int>::iterator i = fds.begin(); i != fds.end(); i++) {
          if (FD_ISSET(*i, &aset)) {
-            FD_CLR(*i, &aset);
+            struct sockaddr_in6 peer;
+            socklen_t peer_len = sizeof(peer);
             int client = ::accept(*i, (struct sockaddr*)&peer, &peer_len);
             if (client != -1) {
                return new Tcp6IO(client, peer);
             }
          }
       }
-      //no pending accepts so use select to wait for a socket to accept on
-      FD_ZERO(&aset);
-      for (vector<int>::iterator i = fds.begin(); i != fds.end(); i++) {
-         FD_SET(*i, &aset);
-      }
-      //inifinite wait in select
-      if (select(nfds, &aset, NULL, NULL, NULL) > 0) {
-         return accept();
-      }
-      else {
-         //should never get here?
-      }
    }
+   return NULL;
 }
 
 RC4::RC4(unsigned char *key, unsigned int keylen) {

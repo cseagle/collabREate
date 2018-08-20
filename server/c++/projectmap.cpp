@@ -22,7 +22,7 @@
 #include "projectmap.h"
 #include "clientset.h"
 
-typedef map<int,ClientSet*>::iterator Projects_it;
+typedef map<uint32_t,ClientSet*>::iterator Projects_it;
 
 ProjectMap::ProjectMap() {
    pthread_mutexattr_t attr;
@@ -49,9 +49,11 @@ void ProjectMap::loop(pcb func, void *user) {
 }
 
 //loop across all clients in a single project
-void ProjectMap::loopProject(int key, ccb func, void *user) {
+void ProjectMap::loopProject(uint32_t key, ccb func, void *user) {
    ClientSet *s = get(key);
-   s->loop(func, user);
+   if (s) {
+      s->loop(func, user);
+   }
 }
 
 //loop across all clients in all projects
@@ -65,14 +67,14 @@ void ProjectMap::loopClients(ccb func, void *user) {
 }
 
 //add a new project
-void ProjectMap::put(int key, ClientSet *val) {
+void ProjectMap::put(uint32_t key, ClientSet *val) {
    pthread_mutex_lock(&mutex);
    projects[key] = val;
    pthread_mutex_unlock(&mutex);
 }
 
 //call this only if you already hold a lock
-ClientSet *ProjectMap::getPriv(int key) {
+ClientSet *ProjectMap::getPriv(uint32_t key) {
    ClientSet *res = NULL;
    Projects_it it = projects.find(key);
    if (it != projects.end()) {
@@ -82,7 +84,7 @@ ClientSet *ProjectMap::getPriv(int key) {
 }
 
 //add client to the given project
-void ProjectMap::addClient(int key, Client *c) {
+void ProjectMap::addClient(uint32_t key, Client *c) {
    pthread_mutex_lock(&mutex);
    ClientSet *proj = getPriv(key);
    if (proj == NULL) {
@@ -118,7 +120,7 @@ void ProjectMap::removeClient(Client *c) {
 }
 
 //number of clients connected to the given project
-int ProjectMap::numClients(int key) {
+int ProjectMap::numClients(uint32_t key) {
    int res = 0;
    pthread_mutex_lock(&mutex);
    ClientSet *proj = getPriv(key);
@@ -131,7 +133,7 @@ int ProjectMap::numClients(int key) {
 
 //get the list of clients connected to the given project
 //should this be a cloned set ?? probably
-ClientSet *ProjectMap::get(int key) {
+ClientSet *ProjectMap::get(uint32_t key) {
    ClientSet *res = NULL;
    pthread_mutex_lock(&mutex);
    Projects_it it = projects.find(key);

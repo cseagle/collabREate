@@ -61,9 +61,9 @@ BasicConnectionManager::~BasicConnectionManager() {
  * @param user the user to authenticate
  * @param challenge the randomly generated challenge send to the plugin
  * @param response the calculated response from the plugin to check 
- * @return the user id of an authenticated user, or INVALID_USER
+ * @return the user id of an authenticated user, or INVALID_UID
  */
-int BasicConnectionManager::authenticate(Client *c, const char *user, const uint8_t *challenge, uint32_t clen, const uint8_t *response, uint32_t rlen) {
+uint32_t BasicConnectionManager::authenticate(Client *c, const char *user, const uint8_t *challenge, uint32_t clen, const uint8_t *response, uint32_t rlen) {
    //always authenticate in basic mode
    c->setUserPub(FULL_PERMISSIONS);
    c->setUserSub(FULL_PERMISSIONS);
@@ -101,7 +101,7 @@ void BasicConnectionManager::sendLatestUpdates(Client *c, uint64_t lastUpdate) {
  * @param pid the local pid of a project to get info on
  * @return a  project info object for the provided pid
  */
-ProjectInfo *BasicConnectionManager::getProjectInfo(int pid) {
+ProjectInfo *BasicConnectionManager::getProjectInfo(uint32_t pid) {
    string projectstring;
    for (Basic_it bi = basicProjects.begin(); bi != basicProjects.end(); bi++) {
       vector<ProjectInfo*> *vpi = (*bi).second;
@@ -137,6 +137,7 @@ vector<ProjectInfo*> *BasicConnectionManager::getProjectList(const string &phash
       ClientSet *cs = projects.get((*it)->lpid);
       if (cs != NULL) {
          (*it)->connected = cs->size();
+         break;
       }
    }
    return plist;
@@ -148,7 +149,7 @@ vector<ProjectInfo*> *BasicConnectionManager::getProjectList(const string &phash
  * @param lpid the local project id of the project on this server 
  * @return 0 on success, negative value on failure
  */
-int BasicConnectionManager::joinProject(Client *c, int lpid) {
+int BasicConnectionManager::joinProject(Client *c, uint32_t lpid) {
    int rval = -1;
    ::logln("in join");
    bool foundPid = false;
@@ -293,7 +294,7 @@ int BasicConnectionManager::migrateProject(const char *owner, const string &gpid
 int BasicConnectionManager::addProject(Client *c, const string &hash, const string &desc, uint64_t pub, uint64_t sub) {
    ::logln("in addProject ", LDEBUG);
    int lpid = -1;
-   int uid = c->getUid();
+//   int uid = c->getUid();
    string gpid;
    //logln("incrementing basic mode pid to : " + basicmodepid, LINFO1);
    sem_wait(&pidLock);

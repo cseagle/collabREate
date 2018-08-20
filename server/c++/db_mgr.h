@@ -35,16 +35,16 @@ using namespace std;
 class DatabaseConnectionManager : public ConnectionManagerBase {
 public:
    DatabaseConnectionManager(json_object *conf);
-   ~DatabaseConnectionManager();
+   virtual ~DatabaseConnectionManager();
    
-   int authenticate(Client *c, const char *user, const uint8_t *challenge, uint32_t clen, const uint8_t *response, uint32_t rlen);
+   uint32_t authenticate(Client *c, const char *user, const uint8_t *challenge, uint32_t clen, const uint8_t *response, uint32_t rlen);
    void migrateUpdate(const char *newowner, int pid, const char *cmd, json_object *obj);
    void post(Client *src, const char *cmd, json_object *obj);
    void sendLatestUpdates(Client *c, uint64_t lastUpdate);
-   ProjectInfo *getProjectInfo(int pid);
+   ProjectInfo *getProjectInfo(uint32_t pid);
 
    vector<ProjectInfo*> *getProjectList(const string & phash);
-   int joinProject(Client *c, int lpid);
+   int joinProject(Client *c, uint32_t lpid);
    int snapProject(Client *c, uint64_t lastupdateid, const string &desc);
    int forkProject(Client *c, uint64_t lastupdateid, const string &desc);
    int forkProject(Client *c, uint64_t lastupdateid, const string &desc, uint64_t pub, uint64_t sub);

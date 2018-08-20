@@ -173,6 +173,7 @@ void *ConnectionManagerBase::run(void *arg) {
       json_object_put(p->obj);
       delete p;
    }
+   return NULL;
 }
 
 static bool clientList(Client *c, void *user) {

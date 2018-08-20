@@ -41,25 +41,25 @@ typedef bool (*ccb)(Client *c, void *user);
 
 class ProjectMap {
 private:
-   map<int,ClientSet*> projects;
+   map<uint32_t,ClientSet*> projects;
    pthread_mutex_t mutex;
 
-   ClientSet *getPriv(int key);
+   ClientSet *getPriv(uint32_t key);
 
 public:
    ProjectMap();
    ~ProjectMap();
 
-   void put(int key, ClientSet *val);
-   void addClient(int key, Client *c);
+   void put(uint32_t key, ClientSet *val);
+   void addClient(uint32_t key, Client *c);
    void addClient(Client *c);
    void removeClient(Client *c);
-   ClientSet *get(int key);
-   int numClients(int key);
+   ClientSet *get(uint32_t key);
+   int numClients(uint32_t key);
    //loop across all projects
    void loop(pcb func, void *user);
    //loop across all clients in a single project
-   void loopProject(int key, ccb func, void *user);
+   void loopProject(uint32_t key, ccb func, void *user);
    //loop across all clients in all projects
    void loopClients(ccb func, void *user);
 
