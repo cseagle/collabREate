@@ -134,20 +134,17 @@ ProjectInfo *BasicConnectionManager::getProjectInfo(uint32_t pid) {
  * @return a vector of project info objects for the provided phash
  */
 vector<ProjectInfo*> *BasicConnectionManager::getProjectList(const string &phash) {
-   vector<ProjectInfo*> *plist;
+   vector<ProjectInfo*> *plist = NULL;
    //build a basic mode project list
    Basic_it bi = basicProjects.find(phash);
    if (bi != basicProjects.end()) {
       plist = (*bi).second;
-   }
-   else {
-      plist = new vector<ProjectInfo*>;
-   }
-   for (Info_it it = plist->begin(); it != plist->end(); it++) {
-      ClientSet *cs = projects.get((*it)->lpid);
-      if (cs != NULL) {
-         (*it)->connected = cs->size();
-         break;
+      for (Info_it it = plist->begin(); it != plist->end(); it++) {
+         ClientSet *cs = projects.get((*it)->lpid);
+         if (cs != NULL) {
+            (*it)->connected = cs->size();
+            break;
+         }
       }
    }
    return plist;

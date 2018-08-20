@@ -146,7 +146,6 @@ void Client::send_data(const char *command, json_object *obj) {
       log(LDEBUG, "Client::send_data calling conn->writeJson\n");
       conn->writeJson(obj);  //calls json_object_put
       //fprintf(stderr, "send_data- cmd: %s\n");
-//      json_object_put(obj);
 //      stats[0][command]++;    //figure out way to count messages - map???
 /*
    }
@@ -681,44 +680,44 @@ bool Client::msg_project_list(json_object *obj, Client *c) {
    }
    c->hash = string_from_json(obj, "md5");
 //   c->log(LINFO4, "project hash: %s\n", c->hash.c_str());
+   json_object *projects = json_object_new_array();
    vector<ProjectInfo*> *plist = c->cm->getProjectList(c->hash);
 //   int nump = plist->size();
-   json_object *projects = json_object_new_array();
 //   c->log(LINFO3, " Found %u projects\n", nump);
    //create list of projects
-   for (vector<ProjectInfo*>::iterator pi = plist->begin(); pi != plist->end(); pi++) {
-//      c->log(LINFO4, " " + pi.lpid + " "+ pi.desc, LINFO4);
-      char buf[256];
-      json_object *proj = json_object_new_object();
-      append_json_int32_val(proj, "id", (*pi)->lpid);
-      append_json_uint64_val(proj, "snap_id", (*pi)->snapupdateid);
-      if ((*pi)->parent > 0) {
-         if ((*pi)->snapupdateid > 0) {
-            snprintf(buf, sizeof(buf), "[-] %s (SNAP of '%s'@%" PRIu64 " updates])", (*pi)->desc.c_str(), (*pi)->pdesc.c_str(), (*pi)->snapupdateid);
-//            log("[-] " + pi.desc + " (snapshot of (" + pi.parent + ")'" + pi.pdesc+"' ["+ pi.snapupdateid + " updates]) ", LDEBUG);
+   if (plist) {
+      for (vector<ProjectInfo*>::iterator pi = plist->begin(); pi != plist->end(); pi++) {
+   //      c->log(LINFO4, " " + pi.lpid + " "+ pi.desc, LINFO4);
+         char buf[256];
+         json_object *proj = json_object_new_object();
+         append_json_int32_val(proj, "id", (*pi)->lpid);
+         append_json_uint64_val(proj, "snap_id", (*pi)->snapupdateid);
+         if ((*pi)->parent > 0) {
+            if ((*pi)->snapupdateid > 0) {
+               snprintf(buf, sizeof(buf), "[-] %s (SNAP of '%s'@%" PRIu64 " updates])", (*pi)->desc.c_str(), (*pi)->pdesc.c_str(), (*pi)->snapupdateid);
+   //            log("[-] " + pi.desc + " (snapshot of (" + pi.parent + ")'" + pi.pdesc+"' ["+ pi.snapupdateid + " updates]) ", LDEBUG);
+            }
+            else {
+               snprintf(buf, sizeof(buf), "[%d] %s (FORK of '%s')", (*pi)->connected, (*pi)->desc.c_str(), (*pi)->pdesc.c_str());
+   //            log("[" + pi.connected + "] " + pi.desc + " (forked from (" + pi.parent + ") '" + pi.pdesc +"')", LDEBUG);
+            }
          }
          else {
-            snprintf(buf, sizeof(buf), "[%d] %s (FORK of '%s')", (*pi)->connected, (*pi)->desc.c_str(), (*pi)->pdesc.c_str());
-//            log("[" + pi.connected + "] " + pi.desc + " (forked from (" + pi.parent + ") '" + pi.pdesc +"')", LDEBUG);
+            snprintf(buf, sizeof(buf), "[%d] %s", (*pi)->connected, (*pi)->desc.c_str());
          }
+         append_json_string_val(proj, "description", buf);
+         //since the user permissions may already limit the eventual effective permissions
+         //only show the user the maximum attainable by this particular user (mask)
+         //upublish = usubscribe = FULL_PERMISSIONS;  //quick BASIC mode test
+         append_json_uint64_val(proj, "pub_mask", (*pi)->pub & c->upublish);
+         append_json_uint64_val(proj, "sub_mask", (*pi)->sub & c->usubscribe);
+   
+         json_object_array_add(projects, proj);
+   //                    logln("", LDEBUG);
+   //                    logln("pP " + (*pi)->pub + " pS " + (*pi)->sub, LINFO4);
+   //                    logln("uP " + c->upublish + " uS " + c->usubscribe, LINFO4);
       }
-      else {
-         snprintf(buf, sizeof(buf), "[%d] %s", (*pi)->connected, (*pi)->desc.c_str());
-      }
-      append_json_string_val(proj, "description", buf);
-      //since the user permissions may already limit the eventual effective permissions
-      //only show the user the maximum attainable by this particular user (mask)
-      //upublish = usubscribe = FULL_PERMISSIONS;  //quick BASIC mode test
-      append_json_uint64_val(proj, "pub_mask", (*pi)->pub & c->upublish);
-      append_json_uint64_val(proj, "sub_mask", (*pi)->sub & c->usubscribe);
-
-      json_object_array_add(projects, proj);
-//                    logln("", LDEBUG);
-//                    logln("pP " + (*pi)->pub + " pS " + (*pi)->sub, LINFO4);
-//                    logln("uP " + c->upublish + " uS " + c->usubscribe, LINFO4);
-      delete *pi;
    }
-   delete plist;
 
    //also append list of permissions supported by this server
    json_object *options = json_object_new_array();

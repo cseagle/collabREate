@@ -73,6 +73,7 @@ void ConnectionManagerBase::terminate() {
    projects.loopClients(termClients, NULL);
    if (conf != NULL) {
       json_object_put(conf);
+      conf = NULL;
    }
 }
 
