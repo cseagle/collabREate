@@ -717,6 +717,7 @@ bool Client::msg_project_list(json_object *obj, Client *c) {
    //                    logln("pP " + (*pi)->pub + " pS " + (*pi)->sub, LINFO4);
    //                    logln("uP " + c->upublish + " uS " + c->usubscribe, LINFO4);
       }
+      delete plist;
    }
 
    //also append list of permissions supported by this server

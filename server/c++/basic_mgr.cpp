@@ -138,7 +138,7 @@ vector<ProjectInfo*> *BasicConnectionManager::getProjectList(const string &phash
    //build a basic mode project list
    Basic_it bi = basicProjects.find(phash);
    if (bi != basicProjects.end()) {
-      plist = (*bi).second;
+      plist = new vector<ProjectInfo*>(*(*bi).second);
       for (Info_it it = plist->begin(); it != plist->end(); it++) {
          ClientSet *cs = projects.get((*it)->lpid);
          if (cs != NULL) {
