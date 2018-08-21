@@ -46,6 +46,7 @@ private:
    map<string,vector<ProjectInfo*>*> basicProjects;
    int basicmodepid;
    sem_t pidLock;
+   ProjectInfo *findProject(uint32_t lpid);
 
 public:
    BasicConnectionManager(json_object *conf);

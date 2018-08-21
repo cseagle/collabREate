@@ -89,7 +89,8 @@ uint32_t BasicConnectionManager::authenticate(Client *c, const char *user, const
  */
 void BasicConnectionManager::post(Client *src, const char * cmd, json_object *obj) {
    sem_wait(&queueMutex);
-   queue.push_back(new Packet(src, cmd, obj, 0));   //add a new packet with the binary data to the queue
+   ProjectInfo *pi = findProject(src->getPid());
+   queue.push_back(new Packet(src, cmd, obj, pi->next_uid()));   //add a new packet with the binary data to the queue
    sem_post(&queueMutex);
    sem_post(&queueSem);  //notify is the compliment to wait
 }
@@ -169,7 +170,7 @@ int BasicConnectionManager::joinProject(Client *c, uint32_t lpid) {
             foundPid = true;
             c->setGpid(EMPTY_GPID);
             c->setPid(lpid);
-           log(LDEBUG, "BASIC mode has no notion of users, setting permissions based on REQ\n");
+            log(LDEBUG, "BASIC mode has no notion of users, setting permissions based on REQ\n");
             //c->setPub(c.getReqPub());
             //c->setSub(c.getReqSub());
             c->setPub(FULL_PERMISSIONS);
@@ -284,8 +285,21 @@ int BasicConnectionManager::snapforkProject(Client *c, int spid, const string &d
 
 int BasicConnectionManager::migrateProject(const char *owner, const string &gpid, const string &hash, const string &desc, uint64_t pub, uint64_t sub) {
 
-  log(LERROR, "migrating in BASIC mode doesn't make sense!\n");
+   log(LERROR, "migrating in BASIC mode doesn't make sense!\n");
    return -1;
+}
+
+//Find a project given only an lpid
+ProjectInfo *BasicConnectionManager::findProject(uint32_t lpid) {
+   for (Basic_it bi = basicProjects.begin(); bi != basicProjects.end(); bi++) {
+      vector<ProjectInfo*> *vpi = (*bi).second;
+      for (Info_it it = vpi->begin(); it != vpi->end(); it++) {
+         if ((*it)->lpid == lpid) {
+            return *it;
+         }
+      }
+   }
+   return NULL;
 }
 
 /**
@@ -299,7 +313,7 @@ int BasicConnectionManager::migrateProject(const char *owner, const string &gpid
  */
 
 int BasicConnectionManager::addProject(Client *c, const string &hash, const string &desc, uint64_t pub, uint64_t sub) {
-  log(LDEBUG, "in addProject\n");
+   log(LDEBUG, "in addProject\n");
    int lpid = -1;
 //   int uid = c->getUid();
    string gpid;
@@ -323,7 +337,7 @@ int BasicConnectionManager::addProject(Client *c, const string &hash, const stri
    c->setPid(lpid);
    //basic mode has no Gpid?
    c->setGpid(EMPTY_GPID);
-  log(LINFO, "BASIC mode has no notion of users, setting permissions based on REQ\n");
+   log(LINFO, "BASIC mode has no notion of users, setting permissions based on REQ\n");
    //c.setPub(c.getReqPub());
    //c.setSub(c.getReqSub());
    c->setPub(FULL_PERMISSIONS);

@@ -22,6 +22,7 @@
 #define __HANDLER_H
 
 #include <stdint.h>
+#include <semaphore.h>
 #include <string>
 
 using namespace std;
@@ -41,9 +42,14 @@ public:
    string hash;
    string gpid;
 
-   ProjectInfo(uint32_t localpid, const string &description, uint32_t currentlyconnected = 0);
+   ProjectInfo(uint32_t localpid, const string &description, uint32_t currentlyconnected = 0, uint64_t init_uid = 0);
    ProjectInfo(const ProjectInfo &pi);
-   
+
+   uint64_t next_uid();
+
+private:
+   sem_t uidMutex;
+   uint64_t updateid;
 };
 
 #endif
