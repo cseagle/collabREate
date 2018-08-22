@@ -799,7 +799,9 @@ void comment_changed(ea_t ea, bool rep) {
 void change_ti(ea_t ea, const type_t *type, const p_list *fnames) {
    json_object *obj = json_object_new_object();
    append_json_hex_val(obj, "ti", (const uint8_t*)type);
-   append_json_hex_val(obj, "fnames", (const uint8_t*)fnames);
+   if (fnames) {
+      append_json_hex_val(obj, "fnames", (const uint8_t*)fnames);
+   }
    send_json(ea, COMMAND_TI_CHANGED, obj);
 /*
    if (send_data(b) == -1) {
@@ -813,7 +815,9 @@ void change_ti(ea_t ea, const type_t *type, const p_list *fnames) {
 void change_op_ti(ea_t ea, int n, const type_t *type, const p_list *fnames) {
    json_object *obj = json_object_new_object();
    append_json_hex_val(obj, "ti", (const uint8_t*)type);
-   append_json_hex_val(obj, "fnames", (const uint8_t*)fnames);
+   if (fnames) {
+      append_json_hex_val(obj, "fnames", (const uint8_t*)fnames);
+   }
    append_json_int32_val(obj, "opnum", n);
    send_json(ea, COMMAND_OP_TI_CHANGED, obj);
 /*
@@ -1918,7 +1922,7 @@ ssize_t idaapi idb_hook(void * /*user_data*/, int notification_code, va_list va)
                                                // in: ea_t ea, const type_t *type, const p_list *fnames
          ea_t ea = va_arg(va, ea_t);
          const type_t *type = va_arg(va, const type_t*);
-         const p_list *fnames = va_arg(va, const p_list*);
+         const p_list *fnames = va_arg(va, const p_list*);   //this can be NULL???
          change_ti(ea, type, fnames);
          break;
       }
@@ -2178,12 +2182,12 @@ ssize_t idaapi idb_hook(void * /*user_data*/, int notification_code, va_list va)
          break;
       }
       case idb_event::auto_empty: {
-         //         msg("auto_empty\n");
+         msg("auto_empty\n");
          break;
          //         return 0;
       }
       case idb_event::auto_empty_finally: {
-         //         msg("auto_empty_finally\n");
+         msg("auto_empty_finally\n");
          //         return 0;
          break;
       }
@@ -2542,6 +2546,11 @@ ssize_t idaapi idp_hook(void * /*user_data*/, int notification_code, va_list va)
          msg(PLUGIN_NAME": 0x%s undefined\n", a1.c_str());
 */
          idp_undefine(ea);
+#ifndef __IDAFW__
+         unhookAll();
+         auto_wait();
+         hookAll();
+#endif
          break;
       }
       case processor_t::ev_add_cref: {
@@ -2576,7 +2585,7 @@ ssize_t idaapi idp_hook(void * /*user_data*/, int notification_code, va_list va)
          break;
       }
       case processor_t::ev_auto_queue_empty : {
-//         msg("auto_queue_empty\n");
+         msg("auto_queue_empty\n");
          break;
 //         return 0;
       }

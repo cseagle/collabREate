@@ -524,11 +524,7 @@ int cmd_ti_changed(json_object *json) {
    if (ti == NULL) {
       return -1;
    }
-   const p_list *fnames = (const p_list*)hex_from_json(json, "fnames", &fnames_len);
-   if (fnames == NULL) {
-      qfree((void*)ti);
-      return -1;
-   }
+   const p_list *fnames = (const p_list*)hex_from_json(json, "fnames", &fnames_len);  //NULL is a valid result here
    const type_t *ti1 = ti;  //for free because deserialize changes ti
    const p_list *fnames1 = fnames;  //for free because deserialize changes fnames
 #if IDA_SDK_VERSION >= 650
@@ -564,11 +560,7 @@ int cmd_op_ti_changed(json_object *json) {
    if (ti == NULL) {
       return -1;
    }
-   const p_list *fnames = (const p_list*)hex_from_json(json, "fnames", &fnames_len);
-   if (fnames == NULL) {
-      qfree((void*)ti);
-      return -1;
-   }
+   const p_list *fnames = (const p_list*)hex_from_json(json, "fnames", &fnames_len);  //NULL is a valid return here
    const type_t *ti1 = ti;  //for free because deserialize changes ti
    const p_list *fnames1 = fnames;  //for free because deserialize changes fnames
 #if IDA_SDK_VERSION >= 650
