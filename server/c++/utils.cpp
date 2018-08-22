@@ -261,12 +261,12 @@ json_object *NetworkIO::readJson() {
       jerr = json_tokener_get_error(tok);
       if (jerr == json_tokener_continue) {
          //json object is syntactically correct, but incomplete
-         //fprintf(stderr, "json_tokener_continue for %s\n", json_buffer.c_str());
+         //log(LDEBUG, "json_tokener_continue for %s\n", json_buffer.c_str());
          continue;
       }
       else if (jerr != json_tokener_success) {
          //need to reconnect socket and in the meantime start caching event locally
-         //fprintf(stderr, "jerr != json_tokener_success for %s\n", json_buffer.c_str());
+         //log(LERROR, "jerr != json_tokener_success for %s\n", json_buffer.c_str());
          break;
       }
       if (obj != NULL && jerr == json_tokener_success) {

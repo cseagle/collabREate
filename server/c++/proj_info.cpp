@@ -18,6 +18,7 @@
    Place, Suite 330, Boston, MA 02111-1307 USA
  */
 
+#include <string.h>
 #include "proj_info.h"
 
 sem_t uidMutex;
@@ -42,6 +43,12 @@ ProjectInfo::ProjectInfo(const ProjectInfo &pi) {
    *this = pi;
 }
 
+ProjectInfo::~ProjectInfo() {
+   for (vector<char*>::iterator i = updates.begin(); i != updates.end(); i++) {
+      free(*i);
+   }
+}
+
 uint64_t ProjectInfo::next_uid() {
    uint64_t result;
    sem_wait(&uidMutex);
@@ -49,3 +56,8 @@ uint64_t ProjectInfo::next_uid() {
    sem_post(&uidMutex);
    return result;
 }
+
+void ProjectInfo::append_update(const char *update) {
+   updates.push_back(strdup(update));
+}
+

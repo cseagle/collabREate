@@ -90,7 +90,10 @@ uint32_t BasicConnectionManager::authenticate(Client *c, const char *user, const
 void BasicConnectionManager::post(Client *src, const char * cmd, json_object *obj) {
    sem_wait(&queueMutex);
    ProjectInfo *pi = findProject(src->getPid());
-   queue.push_back(new Packet(src, cmd, obj, pi->next_uid()));   //add a new packet with the binary data to the queue
+   Packet *pkt = new Packet(src, cmd, obj, pi->next_uid());
+   const char *json = json_object_to_json_string(pkt->obj);
+   pi->append_update(json);
+   queue.push_back(pkt);   //add a new packet with the binary data to the queue
    sem_post(&queueMutex);
    sem_post(&queueSem);  //notify is the compliment to wait
 }
@@ -104,7 +107,19 @@ void BasicConnectionManager::post(Client *src, const char * cmd, json_object *ob
  * @param lastUpdate the last update the client received 
  */
 void BasicConnectionManager::sendLatestUpdates(Client *c, uint64_t lastUpdate) {
-   c->send_error("Server is in basic mode, updates to date are not stored");
+//   c->send_error("Server is in basic mode, updates to date are not stored");
+   ProjectInfo *pi = findProject(c->getPid());
+   const vector<char*> &updates = pi->get_updates();
+   for (vector<char*>::const_iterator i = updates.begin(); i != updates.end(); i++) {
+      json_object *obj = json_tokener_parse(*i);
+      uint64_t uid;
+      if (uint64_from_json(obj, "updateid", &uid) && uid > lastUpdate) {
+         const char *cmd = string_from_json(obj, "type");
+         if (cmd) {
+            c->post(cmd, obj);
+         }
+      }
+   }
 }
 
 /**

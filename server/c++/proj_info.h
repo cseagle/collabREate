@@ -24,6 +24,7 @@
 #include <stdint.h>
 #include <semaphore.h>
 #include <string>
+#include <vector>
 
 using namespace std;
 
@@ -44,12 +45,19 @@ public:
 
    ProjectInfo(uint32_t localpid, const string &description, uint32_t currentlyconnected = 0, uint64_t init_uid = 0);
    ProjectInfo(const ProjectInfo &pi);
+   ~ProjectInfo();
 
    uint64_t next_uid();
+
+   void append_update(const char *update);
+   const vector<char*> &get_updates() {return updates;};
 
 private:
    sem_t uidMutex;
    uint64_t updateid;
+
+   vector<char*> updates;
+
 };
 
 #endif
