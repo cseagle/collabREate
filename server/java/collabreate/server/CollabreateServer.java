@@ -209,7 +209,7 @@ public class CollabreateServer extends Thread implements CollabreateConstants {
       int port = getConfigInt("SERVER_PORT", DEFAULT_PORT);
       ss = new ServerSocket(port);
 
-      String logFile = getConfigString("LogFile", null);
+      String logFile = getConfigString("LOG_FILE", null);
       if (logFile != null) {
          try {
             logStream = new PrintStream(new FileOutputStream(logFile, true), true);

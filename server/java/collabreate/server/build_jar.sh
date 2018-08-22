@@ -4,7 +4,7 @@
 #the jar manifest needs the correct file names
 SQLJAR=`ls *mysql*.jar 2>/dev/null`
 POSTGRESJAR=`ls *postgres*.jar 2>/dev/null`
-MYCP="$SQLJAR $POSTGRESJAR"
+MYCP="$SQLJAR $POSTGRESJAR gson-2.8.0.jar"
 
 echo "Using these JDBC connectors:$MYCP"
 
@@ -33,12 +33,12 @@ echo "Implementation-URL: www.idabook.com/collabreate/" >> manager_manifest.mf
 
 #build the jar files
 cd ../..
-javac collabreate/server/*.java
+javac -cp gson-2.8.0.jar collabreate/server/*.java
 
-jar cfm collabreate_server.jar collabreate/server/server_manifest.mf collabreate/server/*.class
+jar cfm collabreate_server.jar collabreate/server/server_manifest.mf gson-2.8.0.jar collabreate/server/*.class
 mv -f collabreate_server.jar collabreate/server
 
-jar cfm collabreate_manager.jar collabreate/server/manager_manifest.mf collabreate/server/*.class
+jar cfm collabreate_manager.jar collabreate/server/manager_manifest.mf gson-2.8.0.jar collabreate/server/*.class
 mv -f collabreate_manager.jar collabreate/server
 
 cd collabreate/server

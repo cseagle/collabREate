@@ -6,7 +6,7 @@
 #java -classpath $CLASSPATH -jar collabreate_server.jar $1 > /dev/null 2>&1 < /dev/null &
 
 #or even execute the class files directly:
-#java collabreate.server.CollabreateServer collabreate/server/example_server.conf
+#java collabreate.server.CollabreateServer collabreate/server/example_server.json
 
-java -jar collabreate_server.jar server.conf > /dev/null 2>&1 < /dev/null &
+java -jar collabreate_server.jar server.json > /dev/null 2>&1 < /dev/null &
 

@@ -31,8 +31,8 @@ package collabreate.server;
 
 public interface CollabreateConstants {
 
-   public static final long default_pub = 0x3fff;
-   public static final long default_sub = 0x3fff;
+   public static final long default_pub = 0x7fff;
+   public static final long default_sub = 0x7fff;
 
    public static final long FULL_PERMISSIONS            = 0x7fffffff;
 
@@ -161,6 +161,7 @@ public interface CollabreateConstants {
    public static final long  MASK_FLIRT                  = 0x00000800;
    public static final long  MASK_THUNK                  = 0x00001000;
    public static final long  MASK_XREF                   = 0x00002000;
+   public static final long  MASK_USER                   = 0x00004000;
 
    public static final String[] permStrings = {
                               "Undefine",

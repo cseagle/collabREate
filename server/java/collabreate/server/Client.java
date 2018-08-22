@@ -1091,6 +1091,8 @@ public class Client extends Thread implements CollabreateConstants {
       perms_map.put(COMMAND_ADD_DREF, MASK_XREF);
       perms_map.put(COMMAND_DEL_CREF, MASK_XREF);
       perms_map.put(COMMAND_DEL_DREF, MASK_XREF);
+
+      perms_map.put(COMMAND_USER_MESSAGE, MASK_USER);
    
    }
 
