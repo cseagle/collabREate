@@ -2182,12 +2182,12 @@ ssize_t idaapi idb_hook(void * /*user_data*/, int notification_code, va_list va)
          break;
       }
       case idb_event::auto_empty: {
-         msg("auto_empty\n");
+//         msg("auto_empty\n");
          break;
          //         return 0;
       }
       case idb_event::auto_empty_finally: {
-         msg("auto_empty_finally\n");
+//         msg("auto_empty_finally\n");
          //         return 0;
          break;
       }
@@ -2527,7 +2527,7 @@ ssize_t idaapi idp_hook(void * /*user_data*/, int notification_code, va_list va)
          break;
       }
       case processor_t::auto_empty: {
-         //         msg("auto_empty\n");
+//         msg("auto_empty\n");
          break;
          //         return 0;
       }
@@ -2585,7 +2585,7 @@ ssize_t idaapi idp_hook(void * /*user_data*/, int notification_code, va_list va)
          break;
       }
       case processor_t::ev_auto_queue_empty : {
-         msg("auto_queue_empty\n");
+//         msg("auto_queue_empty\n");
          break;
 //         return 0;
       }
