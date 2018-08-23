@@ -107,7 +107,6 @@ void BasicConnectionManager::post(Client *src, const char * cmd, json_object *ob
  * @param lastUpdate the last update the client received 
  */
 void BasicConnectionManager::sendLatestUpdates(Client *c, uint64_t lastUpdate) {
-//   c->send_error("Server is in basic mode, updates to date are not stored");
    ProjectInfo *pi = findProject(c->getPid());
    const vector<char*> &updates = pi->get_updates();
    for (vector<char*>::const_iterator i = updates.begin(); i != updates.end(); i++) {

@@ -52,7 +52,7 @@ ProjectInfo::~ProjectInfo() {
 uint64_t ProjectInfo::next_uid() {
    uint64_t result;
    sem_wait(&uidMutex);
-   result = updateid++;
+   result = ++updateid;
    sem_post(&uidMutex);
    return result;
 }
