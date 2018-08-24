@@ -230,7 +230,7 @@ void disp_request_t::queueObject(json_object *obj) {
 void disp_request_t::flush() {
    qmutex_lock(mtx);
    for (qvector<json_object*>::iterator i = objects.begin(); i != objects.end(); i++) {
-      delete *i;
+      json_object_put(*i);
    }
    objects.clear();
    qmutex_unlock(mtx);
