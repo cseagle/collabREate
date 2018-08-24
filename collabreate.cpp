@@ -57,7 +57,6 @@
 #include <offset.hpp>
 #include <auto.hpp>
 
-#include <cstdio>
 #include <json-c/json.h>
 
 #include <map>

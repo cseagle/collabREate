@@ -53,7 +53,13 @@ static int idaapi collab_cb(int fid, form_actions_t &fa) {
          break;
       case SEND: {  // Send button pressed
          qstring val;
+#if IDA_SDK_VERSION <= 650
+         if (fa.get_field_value(2, &val)) {
+#elif IDA_SDK_VERSION <= 670
+         if (fa._get_field_value(2, &val)) {
+#else
          if (fa.get_string_value(2, &val)) {
+#endif
             msg("Sending: %s\n", val.c_str());
 
             //*** are next two lines necessary or should we wait
