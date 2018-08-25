@@ -172,7 +172,6 @@ extern qstring *changeCache;
 #define LASTUPDATE_SUPVAL 4
 #define OPTIONS_SUPVAL 5
 
-#define LASTUPDATE_ALTVAL 1
 #define LAST_PORT_ALTVAL 2
 
 #define CHALLENGE_SIZE 32
