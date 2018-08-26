@@ -130,7 +130,7 @@ bool do_auth() {
 }
 
 int choose_project(json_object *json) {
-   const char *format = "BUTTON YES* Ok\nBUTTON CANCEL Cancel\nProject Selection\n\n\nSelect a project to join:\n<Description (New project only):A:1024:64::>\n<Project:b:0:::>\n";
+   const char *format = "BUTTON YES* Ok\nBUTTON CANCEL Cancel\nProject Selection\n\n\nSelect a project to join:\n<Project:b:0:::><Description (New project only):A:1024:64::>\n\n";
 
    description[0] = 0;
 
@@ -210,7 +210,7 @@ int choose_project(json_object *json) {
       optLabels[i] = qstrdup(json_object_to_json_string(label));
    }
 
-   int res = AskUsingForm_c(format, description, &projectList, &sel);
+   int res = AskUsingForm_c(format, &projectList, &sel, description);
    if (res == ASKBTN_YES) {
       return sel ? projects[sel - 1] : 0;  //map selection index to associated project number
    }
@@ -359,7 +359,7 @@ const int cmd_chooser::widths[] = { 32 };
 const char *cmd_chooser::header[] = { "" };
 
 int do_choose_command() {
-   return cmd_info.choose();
+   return (int)cmd_info.choose();
 }
 #else
 char* idaapi get_command(void *obj, uint32 n, char *buf) {
