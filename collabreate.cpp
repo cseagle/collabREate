@@ -178,32 +178,30 @@ int idaapi init(void) {
    if (sz > 0) {
       msg(PLUGIN_NAME": Operating in caching mode until connected.\n");
       if (changeCache == NULL) {
-         ssize_t sz = cnn.supstr(1, NULL, 0, COLLABREATE_CACHE_TAG);
+         size_t sz;
+         void *tcache = cnn.getblob(NULL, &sz, 1, COLLABREATE_CACHE_TAG);
          if (sz > 0) {
-            char *tmp = new char[sz + 2];
-            cnn.supstr(1, tmp, sz + 2, COLLABREATE_CACHE_TAG);
-            changeCache = new qstring(tmp);
-            delete [] tmp;
+            changeCache = new qstring((char*)tcache);
          }
          else {
             changeCache = new qstring();
          }
+         qfree(tcache);
          hookAll();
       }
    }
    if (msgHistory.size() == 0) {
-      ssize_t sz = cnn.supstr(1, NULL, 0, COLLABREATE_MSGHISTORY_TAG);
-      if (sz > 0) {
-         char *tmp = new char[sz + 2];
+      size_t sz;
+      void *thist = cnn.getblob(NULL, &sz, 1, COLLABREATE_MSGHISTORY_TAG);
+      if (sz > 1) {
          char *sptr, *endp;
-         sptr = tmp;
-         cnn.supstr(1, tmp, sz + 2, COLLABREATE_MSGHISTORY_TAG);
+         sptr = (char*)thist;
          while ((endp = strchr(sptr, '\n')) != NULL) {
             msgHistory.push_back(qstring(sptr, endp - sptr));
             sptr = endp + 1;
          }
-         delete [] tmp;
       }
+      qfree(thist);
    }
    build_handler_map();
    if (init_network()) {
@@ -240,11 +238,11 @@ void idaapi term(void) {
          temp += msgHistory[i];
          temp += '\n';
       }
-      cnn.supset(1, temp.c_str(), 0, COLLABREATE_MSGHISTORY_TAG);
+      cnn.setblob(temp.c_str(), temp.length() + 1, 1, COLLABREATE_MSGHISTORY_TAG);
       msgHistory.clear();
    }
    if (changeCache != NULL && changeCache->length() > 0) {
-      cnn.supset(1, changeCache->c_str(), 0, COLLABREATE_CACHE_TAG);
+      cnn.setblob(changeCache->c_str(), changeCache->length() + 1, 1, COLLABREATE_CACHE_TAG);
       delete changeCache;
       changeCache = NULL;
    }

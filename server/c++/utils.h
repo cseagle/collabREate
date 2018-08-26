@@ -309,6 +309,8 @@ public:
    string getPeerAddr();   
 private:
    string json_buffer;
+   uint64_t ping_val;
+   bool pinging;
 };
 
 class NetworkService {

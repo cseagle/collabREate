@@ -9,6 +9,8 @@
   "#log_verbosity" : "#higher numbers result in loging more events",
   "LOG_VERBOSITY" : 4,
 
+  "PING_TIMEOUT" : 300,
+
   "SERVER_PORT" : 5042,
 
   "SERVER_MODE" : "database",

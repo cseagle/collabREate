@@ -153,6 +153,8 @@
 
 #define MSG_ERROR                    "collab_error"
 #define MSG_FATAL                    "collab_fatal"
+#define MSG_PING                     "ping"
+#define MSG_PONG                     "pong"
 
 class netnode;
 extern netnode cnn;

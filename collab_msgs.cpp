@@ -1467,9 +1467,8 @@ int project_join_reply(json_object *json) {
       if (changeCache != NULL) {
 //                  msg("sending change cache of size %d\n", changeCache->size());
          send_all(*changeCache);
-         delete changeCache;
-         changeCache = NULL;
-         cnn.supdel(1, COLLABREATE_CACHE_TAG);
+         changeCache->clear();
+         cnn.delblob(1, COLLABREATE_CACHE_TAG);
       }
       qfree(gpid);
    }
@@ -1607,6 +1606,19 @@ int collab_fatal(json_object *json) {
    return 0;
 }
 
+int collab_ping(json_object *json) {
+   uint64_t id;
+   if (uint64_from_json(json, "id", &id)) {
+      json_object *obj = json_object_new_object();
+      append_json_uint64_val(obj, "id", id);
+      send_json(MSG_PONG, obj);
+   }
+   else {
+      //just ignore if id is missing??
+   }
+   return 0;
+}
+
 /*
  * Main dispatch routine for received remote notifications
  */
@@ -1623,7 +1635,7 @@ bool msg_dispatcher(json_object *json) {
    }
 
 #ifdef DEBUG
-   msg(PLUGIN_NAME": msg_dispatcher called for command: %s\n", msg_type);
+   msg(PLUGIN_NAME": msg_dispatcher called for: %s\n", json_object_to_json_string(json));
 #endif
 
    //first see if this is an idb related message and handle accordingly
@@ -1703,6 +1715,7 @@ void build_handler_map() {
    ctrl_handlers[MSG_ACK_UPDATEID] = ack_updateid;
    ctrl_handlers[MSG_ERROR] = collab_error;
    ctrl_handlers[MSG_FATAL] = collab_fatal;
+   ctrl_handlers[MSG_PING] = collab_ping;
 
    ida_handlers[COMMAND_UNDEFINE] = cmd_undefine;
    ida_handlers[COMMAND_MAKE_CODE] = cmd_make_code;

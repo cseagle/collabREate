@@ -189,19 +189,17 @@ disp_request_t::~disp_request_t() {
 //can arrive and be processed during the loop since queue synchronization takes
 //place within the StringList
 int idaapi disp_request_t::execute(void) {
-//   msg("execute called\n");
    while (objects.size() > 0) {
       qmutex_lock(mtx);
       qvector<json_object*>::iterator i = objects.begin();
       json_object *obj = *i;
       objects.erase(i);
       qmutex_unlock(mtx);
-//      msg("dequeued: %s\n", s->c_str());
       bool res = (*_disp)(obj);
       if (!res) {  //not sure we really care what is returned here
 //         msg(PLUGIN_NAME": connection to server severed at dispatch.\n");
-         comm->cleanup(true);
-         break;
+//         comm->cleanup(true);     //probably not the right thing to do??
+//         break;
       }
       else {
          //msg(PLUGIN_NAME": dispatch routine called successfully.\n");
@@ -269,6 +267,12 @@ void CollabSocket::cleanup(bool warn) {
       msg("closesocket returned %d\n", res);
       connected = false;
       conn = (_SOCKET)INVALID_SOCKET;
+/*
+ * TODO: rethink this. Is joining on the comm thread necessary?
+ *       All paths to cleanup SHOULD come via the IDA work thread
+ *       which means this should NOT dedlock, but it seems to
+*/
+/*
 #ifdef _WIN32
       if (thread) {
          msg("attempting to sync on thread exit\n");
@@ -281,6 +285,12 @@ void CollabSocket::cleanup(bool warn) {
          pthread_join(thread, NULL);
          thread = 0;
       }
+#endif
+*/
+#ifdef _WIN32
+      thread = NULL;
+#else
+      thread = 0;
 #endif
       if (warn) {
          warning("Connection to collabREate server has been closed.\n"
@@ -419,7 +429,7 @@ void *CollabSocket::recvHandler(void *_sock) {
          b.append((char*)buf, len);   //append new data into static buffer
 
          while (1) {
-            jobj = json_tokener_parse_ex(tok, b.c_str(), b.length());
+            jobj = json_tokener_parse_ex(tok, b.c_str(), (int)b.length());
             jerr = json_tokener_get_error(tok);
             if (jerr == json_tokener_continue) {
                //json object is syntactically correct, but incomplete

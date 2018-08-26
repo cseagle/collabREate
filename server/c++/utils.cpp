@@ -31,6 +31,7 @@
 #include <sys/types.h>
 #include <netdb.h>
 #include <fcntl.h>
+#include <errno.h>
 #include <err.h>
 #include <stdint.h>
 #include <string>
@@ -73,6 +74,7 @@ union uLongLong {
 
 static FILE *logger = stderr;
 static int log_level = 0;
+static time_t ping_timeout = 300;
 
 uint64_t htonll(uint64_t val) {
    uLongLong ull;
@@ -248,15 +250,40 @@ IOBase &FileIO::operator<<(const string &s) {
 json_object *NetworkIO::readJson() {
    char buf[2048];
    json_tokener *tok = json_tokener_new();
-   json_object *obj = NULL;
    enum json_tokener_error jerr;
+   json_object *obj = NULL;
    while (1) {
+      fd_set rset;
+      timeval timeo = {ping_timeout, 0};
+      FD_ZERO(&rset);
+      FD_SET(fd, &rset);
+      int nfds = select(fd + 1, &rset, NULL, NULL, &timeo);
+      if (nfds == 0) {
+         //we timed out
+         if (pinging) {
+            //no response, time to disconnect
+            break;
+         }
+         else {
+            //send a ping to see if they are alive
+            char ping[256];
+            fill_random((unsigned char*)&ping_val, sizeof(ping_val));
+            ping_val &= 0x7fffffffffffffff;  //make sure it's >= 0
+            snprintf(ping, sizeof(ping), "{\"type\":\"ping\",\"id\":%llu}", ping_val);
+            pinging = true;
+            *this << ping;
+            continue;   //go back and try to read again
+         }
+      }
+      pinging = false;
       ssize_t len = recv(fd, buf, sizeof(buf), 0);
       if (len <= 0) {
+         //recv error or EOF, in any case we quit
          break;
       }
       json_buffer.append(buf, len);   //append new data into json buffer
 
+      json_tokener_reset(tok);
       obj = json_tokener_parse_ex(tok, json_buffer.c_str(), json_buffer.length());
       jerr = json_tokener_get_error(tok);
       if (jerr == json_tokener_continue) {
@@ -280,9 +307,23 @@ json_object *NetworkIO::readJson() {
          else {
             json_buffer.clear();
          }
+         //check if it's a pong
+         const char *type = string_from_json(obj, "type");
+         if (type != NULL && strcmp(type, "pong") == 0) {
+            uint64_t response;
+            if (!uint64_from_json(obj, "id", &response) || response != ping_val) {
+               //failed pong reply we are quitting now
+               json_object_put(obj);
+               obj = NULL;
+            }
+            else {
+               //valid pong, just keep reading
+               json_object_put(obj);
+               continue;
+            }
+         }
          break;
       }
-      json_tokener_reset(tok);
    }
    json_tokener_free(tok);
    return obj;
@@ -357,6 +398,8 @@ NetworkIO::NetworkIO(const char *host, int port) {
    if (ap == NULL) {
       throw IOException("Fail: ap is NULL");
    }
+
+   pinging = false;
 
    freeaddrinfo(addr);
 }
@@ -710,6 +753,7 @@ json_object *parseConf(const char *fname) {
          }
       }
       log_level = getIntOption(conf, "LOG_VERBOSITY", 0);
+      ping_timeout = getIntOption(conf, "PING_TIMEOUT", 300);
    }
    
    return conf;

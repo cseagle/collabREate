@@ -130,7 +130,7 @@ bool do_auth() {
 }
 
 int choose_project(json_object *json) {
-   const char *format = "BUTTON YES* Ok\nBUTTON CANCEL Cancel\nProject Selection\n\n\nSelect a project to join:\n<Project:b:0:::><Description (New project only):A:1024:64::>\n\n";
+   const char *format = "BUTTON YES* Ok\nBUTTON CANCEL Cancel\nProject Selection\n\n\nSelect a project to join:\n<Project:b:0:::>\n<Description (New project only):A:1024:64::>\n";
 
    description[0] = 0;
 

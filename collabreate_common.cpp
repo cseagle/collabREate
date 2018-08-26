@@ -371,7 +371,7 @@ uint8_t *hex_from_json(json_object *json, const char *key, uint32_t *len) {
 const char *string_from_json(json_object *json, const char *key) {
    json_object *value;
 
-   if (!json_object_object_get_ex (json, key, &value)) {
+   if (!json_object_object_get_ex(json, key, &value)) {
       return NULL;
    }
 
@@ -381,7 +381,7 @@ const char *string_from_json(json_object *json, const char *key) {
 bool bool_from_json(json_object *json, const char *key, bool *val) {
    json_object *value;
 
-   if (!json_object_object_get_ex (json, key, &value)) {
+   if (!json_object_object_get_ex(json, key, &value)) {
       return false;
    }
 
@@ -392,7 +392,7 @@ bool bool_from_json(json_object *json, const char *key, bool *val) {
 bool uint64_from_json(json_object *json, const char *key, uint64_t *val) {
    json_object *value;
 
-   if (!json_object_object_get_ex (json, key, &value)) {
+   if (!json_object_object_get_ex(json, key, &value)) {
       return false;
    }
 
@@ -421,7 +421,7 @@ bool uint32_from_json(json_object *json, const char *key, uint32_t *val) {
 bool int32_from_json(json_object *json, const char *key, int32_t *val) {
    json_object *value;
 
-   if (!json_object_object_get_ex (json, key, &value)) {
+   if (!json_object_object_get_ex(json, key, &value)) {
       return false;
    }
 
