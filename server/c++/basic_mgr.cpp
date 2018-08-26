@@ -173,40 +173,23 @@ vector<ProjectInfo*> *BasicConnectionManager::getProjectList(const string &phash
  */
 int BasicConnectionManager::joinProject(Client *c, uint32_t lpid) {
    int rval = -1;
-   log(LDEBUG, "in join\n");
-   bool foundPid = false;
    log(LDEBUG, "joining in basic mode\n");
-   Basic_it bi = basicProjects.find(c->getHash());
-   if (bi != basicProjects.end()) {
-      vector<ProjectInfo*> *plist = (*bi).second;
-      for (Info_it pi = plist->begin(); pi != plist->end(); pi++) {
-         if ((*pi)->lpid == lpid) {
-            foundPid = true;
-            c->setGpid(EMPTY_GPID);
-            c->setPid(lpid);
-            log(LDEBUG, "BASIC mode has no notion of users, setting permissions based on REQ\n");
-            //c->setPub(c.getReqPub());
-            //c->setSub(c.getReqSub());
-            c->setPub(FULL_PERMISSIONS);
-            c->setSub(FULL_PERMISSIONS);
-            break;
-         }
-         else {
-           log(LERROR, "couldn't find current project\n");
-         }
-      }
-   }
-   else {
-     log(LINFO, "plist is NULL\n");
-   }
-   if (foundPid) {
+   ProjectInfo *pi = findProject(lpid);
+   if (pi) {
+      c->setGpid(lpid2gpid(lpid));
+      c->setPid(lpid);
+      log(LDEBUG, "BASIC mode has no notion of users, setting permissions based on REQ\n");
+      //c->setPub(c.getReqPub());
+      //c->setSub(c.getReqSub());
+      c->setPub(FULL_PERMISSIONS);
+      c->setSub(FULL_PERMISSIONS);
       projects.addClient(c);
       rval = 0;
    }
    else {
-//           log(LERROR, "ERROR: attempt to join a non-existant project: %u\n", lpid);
+//     log(LERROR, "ERROR: attempt to join a non-existant project: %u\n", lpid);
+     log(LERROR, "couldn't find current project\n");
    }
-
    return rval;
 }
 
@@ -349,8 +332,15 @@ int BasicConnectionManager::addProject(Client *c, const string &hash, const stri
    vpi->push_back(pi);
    sem_post(&pidLock);
    c->setPid(lpid);
-   //basic mode has no Gpid?
-   c->setGpid(EMPTY_GPID);
+
+   uint8_t gpid_bytes[32];
+   fill_random(gpid_bytes, sizeof(gpid_bytes));
+   gpid = toHexString(gpid_bytes, sizeof(gpid_bytes));
+   c->setGpid(gpid);
+
+   gpid_lpid_map[gpid] = lpid;
+   lpid_gpid_map[lpid] = gpid;
+
    log(LINFO, "BASIC mode has no notion of users, setting permissions based on REQ\n");
    //c.setPub(c.getReqPub());
    //c.setSub(c.getReqSub());
@@ -373,5 +363,16 @@ int BasicConnectionManager::addProject(Client *c, const string &hash, const stri
  * @return the glocabl pid
  */
 string BasicConnectionManager::lpid2gpid(int lpid) {
+   if (lpid_gpid_map.find(lpid) != lpid_gpid_map.end()) {
+      return lpid_gpid_map[lpid];
+   }
    return string();
 }
+
+int BasicConnectionManager::gpid2lpid(const string &gpid) {
+   if (gpid_lpid_map.find(gpid) != gpid_lpid_map.end()) {
+      return gpid_lpid_map[gpid];
+   }
+   return -1;
+}
+

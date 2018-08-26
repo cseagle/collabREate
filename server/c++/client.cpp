@@ -480,15 +480,6 @@ bool Client::msg_project_rejoin_request(json_object *obj, Client *c) {
    bool res = false;
 //   int rejoingbasic = 0;
    string gpid = string_from_json(obj, "gpid");
-   if ( isNumeric(gpid) ) {
-      uint32_t gpi = -1;
-      sscanf(gpid.c_str(), "%d", &gpi);
-      if ( gpi == 0 ) {
-         //basic mode pid was stored in netnode
-         c->send_error("This instance of IDA connected in basic mode, cannot reconnect.");
-         return res;
-      }
-   }
    int lpid = c->cm->gpid2lpid(gpid);
    if (lpid < 0) {
       c->log(LERROR, "Invalid gpid received for project rejoin request\n");

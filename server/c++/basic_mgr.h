@@ -43,6 +43,8 @@ typedef vector<ProjectInfo*>::iterator Info_it;
 
 class BasicConnectionManager : public ConnectionManagerBase {
 private:
+   map<string,uint32_t> gpid_lpid_map;
+   map<uint32_t,string> lpid_gpid_map;
    map<string,vector<ProjectInfo*>*> basicProjects;
    int basicmodepid;
    sem_t pidLock;
@@ -216,7 +218,7 @@ public:
     * @param gpid global pid 
     * @return the local pid
     */
-   int gpid2lpid(const string &gpid) {return -1;};
+   int gpid2lpid(const string &gpid);
 
    /**
     * lpid2gpid converts an lpid (pid local to a particular server instance) 
