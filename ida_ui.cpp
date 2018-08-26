@@ -338,7 +338,7 @@ struct cmd_chooser : public chooser_t {
    static const int widths[];
    static const char *header[];
 
-   cmd_chooser() : chooser_t(CH_MODAL | CH_KEEP | CH_NOBTNS, 1, widths,
+   cmd_chooser() : chooser_t(CH_MODAL | CH_KEEP, 1, widths,
                              header, CHOOSER_NOMAINMENU CHOOSER_NOSTATUSBAR "Select Command") {
    };
 
@@ -377,7 +377,7 @@ uint32 idaapi sizer(void *obj) {
 }
 
 int do_choose_command() {
-   int res = choose(CH_MODAL | CH_NOBTNS, -1, -1, -1, -1, (void*)NULL, 32, sizer, get_command, "Command", -1);
+   int res = choose(CH_MODAL, -1, -1, -1, -1, (void*)NULL, 32, sizer, get_command, "Command", -1);
    if (res >= 1 && res <= numCommands()) {
       return res - 1;
    }
