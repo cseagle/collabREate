@@ -178,9 +178,9 @@ int idaapi init(void) {
    if (sz > 0) {
       msg(PLUGIN_NAME": Operating in caching mode until connected.\n");
       if (changeCache == NULL) {
-         size_t sz;
+         size_t sz = 0;
          void *tcache = cnn.getblob(NULL, &sz, 1, COLLABREATE_CACHE_TAG);
-         if (sz > 0) {
+         if (tcache != NULL && sz > 0) {
             changeCache = new qstring((char*)tcache);
          }
          else {
@@ -191,9 +191,9 @@ int idaapi init(void) {
       }
    }
    if (msgHistory.size() == 0) {
-      size_t sz;
+      size_t sz = 0;
       void *thist = cnn.getblob(NULL, &sz, 1, COLLABREATE_MSGHISTORY_TAG);
-      if (sz > 1) {
+      if (thist != NULL && sz > 1) {
          char *sptr, *endp;
          sptr = (char*)thist;
          while ((endp = strchr(sptr, '\n')) != NULL) {
