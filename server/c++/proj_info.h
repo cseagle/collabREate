@@ -18,8 +18,8 @@
    Place, Suite 330, Boston, MA 02111-1307 USA
  */
 
-#ifndef __HANDLER_H
-#define __HANDLER_H
+#ifndef __PROJ_INFO_H
+#define __PROJ_INFO_H
 
 #include <stdint.h>
 #include <semaphore.h>
@@ -48,6 +48,7 @@ public:
    ~ProjectInfo();
 
    uint64_t next_uid();
+   uint64_t curr_uid();
 
    void append_update(const char *update);
    const vector<char*> &get_updates() {return updates;};

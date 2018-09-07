@@ -25,13 +25,13 @@
 #include <string>
 #include <json-c/json.h>
 
+#include "io.h"
 #include "utils.h"
 #include "client.h"
-#include "mgr_helper.h"
 
 using namespace std;
 
-class ConnectionManagerBase;
+class ConnectionManager;
 class ManagerHelper;
 
 typedef void (*MsgHandler)(json_object *obj, ManagerHelper *mh);
@@ -50,7 +50,7 @@ private:
    NetworkIO *nio;
    Tcp6Service *ss;
    json_object *conf;
-   ConnectionManagerBase *cm;
+   ConnectionManager *cm;
    int pidForUpdates;
    static map<string,MsgHandler> *handlers;
 
@@ -61,14 +61,14 @@ public:
     * @param conn the connectionManager associated with this ManagerHelper
     * @param p a propertied object (config file)
     */
-   ManagerHelper(ConnectionManagerBase *conn, json_object *conf);
+   ManagerHelper(ConnectionManager *conn, json_object *conf);
 
    /**
     * instantiates a new ManagerHelper with default parameters, the ManagerHelper
     * facilitates getting server state information to the ServerManager
     * @param conn the connectionManager associated with this ManagerHelper
     */
-   ManagerHelper(ConnectionManagerBase *conn);
+   ManagerHelper(ConnectionManager *conn);
 
    void shutdown();
 
@@ -96,8 +96,10 @@ private:
    static void mng_get_connections(json_object *obj, ManagerHelper *mh);
    static void mng_get_stats(json_object *obj, ManagerHelper *mh);
    static void mng_shutdown(json_object *obj, ManagerHelper *mh);
-   static void mng_project_migrate(json_object *obj, ManagerHelper *mh);
-   static void mng_migrate_update(json_object *obj, ManagerHelper *mh);
+   static void mng_project_import(json_object *obj, ManagerHelper *mh);
+   static void mng_import_update(json_object *obj, ManagerHelper *mh);
+   static void mng_project_list(json_object *obj, ManagerHelper *mh);
+   static void mng_project_export(json_object *obj, ManagerHelper *mh);
 
    void init_handlers();
 

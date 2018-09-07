@@ -40,7 +40,7 @@ class ClientSet {
 private:
    set<Client*> clients;
    pthread_mutex_t mutex;
-   
+
 public:
    ClientSet();
    ~ClientSet();

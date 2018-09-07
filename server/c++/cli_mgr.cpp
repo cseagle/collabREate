@@ -28,6 +28,19 @@
 #include "cli_mgr.h"
 #include "projectmap.h"
 #include "clientset.h"
+#include "io.h"
+
+UserInfo::UserInfo(const char *uname, uint32_t _uid, uint64_t _pub, uint64_t _sub) : username(uname) {
+   uid = _uid;
+   pub = _pub;
+   sub = _sub;
+}
+
+UserInfo::UserInfo() : username("invalid") {
+   uid = INVALID_UID;
+   pub = 0;
+   sub = 0;
+}
 
 Packet::Packet(Client *src, const char *cmd, json_object *obj, uint64_t updateid) {
    c = src;
@@ -40,9 +53,9 @@ Packet::Packet(Client *src, const char *cmd, json_object *obj, uint64_t updateid
 /**
  * For use in Basic mode when a Global project ID is not needed
  */
-const char * const ConnectionManagerBase::EMPTY_GPID = "0000000000000000000000000000000000000000000000000000000000000000";
+const char * const ConnectionManager::EMPTY_GPID = "0000000000000000000000000000000000000000000000000000000000000000";
 
-ConnectionManagerBase::ConnectionManagerBase(json_object *conf) {
+ConnectionManager::ConnectionManager(json_object *conf) {
    this->conf = conf;
    done = false;
    sem_init(&pidLock, 0, 1);
@@ -50,7 +63,15 @@ ConnectionManagerBase::ConnectionManagerBase(json_object *conf) {
    sem_init(&queueMutex, 0, 1);
 }
 
-void ConnectionManagerBase::start() {
+const UserInfo &ConnectionManager::getUserInfo(uint32_t uid) {
+   static UserInfo invalid;
+   if (user_map.find(uid) == user_map.end()) {
+      return invalid;
+   }
+   return user_map[uid];
+}
+
+void ConnectionManager::start() {
    pthread_attr_t attr;
    pthread_attr_init(&attr);
    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
@@ -65,9 +86,9 @@ static bool termClients(Client *c, void *user) {
 
 /**
  * terminate terminates the connection manager
- * it terminates all clients connected to all projects 
+ * it terminates all clients connected to all projects
  */
-void ConnectionManagerBase::terminate() {
+void ConnectionManager::terminate() {
    log(LINFO, "ConnectionManager terminating\n");
    done = true;
    projects.loopClients(termClients, NULL);
@@ -78,19 +99,10 @@ void ConnectionManagerBase::terminate() {
 }
 
 /**
- * Add a new connection
- * @param s the socket to create new client for
- */
-void ConnectionManagerBase::add(NetworkIO *s) {
-   Client *c = new Client(this, s);
-   c->start();
-}
-
-/**
- * remove removes a client from a currently reflecting project 
+ * remove removes a client from a currently reflecting project
  * @param c the client to remove (from whatever project it is already connected to)
  */
-void ConnectionManagerBase::remove(Client *c) {
+void ConnectionManager::remove(Client *c) {
 //  logln("Removing client from " + c->getGpid() + " chain", LINFO1);
    projects.removeClient(c);
 }
@@ -102,10 +114,10 @@ static bool clientStats(Client *c, void *user) {
 }
 
 /**
- * dumpStats dumps send / receive stats for each connected client 
+ * dumpStats dumps send / receive stats for each connected client
  */
-string ConnectionManagerBase::dumpStats() {
-   string sb = "";   
+string ConnectionManager::dumpStats() {
+   string sb = "";
    projects.loopClients(clientStats, &sb);
    if (sb.length() == 0) {
       sb = "Stats:\n - none - \n";
@@ -141,8 +153,8 @@ static bool dispatch(Client *c, void *user) {
  * sends this packet to other clients according to permissions and project subscription
  * this also sends the server created unique updateID back to the originator of the packet
  */
-void *ConnectionManagerBase::run(void *arg) {
-   ConnectionManagerBase *mgr = (ConnectionManagerBase*)arg;
+void *ConnectionManager::run(void *arg) {
+   ConnectionManager *mgr = (ConnectionManager*)arg;
    while (!mgr->done) {
       sem_wait(&mgr->queueSem);
       sem_wait(&mgr->queueMutex);
@@ -181,12 +193,12 @@ static bool clientList(Client *c, void *user) {
 }
 
 /**
- * listConnection displays the current connections to the collabREate connection manager 
+ * listConnection displays the current connections to the collabREate connection manager
  */
-string ConnectionManagerBase::listConnections() {
+string ConnectionManager::listConnections() {
    string sb = "";
    projects.loopClients(clientList, &sb);
-   if (sb.length() == 0) { 
+   if (sb.length() == 0) {
       sb = "Client   Address:Port                  Pub(Effective) Sub(Effective) PID     User\n - none - \n";
    }
    else {

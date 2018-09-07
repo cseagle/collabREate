@@ -1,10 +1,11 @@
-SERVER_OBJS=server.o proj_info.o utils.o db_mgr.o client.o cli_mgr.o basic_mgr.o clientset.o projectmap.o mgr_helper.o
+SERVER_OBJS=server.o proj_info.o utils.o db_mgr.o client.o cli_mgr.o basic_mgr.o clientset.o projectmap.o mgr_helper.o io.o
 MGR_OBJS=server_mgr.o proj_info.o utils.o
 
 CC=g++
 LD=g++
 
-CFLAGS = -fno-rtti -g
+CFLAGS = -g
+CPPFLAGS =
 
 #Print error messages
 CFLAGS += -DDEBUG -Wall
@@ -15,7 +16,7 @@ EXTRALIBS=-lpthread -lpq -lcrypto -ljson-c
 
 LIBDIR=-L/usr/local/lib
 
-INC=-I/usr/include/postgresql -I/usr/local/inlcude
+INC=-I/usr/include/postgresql -I/usr/local/include
 
 #use the following to strip your binary
 #LDFLAGS=-s
@@ -23,10 +24,10 @@ INC=-I/usr/include/postgresql -I/usr/local/inlcude
 all: collab collab_mgr
 
 collab: $(SERVER_OBJS)
-	$(LD) $(LDFLAGS) -o $@ $(SERVER_OBJS) $(LIBDIR) $(EXTRALIBS) 
+	$(LD) $(LDFLAGS) -o $@ $(SERVER_OBJS) $(LIBDIR) $(EXTRALIBS)
 
 collab_mgr: $(MGR_OBJS)
-	$(LD) $(LDFLAGS) -o $@ $(MGR_OBJS) $(LIBDIR) $(EXTRALIBS) 
+	$(LD) $(LDFLAGS) -o $@ $(MGR_OBJS) $(LIBDIR) $(EXTRALIBS)
 
 %.o: %.cpp
 	$(CC) -c $(CFLAGS) $(INC) $< -o $@

@@ -32,26 +32,34 @@
 
 using namespace std;
 
-class DatabaseConnectionManager : public ConnectionManagerBase {
+class DatabaseConnectionManager : public ConnectionManager {
 public:
    DatabaseConnectionManager(json_object *conf);
    virtual ~DatabaseConnectionManager();
-   
-   virtual void beginAuth(Client *c);
-   uint32_t authenticate(Client *c, const char *user, const uint8_t *challenge, uint32_t clen, const uint8_t *response, uint32_t rlen);
-   void migrateUpdate(const char *newowner, int pid, const char *cmd, json_object *obj);
+
+   /**
+    * doAuth authenticates a user
+    * bacially this is standard CHAP with HMAC (md5)
+    * @param nio The network connection to authenticate
+    * @return the user id of an authenticated user, or failure code
+    */
+   uint32_t doAuth(NetworkIO *nio);
+
+   void importUpdate(const char *newowner, int pid, const char *cmd, json_object *obj);
    void post(Client *src, const char *cmd, json_object *obj);
    void sendLatestUpdates(Client *c, uint64_t lastUpdate);
    ProjectInfo *getProjectInfo(uint32_t pid);
 
    vector<ProjectInfo*> *getProjectList(const string & phash);
+   vector<ProjectInfo*> *getAllProjects();
    int joinProject(Client *c, uint32_t lpid);
    int snapProject(Client *c, uint64_t lastupdateid, const string &desc);
    int forkProject(Client *c, uint64_t lastupdateid, const string &desc);
    int forkProject(Client *c, uint64_t lastupdateid, const string &desc, uint64_t pub, uint64_t sub);
    void sendForkFollows(Client *originator, int oldlpid, uint64_t lastupdateid, const string &desc);
    int snapforkProject(Client *c, int spid, const string &desc, uint64_t pub, uint64_t sub);
-   int migrateProject(const char *owner, const string &gpid, const string &hash, const string &desc, uint64_t pub, uint64_t sub);
+   int importProject(const char *owner, const string &gpid, const string &hash, const string &desc, uint64_t pub, uint64_t sub);
+   json_object *exportProject(uint32_t pid);
    int addProject(Client *c, const string &hash, const string &desc, uint64_t pub, uint64_t sub);
    void updateProjectPerms(Client *c, uint64_t pub, uint64_t sub);
    int gpid2lpid(const string &gpid);
@@ -59,11 +67,12 @@ public:
 
 private:
    void init_queries();
-   
+
    sem_t pu_sem;
    sem_t ap_sem;
    sem_t aps_sem;
    sem_t apf_sem;
+   sem_t fp_sem;
    sem_t fpbh_sem;
    sem_t fpbp_sem;
    sem_t fpbg_sem;

@@ -42,11 +42,6 @@
 
 using std::string;
 
-#define ERROR_CREATE_SOCK "Unable to create socket"
-#define ERROR_REUSE_SOCK "Unable to set reuse"
-#define ERROR_BIND_SOCK "Unable to bind socket"
-#define ERROR_LISTEN_SOCK "Unable to listen on socket"
-
 const char *permStrings[] = {
       "Undefine",
       "Make Code",
@@ -74,7 +69,7 @@ union uLongLong {
 
 static FILE *logger = stderr;
 static int log_level = 0;
-static time_t ping_timeout = 300;
+time_t ping_timeout = 300;
 
 uint64_t htonll(uint64_t val) {
    uLongLong ull;
@@ -167,9 +162,9 @@ string toHexString(const uint8_t *buf, int len) {
 }
 
 /**
- * getMD5 - calculate the md5sum of a string 
- * @param tohash The string to hash 
- * @return The md5sum of the input string 
+ * getMD5 - calculate the md5sum of a string
+ * @param tohash The string to hash
+ * @return The md5sum of the input string
  */
 string getMD5(const void *tohash, int len) {
    string hashString = "";
@@ -183,177 +178,108 @@ string getMD5(const string &s) {
    return getMD5(s.c_str(), s.length());
 }
 
-void log(const char *format, va_list va) {
+void vlog(const char *format, va_list va) {
    vfprintf(logger, format, va);
 }
 
-void log(int verbosity, const char *format, va_list va) {
+void vlog(int verbosity, const char *format, va_list va) {
    if (verbosity <= log_level) {
-      log(format, va);
+      vlog(format, va);
    }
 }
 
 void log(const char *format, ...) {
    va_list va;
    va_start(va, format);
-   log(format, va);
+   vlog(format, va);
    va_end(va);
 }
 
 void log(int verbosity, const char *format, ...) {
    va_list va;
    va_start(va, format);
-   log(verbosity, format, va);
+   vlog(verbosity, format, va);
    va_end(va);
 }
 
-void log(int verbosity, const string &msg) {
-   log(verbosity, "%s", msg.c_str());
-}
-
-void logln(int verbosity, const string &msg) {
-   log(verbosity, "%s\n", msg.c_str());
-}
-
-IOException::IOException(const string &msg) {
-   this->msg = msg;
-}
-const string &IOException::getMessage() {
-   return msg;
-}
-
-json_object *FileIO::readJson() {
-   return json_object_from_fd(fd);
-}
-
-bool IOBase::writeJson(json_object *obj) {
-   size_t jlen;
-   const char *json = json_object_to_json_string_length(obj, JSON_C_TO_STRING_PLAIN, &jlen);
-   *this << json;
-   json_object_put(obj);   //release the object
-   return true;
-}
-
-FileIO::FileIO() {
-   fd = -1;
-}
-
-FileIO::FileIO(int fd) {
-   this->fd = fd;
-}
-
-IOBase &FileIO::operator<<(const string &s) {
-   this->sendMsg(s.c_str(), 0);
-   return *this;
-}
-
-json_object *NetworkIO::readJson() {
+//returns true: a read was performed, check *obj
+//       false: a timeout occurred
+bool readJson(int sock, string &json_buffer, json_object **obj, time_t timeout) {
    char buf[2048];
    json_tokener *tok = json_tokener_new();
    enum json_tokener_error jerr;
-   json_object *obj = NULL;
+   bool result = true;
+   *obj = NULL;
    while (1) {
-      fd_set rset;
-      timeval timeo = {ping_timeout, 0};
-      FD_ZERO(&rset);
-      FD_SET(fd, &rset);
-      int nfds = select(fd + 1, &rset, NULL, NULL, &timeo);
-      if (nfds == 0) {
-         //we timed out
-         if (pinging) {
-            //no response, time to disconnect
-            break;
-         }
-         else {
-            //send a ping to see if they are alive
-            char ping[256];
-            fill_random((unsigned char*)&ping_val, sizeof(ping_val));
-            ping_val &= 0x7fffffffffffffff;  //make sure it's >= 0
-            snprintf(ping, sizeof(ping), "{\"type\":\"ping\",\"id\":%llu}", ping_val);
-            pinging = true;
-            *this << ping;
-            continue;   //go back and try to read again
-         }
+      //start by seeing if we have a complete json object already buffered
+      json_tokener_reset(tok);
+      *obj = json_tokener_parse_ex(tok, json_buffer.c_str(), json_buffer.length());
+      jerr = json_tokener_get_error(tok);
+      if (jerr == json_tokener_continue) {
+         //json object is syntactically correct, but incomplete
+         log(LDEBUG, "json_tokener_continue for %s\n", json_buffer.c_str());
       }
-      pinging = false;
-      ssize_t len = recv(fd, buf, sizeof(buf), 0);
+      else if (jerr != json_tokener_success) {
+         //need to reconnect socket and in the meantime start caching event locally
+         log(LERROR, "jerr != json_tokener_success for %s\n", json_buffer.c_str());
+         break;
+      }
+      else if (*obj != NULL) {
+         //we extracted a json object from the front of the string
+         //queue it and trim the string
+         log(LDEBUG, "jerr == json_tokener_success for %s\n", json_buffer.c_str());
+         json_buffer.erase(0, tok->char_offset);
+         break;
+      }
+      else {
+         //can we ever get here?
+      }
+
+      //couldn't buid a json object so we need to read more data
+      fd_set rset;
+      timeval timeo = {timeout, 0};
+      FD_ZERO(&rset);
+      FD_SET(sock, &rset);
+      int nfds = select(sock + 1, &rset, NULL, NULL, timeout ? &timeo : NULL);
+      if (nfds == 0) {
+         result = false;
+         break;
+      }
+      ssize_t len = recv(sock, buf, sizeof(buf), 0);
       if (len <= 0) {
          //recv error or EOF, in any case we quit
          break;
       }
       json_buffer.append(buf, len);   //append new data into json buffer
-
-      json_tokener_reset(tok);
-      obj = json_tokener_parse_ex(tok, json_buffer.c_str(), json_buffer.length());
-      jerr = json_tokener_get_error(tok);
-      if (jerr == json_tokener_continue) {
-         //json object is syntactically correct, but incomplete
-         //log(LDEBUG, "json_tokener_continue for %s\n", json_buffer.c_str());
-         continue;
-      }
-      else if (jerr != json_tokener_success) {
-         //need to reconnect socket and in the meantime start caching event locally
-         //log(LERROR, "jerr != json_tokener_success for %s\n", json_buffer.c_str());
-         break;
-      }
-      if (obj != NULL && jerr == json_tokener_success) {
-         //we extracted a json object from the front of the string
-         //queue it and trim the string
-         //fprintf(stderr, "jerr == json_tokener_success for %s\n", json_buffer.c_str());
-         if (tok->char_offset < json_buffer.length()) {
-            //shift any remaining portions of the buffer to the front
-            json_buffer.erase(0, tok->char_offset); 
-         }
-         else {
-            json_buffer.clear();
-         }
-         //check if it's a pong
-         const char *type = string_from_json(obj, "type");
-         if (type != NULL && strcmp(type, "pong") == 0) {
-            uint64_t response;
-            if (!uint64_from_json(obj, "id", &response) || response != ping_val) {
-               //failed pong reply we are quitting now
-               json_object_put(obj);
-               obj = NULL;
-            }
-            else {
-               //valid pong, just keep reading
-               json_object_put(obj);
-               continue;
-            }
-         }
-         break;
-      }
    }
    json_tokener_free(tok);
-   return obj;
+   log(LDEBUG, "current json_buffer: %s\n", json_buffer.c_str());
+   return result;
 }
 
-Tcp6IO::Tcp6IO(int fd, sockaddr_in6 &peer) {
-   this->peer = new sockaddr_in6(peer);
-   this->fd = fd;
-}
-
-Tcp6IO::~Tcp6IO() {
-   delete peer;
-}
-
-void FileIO::setFileDescriptor(int fd) {
-   this->fd = fd;
+ssize_t sendAll(int fd, const void *buf, ssize_t size) {
+   ssize_t total = 0;
+   const unsigned char *b = (const unsigned char *)buf;
+   while (total < size) {
+      ssize_t nbytes = write(fd, b + total, size - total);
+      if (nbytes == 0) return -1;
+      total += nbytes;
+   }
+   return total;
 }
 
 /*
  * This reads up to size bytes into a user supplied buffer
  * Returns the number of bytes read or -1 if size bytes
  * could not be read.
- * This function is really only useful for reading fixed 
+ * This function is really only useful for reading fixed
  * size fields.
  */
-ssize_t FileIO::readAll(void *ubuf, ssize_t size) {
+ssize_t readAll(int fd, void *ubuf, ssize_t size) {
    ssize_t total = 0;
    ssize_t nbytes;
    while (total < size) {
-      nbytes = ::read(fd, total +(char*)ubuf, size - total);
+      nbytes = read(fd, total +(char*)ubuf, size - total);
       if (nbytes <= 0) {
          return -1;
       }
@@ -362,275 +288,13 @@ ssize_t FileIO::readAll(void *ubuf, ssize_t size) {
    return total;
 }
 
-NetworkIO::NetworkIO(const char *host, int port) {
-   struct addrinfo hints;
-   addrinfo *addr, *ap;
-   char str_port[16];
-   
-   memset(&hints, 0, sizeof(addrinfo));
-   hints.ai_family = AF_UNSPEC;    /* Allow IPv4 or IPv6 */
-   hints.ai_socktype = SOCK_STREAM; /* Stream socket */
-   hints.ai_flags = AI_PASSIVE;    /* For wildcard IP address */
-   hints.ai_protocol = 0;          /* Any protocol */
-   hints.ai_canonname = NULL;
-   hints.ai_addr = NULL;
-   hints.ai_next = NULL;
-   
-   snprintf(str_port, sizeof(str_port), "%d", port);
-              
-   if (getaddrinfo(host, str_port, &hints, &addr) != 0) {
-      throw IOException("Failed to getaddrinfo");
-   }
-
-   for (ap = addr; ap != NULL; ap = ap->ai_next) {
-      fd = socket(ap->ai_family, ap->ai_socktype, ap->ai_protocol);
-      if (fd == -1) {
-         continue;
-      }
-      
-      if (connect(fd, ap->ai_addr, ap->ai_addrlen) == 0) {
-         break;
-      }
-      
-      ::close(fd);
-   }
-   
-   if (ap == NULL) {
-      throw IOException("Fail: ap is NULL");
-   }
-
-   pinging = false;
-
-   freeaddrinfo(addr);
-}
-
-int NetworkIO::getPeerPort() {
-   sockaddr_in sa;
-   socklen_t slen = sizeof(sa);
-   getpeername(fd, (sockaddr*)&sa, &slen);
-   return htons(sa.sin_port);
-}
-
-string NetworkIO::getPeerAddr() {
-   sockaddr_in6 sa6;
-   sockaddr_in *sa4 = (sockaddr_in*)&sa6;
-   const char *res = NULL;
-   socklen_t slen = sizeof(sa6);
-   char addr[INET6_ADDRSTRLEN];
-   getpeername(fd, (sockaddr*)&sa6, &slen);
-   if (sa6.sin6_family == AF_INET6) {
-      res = inet_ntop(AF_INET6, &sa6.sin6_addr, addr, INET6_ADDRSTRLEN);
-   }
-   else if (sa4->sin_family == AF_INET) {
-      res = inet_ntop(AF_INET, &sa4->sin_addr, addr, INET6_ADDRSTRLEN);
-   }
-   if (res) {
-      return addr;
-   }
-   return "???";
-}
-
-bool FileIO::write(const void *buf, ssize_t len) {
-   return sendAll(buf, len) == len;
-}
-
-/*
- * Write the string contained in buf to the client socket
- * strlen is used to compute the length of buf.  If nullflag
- * is non-zero, then the null terminator is also written to
- * the client.
- */
-ssize_t FileIO::sendMsg(const char *buf, bool nullflag) {
-   size_t len = strlen(buf);
-   return sendAll((const unsigned char *)buf, nullflag ? (len + 1) : len);
-}
-
-/*
- * write size characters from buf to the client socket
- * returns -1 on error or size if all chars were 
- * written.
- */
-ssize_t FileIO::sendAll(const void *buf, ssize_t size) {
-   ssize_t total = 0;
-   const unsigned char *b = (const unsigned char *)buf;
-   while (total < size) {
-      ssize_t nbytes = ::write(fd, b + total, size - total);
-      if (nbytes == 0) return -1;
-      total += nbytes;
-   }
-   return total;
-}
-
-ssize_t FileIO::sendFormat(const char *format, ...) {
-   ssize_t result = 0;
-   char *ptr = NULL;
-   va_list argp;
-   va_start(argp, format);
-   if (vasprintf(&ptr, format, argp) == -1 || ptr == NULL) {
-      result = -1;
-   }
-   else {
-      result = sendMsg(ptr, 0);
-   }
-   free(ptr);
-   return result;
-}
-
-/*
- * setup the server socket by binding to 0.0.0.0:port
- * SO_REUSEADDR is set on the socket.
- * returns the new server socket.
- */
-Tcp6Service::Tcp6Service(int port) {
-   int server = socket(AF_INET6, SOCK_STREAM, 0);
-   if (server == -1) {
-#ifdef DEBUG      
-      err(-1, ERROR_CREATE_SOCK);
-#else
-      throw -1;
-#endif
-   }
-   int one = 1;
-   if (setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one)) == -1) {
-      close();
-#ifdef DEBUG      
-      err(-1, ERROR_REUSE_SOCK);
-#else
-      throw -1;
-#endif
-   }
-   self = new sockaddr_in6;
-//   struct sockaddr_in6 my_addr = IN6ADDR_ANY_INIT;
-   memset(self, 0, sizeof(*self));
-   self->sin6_family = AF_INET6;
-   self->sin6_port = htons(port);
-   if (bind(server, (struct sockaddr*)self, sizeof(*self)) == -1) {
-      close();
-      delete self;
-#ifdef DEBUG      
-      err(-1, ERROR_BIND_SOCK);
-#else
-      throw -1;
-#endif
-   }
-   if (listen(server, 20) == -1) {
-      close();
-      delete self;
-#ifdef DEBUG      
-      err(-1, ERROR_LISTEN_SOCK);
-#else
-      throw -1;
-#endif
-   }
-   fds.push_back(server);
-   nfds = server + 1;
-}
-
-/*
- * setup the server socket by binding to host:port
- * SO_REUSEADDR is set on the socket.
- * returns the new server socket.
- */
-Tcp6Service::Tcp6Service(const char *host, int port) {
-   char str_port[16];   
-   struct addrinfo hints;
-   addrinfo *addr, *ap;
-   int one = 1;
-   nfds = 0;
-   FD_ZERO(&aset);
-      
-   snprintf(str_port, sizeof(str_port), "%d", port);
-   memset(&hints, 0, sizeof(addrinfo));
-   hints.ai_family = AF_UNSPEC;    /* Allow IPv4 or IPv6 */
-   hints.ai_socktype = SOCK_STREAM; /* Stream socket */
-   hints.ai_flags = AI_PASSIVE;    /* For wildcard IP address */
-   hints.ai_protocol = 0;          /* Any protocol */
-   hints.ai_canonname = NULL;
-   hints.ai_addr = NULL;
-   hints.ai_next = NULL;
-              
-   if (getaddrinfo(host, str_port, &hints, &addr) != 0) {
-      throw IOException("Failed to getaddrinfo");
-   }
-
-   for (ap = addr; ap != NULL; ap = ap->ai_next) {
-      int fd = socket(ap->ai_family, ap->ai_socktype, ap->ai_protocol);
-      if (fd == -1) {
-         continue;
-      }
-      if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one)) == -1) {
-         ::close(fd);
-         continue;
-      }      
-      if (bind(fd, ap->ai_addr, ap->ai_addrlen) != 0) {
-         ::close(fd);
-         continue;
-      }
-      if (listen(fd, 20) == -1) {
-         ::close(fd);
-         continue;
-      }
-      if (nfds <= fd) {
-         nfds = fd + 1;
-      }
-      fds.push_back(fd);
-   }
-   
-   freeaddrinfo(addr);
-   
-   if (fds.size() == 0) {
-#ifdef DEBUG      
-      err(-1, ERROR_CREATE_SOCK);
-#else
-      throw -1;
-#endif
-   }
-
-}
-
-bool FileIO::close() {
-   return ::close(fd) == 0;
-}
-
-FileIO::~FileIO() {
-   close();
-}
-
-NetworkService::~NetworkService() {
-   close();
-}
-
-bool NetworkService::close() {
-   int res = 0;
-   for (vector<int>::iterator i = fds.begin(); i != fds.end(); i++) {
-      res |= ::close(*i);
-   }
-   return res == 0;
-}
-
-Tcp6Service::~Tcp6Service() {
-   delete self;
-}
-
-NetworkIO *Tcp6Service::accept() {
-   FD_ZERO(&aset);
-   for (vector<int>::iterator i = fds.begin(); i != fds.end(); i++) {
-      FD_SET(*i, &aset);
-   }
-   //inifinite wait in select
-   if (select(nfds, &aset, NULL, NULL, NULL) > 0) {
-      for (vector<int>::iterator i = fds.begin(); i != fds.end(); i++) {
-         if (FD_ISSET(*i, &aset)) {
-            struct sockaddr_in6 peer;
-            socklen_t peer_len = sizeof(peer);
-            int client = ::accept(*i, (struct sockaddr*)&peer, &peer_len);
-            if (client != -1) {
-               return new Tcp6IO(client, peer);
-            }
-         }
-      }
-   }
-   return NULL;
+bool writeJson(int fd, json_object *obj) {
+   size_t jlen;
+   ssize_t res;
+   const char *json = json_object_to_json_string_length(obj, JSON_C_TO_STRING_PLAIN, &jlen);
+   res = sendAll(fd, json, jlen);
+   json_object_put(obj);   //release the object
+   return jlen == (size_t)res;
 }
 
 RC4::RC4(unsigned char *key, unsigned int keylen) {
@@ -675,7 +339,7 @@ void RC4::crypt(unsigned char *blob, int len) {
    }
 }
 
-int fill_random(unsigned char *buf, unsigned int size) {
+int fill_random(unsigned char *buf, size_t size) {
    int urand = open("/dev/urandom", O_RDONLY);
    if (urand < 0) {
       urand = 0;
@@ -685,8 +349,8 @@ int fill_random(unsigned char *buf, unsigned int size) {
       return 0;
    }
    else {
-      FileIO f(urand);
-      f.readAll(buf, size);
+      readAll(urand, buf, size);
+      close(urand);
       return 1;
    }
 }
@@ -742,7 +406,7 @@ const char *getCstringOption(json_object *conf, const string &opt, const char *d
 
 json_object *parseConf(const char *fname) {
    json_object *conf = json_object_from_file(fname);
-   
+
    if (conf) {
       const char *logfile = getCstringOption(conf, "LOG_FILE", NULL);
       if (logfile) {
@@ -755,7 +419,7 @@ json_object *parseConf(const char *fname) {
       log_level = getIntOption(conf, "LOG_VERBOSITY", 0);
       ping_timeout = getIntOption(conf, "PING_TIMEOUT", 300);
    }
-   
+
    return conf;
 }
 
@@ -841,7 +505,7 @@ const char *string_from_json(json_object *json, const char *key) {
 bool bool_from_json(json_object *json, const char *key, bool *val) {
    json_object *value;
 
-   if (!json_object_object_get_ex (json, key, &value)) {
+   if (!json_object_object_get_ex(json, key, &value)) {
       return false;
    }
 
@@ -852,7 +516,7 @@ bool bool_from_json(json_object *json, const char *key, bool *val) {
 bool uint64_from_json(json_object *json, const char *key, uint64_t *val) {
    json_object *value;
 
-   if (!json_object_object_get_ex (json, key, &value)) {
+   if (!json_object_object_get_ex(json, key, &value)) {
       return false;
    }
 
@@ -872,7 +536,7 @@ bool uint32_from_json(json_object *json, const char *key, uint32_t *val) {
 bool int32_from_json(json_object *json, const char *key, int32_t *val) {
    json_object *value;
 
-   if (!json_object_object_get_ex (json, key, &value)) {
+   if (!json_object_object_get_ex(json, key, &value)) {
       return false;
    }
 

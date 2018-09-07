@@ -23,6 +23,7 @@
 
 #include <string>
 #include <vector>
+#include <map>
 #include <sys/stat.h>
 #include <ctype.h>
 #include <libpq-fe.h>
@@ -33,6 +34,9 @@
 using namespace std;
 
 class ProjectInfo;
+class ServerManager;
+
+typedef void (*MsgHandler)(json_object *obj, ServerManager *sm);
 
 /**
  * ServerManager
@@ -50,10 +54,28 @@ private:
    int port;
    string host;
 
-   NetworkIO *s;
+   int sock;     //socket fd
+   string json_buffer;
+   int json_fd;
+   string import_owner;
+   json_object *import_json;
    int mode;
 
+   sem_t waiter;
+
+   json_object *readJson();
+
    vector<ProjectInfo*> plist;
+   static map<string,MsgHandler> handlers;
+
+   static void *reader(void *arg);
+
+   static void mng_connections(json_object *obj, ServerManager *sm);
+   static void mng_stats(json_object *obj, ServerManager *sm);
+   static void mng_import_reply(json_object *obj, ServerManager *sm);
+   static void mng_project_list(json_object *obj, ServerManager *sm);
+   static void mng_export_updates(json_object *obj, ServerManager *sm);
+   static void msg_error(json_object *obj, ServerManager *sm);
 
 public:
    ServerManager(json_object *p);
@@ -97,9 +119,9 @@ private:
     * by default this must be a local connection.
     */
    void connectToHelper();
-   
+
    void initQueries();
-   
+
    /**
     * similar to post in Client, but does not check subscription status, and takes command as a arg
     * This function should ONLY be called for message id >= MNG_CONTROL_FIRST
@@ -137,7 +159,13 @@ private:
     * @param efile the filename to export to
     * @return 0 on success
     */
-   int exportProject(uint32_t lpid, const char *efile);
+   int exportDatabaseProject(uint32_t lpid);
+   int exportBasicProject(uint32_t lpid);
+
+   int createDatabaseProject(const string &gpid, const string &hash,
+                            const string &desc, uint64_t pub, uint64_t sub);
+   int importDatabaseProject();
+   int importBasicProject();
 
    /**
     * importProject imports a project from a binary final
@@ -169,10 +197,17 @@ private:
     */
    void listUsers();
 
+   void listProjects();
+
    /**
     * listProjects lists the projects on this server
     */
-   void listProjects();
+   void listDatabaseProjects();
+
+   /**
+    * listProjects lists the projects on this server
+    */
+   void listBasicProjects();
 
    /**
     * closeDB closes all the database queries and the database connection
@@ -180,7 +215,7 @@ private:
    void closeDB();
 
    string getPermHeaderString(size_t colWidth);
-   
+
    string getPermHeaderString(size_t colWidth, bool number);
 
    string getPermRowString(uint64_t p, uint64_t s, size_t colWidth);

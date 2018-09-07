@@ -26,7 +26,9 @@
 #include "utils.h"
 #include "cli_mgr.h"
 #include "client.h"
+#include "proj_info.h"
 #include "mgr_helper.h"
+#include "basic_mgr.h"
 
 using namespace std;
 
@@ -50,7 +52,7 @@ map<string,MsgHandler> *ManagerHelper::handlers;
  * @param connm the connectionManager associated with this ManagerHelper
  * @param p a propertied object (config file)
  */
-ManagerHelper::ManagerHelper(ConnectionManagerBase *conn, json_object *conf) {
+ManagerHelper::ManagerHelper(ConnectionManager *conn, json_object *conf) {
    cm = conn;
    pidForUpdates = 0;
    this->conf = conf;
@@ -62,7 +64,7 @@ ManagerHelper::ManagerHelper(ConnectionManagerBase *conn, json_object *conf) {
  * facilitates getting server state information to the ServerManager
  * @param connm the connectionManager associated with this ManagerHelper
  */
-ManagerHelper::ManagerHelper(ConnectionManagerBase *conn) {
+ManagerHelper::ManagerHelper(ConnectionManager *conn) {
    cm = conn;
    conf = NULL;
    pidForUpdates = 0;
@@ -91,7 +93,7 @@ void ManagerHelper::initCommon() {
    }
    else {
       ss = new Tcp6Service(mgr_host, port);
-   }      
+   }
 }
 
 /**
@@ -175,11 +177,13 @@ void ManagerHelper::start() {
 
 void ManagerHelper::init_handlers() {
    handlers = new map<string,MsgHandler>;
-   (*handlers)["mng_get_connections"] = mng_get_connections;
-   (*handlers)["mng_get_stats"] = mng_get_stats;
-   (*handlers)["mng_shutdown"] = mng_shutdown;
-   (*handlers)["mng_project_migrate"] = mng_project_migrate;
-   (*handlers)["mng_migrate_update"] = mng_migrate_update;
+   (*handlers)[MNG_GET_CONNECTIONS] = mng_get_connections;
+   (*handlers)[MNG_GET_STATS] = mng_get_stats;
+   (*handlers)[MNG_SHUTDOWN] = mng_shutdown;
+   (*handlers)[MNG_PROJECT_IMPORT] = mng_project_import;
+   (*handlers)[MNG_IMPORT_UPDATE] = mng_import_update;
+   (*handlers)[MNG_PROJECT_LIST] = mng_project_list;
+   (*handlers)[MNG_PROJECT_EXPORT] = mng_project_export;
 }
 
 void ManagerHelper::mng_get_connections(json_object *obj, ManagerHelper *mh) {
@@ -213,10 +217,10 @@ void ManagerHelper::mng_shutdown(json_object *obj, ManagerHelper *mh) {
    mh->shutdown();
 }
 
-void ManagerHelper::mng_project_migrate(json_object *obj, ManagerHelper *mh) {
+void ManagerHelper::mng_project_import(json_object *obj, ManagerHelper *mh) {
    log(LINFO, "client requested a project migrate\n");
    int status = MNG_MIGRATE_REPLY_FAIL;
-   
+
    const char *uid = string_from_json(obj, "newowner");
    const char *gpid = string_from_json(obj, "gpid");
    const char *hash = string_from_json(obj, "hash");
@@ -225,7 +229,7 @@ void ManagerHelper::mng_project_migrate(json_object *obj, ManagerHelper *mh) {
    uint64_from_json(obj, "publish", &pub);
    uint64_from_json(obj, "subscribe", &sub);
 
-   int newpid = mh->cm->migrateProject(uid, gpid, hash, desc, pub, sub);
+   int newpid = mh->cm->importProject(uid, gpid, hash, desc, pub, sub);
    if (newpid > 0) {
 //      log(LINFO4, "Added new project %d via project migration from another server\n", newpid);
       status = MNG_MIGRATE_REPLY_SUCCESS;
@@ -237,16 +241,67 @@ void ManagerHelper::mng_project_migrate(json_object *obj, ManagerHelper *mh) {
    }
    json_object *resp = json_object_new_object();
    append_json_int32_val(resp, "status", status);
-   mh->send_data(MNG_PROJECT_MIGRATE_REPLY, resp);
+   mh->send_data(MNG_PROJECT_IMPORT_REPLY, resp);
 }
 
-void ManagerHelper::mng_migrate_update(json_object *obj, ManagerHelper *mh) {
-   log(LDEBUG, "in MNG_MIGRATE_UPDATE\n");
+void ManagerHelper::mng_import_update(json_object *obj, ManagerHelper *mh) {
+/*
+   log(LDEBUG, "in MNG_IMPORT_UPDATE\n");
    const char *uid = string_from_json(obj, "newowner");
    const char *inner_json = string_from_json(obj, "update");
    json_object *inner = json_tokener_parse(inner_json);
    const char *cmd = string_from_json(inner, "type");
-   log(LDEBUG, "... got data\n", LERROR);
-   mh->cm->migrateUpdate(uid, mh->pidForUpdates, cmd, inner);
+   log(LDEBUG, "... got data\n");
+   mh->cm->importUpdate(uid, mh->pidForUpdates, cmd, inner);
    json_object_put(inner);
+*/
+   log(LDEBUG, "in MNG_IMPORT_UPDATE\n");
+   const char *uid = strdup(string_from_json(obj, "newowner"));
+   json_object_object_del(obj, "newowner");
+   const char *cmd = string_from_json(obj, "utype");
+   json_object_object_add_ex(obj, "type", json_object_new_string(cmd), JSON_C_OBJECT_KEY_IS_CONSTANT);
+   json_object_object_del(obj, "utype");
+   cmd = string_from_json(obj, "type");
+   json_object_object_add_ex(obj, "pid", json_object_new_int64(mh->pidForUpdates), JSON_C_OBJECT_KEY_IS_CONSTANT);
+
+   log(LDEBUG, "... got data\n");
+   mh->cm->importUpdate(uid, mh->pidForUpdates, cmd, obj);
+   free((void*)uid);
+}
+
+void ManagerHelper::mng_project_list(json_object *obj, ManagerHelper *mh) {
+   json_object *list = json_object_new_array();
+   vector<ProjectInfo*> *all = mh->cm->getAllProjects();
+   if (all) {
+      map<string,vector<ProjectInfo*>*>::iterator pi;
+      for (vector<ProjectInfo*>::iterator vi = all->begin(); vi != all->end(); vi++) {
+         ProjectInfo *p = *vi;
+         json_object *proj = json_object_new_object();
+         append_json_string_val(proj, "description", p->desc);
+         append_json_string_val(proj, "hash", p->hash);
+         append_json_uint32_val(proj, "pid", p->lpid);
+         append_json_string_val(proj, "gpid", p->gpid);
+         append_json_uint64_val(proj, "pub", p->pub);
+         append_json_uint64_val(proj, "sub", p->sub);
+         json_object_array_add(list, proj);
+      }
+   }
+   json_object *projects = json_object_new_object();
+   json_object_object_add_ex(projects, "projects", list, JSON_NEW_CONST_KEY);
+   mh->send_data(MNG_PROJECT_LIST_REPLY, projects);
+   delete all;
+}
+
+void ManagerHelper::mng_project_export(json_object *obj, ManagerHelper *mh) {
+   uint32_t pid;
+   json_object *reply = json_object_new_object();
+   if (uint32_from_json(obj, "pid", &pid)) {
+      json_object *updates = mh->cm->exportProject(pid);
+      json_object_object_add_ex(reply, "updates", updates, JSON_NEW_CONST_KEY);
+      mh->send_data(MNG_EXPORT_UPDATES, reply);
+   }
+   else {
+      append_json_string_val(reply, "msg", "Missing pid in project export request");
+      mh->send_data(MSG_ERROR, reply);
+   }
 }

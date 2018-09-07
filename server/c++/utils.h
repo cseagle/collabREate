@@ -23,10 +23,8 @@
 
 #include <stdint.h>
 #include <stdarg.h>
-#include <sys/select.h>
+#include <time.h>
 #include <string>
-#include <vector>
-#include <map>
 #include <json-c/json.h>
 
 using namespace std;
@@ -180,12 +178,16 @@ using namespace std;
 #define MNG_CONNECTIONS              "mng_connections"
 #define MNG_GET_STATS                "mng_get_stats"
 #define MNG_STATS                    "mng_stats"
+#define MNG_PROJECT_LIST             "mng_project_list"
+#define MNG_PROJECT_LIST_REPLY       "mng_project_list_reply"
+#define MNG_PROJECT_EXPORT           "mng_project_export"
 #define MNG_SHUTDOWN                 "mng_shutdown"
-#define MNG_PROJECT_MIGRATE          "mng_project_migrate"
-#define MNG_PROJECT_MIGRATE_REPLY    "mng_project_migrate_reply"
+#define MNG_PROJECT_IMPORT           "mng_project_import"
+#define MNG_PROJECT_IMPORT_REPLY     "mng_project_import_reply"
+#define MNG_IMPORT_UPDATE            "mng_import_update"
+#define MNG_EXPORT_UPDATES           "mng_export_updates"
 #define MNG_MIGRATE_REPLY_SUCCESS    1
 #define MNG_MIGRATE_REPLY_FAIL       0
-#define MNG_MIGRATE_UPDATE           "mng_migrate_update"
 
 #define MAX_COMMAND 2048
 
@@ -203,11 +205,9 @@ using namespace std;
 #define LINFO4   7
 #define LSQL     10
 #define LDEBUG   15
- 
-const char * const FILE_SIG = "collabRE\n";
+
+const char * const FILE_SIG = "collabRE";
 #define FILE_VER 2
-#define TAG      0xC077ABE8
-#define ENDTAG   0xDEADBEEF
 
 //could extend to CollabreateManagerInterface i guess
 #define MODE_DB 1
@@ -228,9 +228,7 @@ const char * const FILE_SIG = "collabRE\n";
  */
 #define BASIC_USER 0
 
-struct sockaddr_in6;
-struct sockaddr_in;
-class NetworkIO;
+extern time_t ping_timeout;
 
 uint64_t htonll(uint64_t val);
 #define ntohll(x) htonll(x)
@@ -244,104 +242,16 @@ string getMD5(const void *tohash, int len);
 string getMD5(const string &s);
 
 void log(const char *format, ...);
-void log(int verbosity, const char *format, va_list va);
+void vlog(int verbosity, const char *format, va_list va);
 void log(int verbosity, const char *format, ...);
-void log(int verbosity, const string &msg);
-void logln(int verbosity, const string &msg);
 
 extern const char *permStrings[];
 extern size_t permStringsLength;
 
-class IOException {
-public:
-   IOException(const string &msg = "");
-   const string &getMessage();
-private:
-   string msg;
-};
-
-class IOBase {
-public:
-   virtual ~IOBase() {};
-   virtual ssize_t readAll(void *buf, ssize_t size) = 0;
-   virtual json_object *readJson() = 0;
-   virtual bool writeJson(json_object *obj);
-   virtual ssize_t sendMsg(const char *buf, bool nullflag = 0) = 0;
-   virtual ssize_t sendAll(const void *buf, ssize_t len) = 0;
-   virtual ssize_t sendFormat(const char *format, ...) = 0;
-   virtual bool close() = 0;
-
-   //output the string with no null terminator
-   virtual IOBase &operator<<(const string &s) = 0;
-   
-};
-
-class FileIO : public IOBase {
-public:
-   FileIO();
-   FileIO(int fd);
-   virtual ~FileIO();
-   void setFileDescriptor(int fd);
-   ssize_t readAll(void *buf, ssize_t size);
-   json_object *readJson();
-   ssize_t sendMsg(const char *buf, bool nullflag = 0);
-   ssize_t sendAll(const void *buf, ssize_t len);
-   ssize_t sendFormat(const char *format, ...);
-   int getFileDescriptor() {return fd;};
-   bool close();
-
-   bool write(const void *buf, ssize_t len);
-
-   //output the string with no null terminator
-   IOBase &operator<<(const string &s);
-
-protected:
-   int fd;
-};
-
-class NetworkIO : public FileIO {
-public:
-   NetworkIO() {};
-   NetworkIO(const char *host, int port);
-   virtual ~NetworkIO() {};
-   json_object *readJson();
-   int getPeerPort();
-   string getPeerAddr();   
-private:
-   string json_buffer;
-   uint64_t ping_val;
-   bool pinging;
-};
-
-class NetworkService {
-public:
-   virtual ~NetworkService();
-   virtual NetworkIO *accept() = 0;
-   virtual bool close();
-protected:
-   vector<int> fds;
-   fd_set aset;
-   int nfds;
-};
-
-class Tcp6Service : public NetworkService {
-public:
-   Tcp6Service(int port);
-   Tcp6Service(const char *host, int port);
-   virtual ~Tcp6Service();
-    NetworkIO *accept();
-private:
-   sockaddr_in6 *self;
-};
-
-class Tcp6IO : public NetworkIO {
-public:
-   Tcp6IO(int fd, sockaddr_in6 &peer);
-   virtual ~Tcp6IO();
-   
-private:
-   sockaddr_in6 *peer;
-};
+bool readJson(int sock, string &json_buffer, json_object **obj, time_t timeout = 0);
+ssize_t sendAll(int fd, const void *buf, ssize_t size);
+bool writeJson(int fd, json_object *obj);
+ssize_t readAll(int fd, void *ubuf, ssize_t size);
 
 class RC4 {
    unsigned char S[256];
@@ -353,7 +263,7 @@ public:
    void crypt(unsigned char *blob, int len);
 };
 
-int fill_random(unsigned char *buf, uint32_t size);
+int fill_random(unsigned char *buf, size_t size);
 
 json_object *parseConf(const char *conf);
 short getShortOption(json_object *conf, const string &opt, short defaultValue);

@@ -18,6 +18,7 @@
    Place, Suite 330, Boston, MA 02111-1307 USA
  */
 
+#include <string.h>
 #include <string>
 #include <map>
 #include <vector>
@@ -40,9 +41,11 @@ using namespace std;
  */
 
 
-BasicConnectionManager::BasicConnectionManager(json_object *conf) : ConnectionManagerBase(conf) {
+BasicConnectionManager::BasicConnectionManager(json_object *conf) : ConnectionManager(conf) {
    basicmodepid = 500;
+   basic_mode_uid = 1;
    sem_init(&pidLock, 0, 1);
+   sem_init(&uidLock, 0, 1);
 }
 
 BasicConnectionManager::~BasicConnectionManager() {
@@ -55,34 +58,83 @@ BasicConnectionManager::~BasicConnectionManager() {
    }
 }
 
-void BasicConnectionManager::beginAuth(Client *c) {
-   //these are used only for the 'auto auth' in BASIC mode
-   log(LDEBUG, "BasicConnectionManager sending MSG_AUTH_REPLY\n");
-   authenticate(c, NULL, NULL, 0, NULL, 0);
-   c->setAuthenticated(true);
-   json_object *auth = json_object_new_object();
-   append_json_int32_val(auth, "reply", AUTH_REPLY_SUCCESS);
-   c->send_data(MSG_AUTH_REPLY, auth);
+map<uint32_t,string> basic_mode_users;
+uint32_t BasicConnectionManager::uid_for_user(const char *user) {
+   if (basic_mode_users.find(user) == basic_mode_users.end()) {
+      sem_wait(&uidLock);
+      basic_mode_users[user] = basic_mode_uid++;
+      sem_post(&uidLock);
+   }
+   return basic_mode_users[user];
+}
+
+uint32_t BasicConnectionManager::doAuth(NetworkIO *nio) {
+   uint64_t challenge[4] = {0xdeadbeefdeadbeefll, 0xdeadbeefdeadbeefll, 0xdeadbeefdeadbeefll, 0xdeadbeefdeadbeefll};
+   json_object *obj = json_object_new_object();
+   append_json_hex_val(obj, "challenge", (uint8_t*)challenge, CHALLENGE_SIZE);
+   append_json_string_val(obj, "type", MSG_INITIAL_CHALLENGE);
+   log(LINFO4, "Sending initial challenge\n");
+   nio->writeJson(obj);
+
+   obj = nio->readJson();
+   if (obj == NULL) {
+      return AUTH_FAIL;
+   }
+
+   int pluginversion;
+   int32_from_json(obj, "protocol", &pluginversion);
+   if (pluginversion != PROTOCOL_VERSION) {
+      char buf[256];
+      snprintf(buf, sizeof(buf), "Version mismatch. plugin: %d server: %d", pluginversion, PROTOCOL_VERSION);
+      json_object_put(obj);
+      obj = json_object_new_object();
+      append_json_string_val(obj, "error", buf);
+      append_json_string_val(obj, "type", MSG_ERROR);
+      nio->writeJson(obj);
+      return AUTH_INVALID_PROTO;
+   }
+
+   uint32_t rlen;
+   const char *type = string_from_json(obj, "type");
+   uint8_t *response = hex_from_json(obj, "hmac", &rlen);
+   const char *user = string_from_json(obj, "user");
+   json_object_put(obj);
+   if (strcmp(type, MSG_AUTH_REQUEST) || response == NULL || user == NULL || rlen != MD5_SIZE) {
+      return AUTH_INVALID_PROTO;
+   }
+   uint32_t result = AUTH_FAIL;
+   uint32_t uid = uid_for_user(user);
+   if (response != NULL) {  //no memcmp here in basic mode
+      result = uid;
+      user_map[uid] = UserInfo(user, uid, FULL_PERMISSIONS, FULL_PERMISSIONS);
+      delete [] response;
+   }
+   else {
+      //reply should have included a "hmac" field
+      result = AUTH_INVALID_PROTO;
+   }
+   return result;
 }
 
 /**
- * authenticate authenticates a user (for use in database mode)
- * bacially this is standard CHAP with HMAC (md5)
- * @param user the user to authenticate
- * @param challenge the randomly generated challenge send to the plugin
- * @param response the calculated response from the plugin to check 
- * @return the user id of an authenticated user, or INVALID_UID
+ * importUpdate is very similar to 'post', importUpdate only
+ * archives the udpate in the database so that future clients can receive it
+ * @param newowner the new uid to attribute the update to
+ * @param pid the local project id for the migrated project
+ * @param cmd the 'command' that was performed (comment, rename, etc)
+ * @param data the 'data' portion of the command (the comment text, etc)
  */
-uint32_t BasicConnectionManager::authenticate(Client *c, const char *user, const uint8_t *challenge, uint32_t clen, const uint8_t *response, uint32_t rlen) {
-   //always authenticate in basic mode
-   c->setUserPub(FULL_PERMISSIONS);
-   c->setUserSub(FULL_PERMISSIONS);
-   return BASIC_USER;
+void BasicConnectionManager::importUpdate(const char *newowner, int pid, const char *cmd, json_object *obj) {
+   ProjectInfo *pi = findProject(pid);
+   const char *json = json_object_to_json_string(obj);
+   if (pi != NULL) {
+      pi->append_update(json);
+   }
 }
 
 /**
  * post both queues a newly received update to be sent to other clients and (if in DB mode)
- * archives the udpate in the database so that future clients can receive it 
+ * archives the udpate in the database so that future clients can receive it
  * @param src the client that made the update
  * @param cmd the 'command' that was performed (comment, rename, etc)
  * @param data the 'data' portion of the command (the comment text, etc)
@@ -99,12 +151,12 @@ void BasicConnectionManager::post(Client *src, const char * cmd, json_object *ob
 }
 
 /**
- * sendLatestUpdates sends updates from LastUpdate to current 
+ * sendLatestUpdates sends updates from LastUpdate to current
  * it is expected that the client has already joined a project before calling this function
- * it is expected that the client has already received updates from 0 - lastUpdate 
+ * it is expected that the client has already received updates from 0 - lastUpdate
  * this function is typically called when a user is re-joining a project that they had previously worked on
- * @param c the client requesting updates 
- * @param lastUpdate the last update the client received 
+ * @param c the client requesting updates
+ * @param lastUpdate the last update the client received
  */
 void BasicConnectionManager::sendLatestUpdates(Client *c, uint64_t lastUpdate) {
    ProjectInfo *pi = findProject(c->getPid());
@@ -127,7 +179,6 @@ void BasicConnectionManager::sendLatestUpdates(Client *c, uint64_t lastUpdate) {
  * @return a  project info object for the provided pid
  */
 ProjectInfo *BasicConnectionManager::getProjectInfo(uint32_t pid) {
-   string projectstring;
    for (Basic_it bi = basicProjects.begin(); bi != basicProjects.end(); bi++) {
       vector<ProjectInfo*> *vpi = (*bi).second;
       for (Info_it pi = vpi->begin(); pi != vpi->end(); pi++) {
@@ -142,7 +193,24 @@ ProjectInfo *BasicConnectionManager::getProjectInfo(uint32_t pid) {
 }
 
 /**
- * getProjectList generates a list of projects on this server, each list (vector) item is 
+ * getAllProjects generates a list of projects on this server, each list (vector) item is
+ * actually a pinfo (project info) object
+ * @return a vector of project info objects
+ */
+vector<ProjectInfo*> *BasicConnectionManager::getAllProjects() {
+   vector<ProjectInfo*> *plist = new vector<ProjectInfo*>;
+   map<string,vector<ProjectInfo*>*>::iterator pi;
+   for (pi = basicProjects.begin(); pi != basicProjects.end(); pi++) {
+      vector<ProjectInfo*> *v = (*pi).second;
+      for (vector<ProjectInfo*>::iterator vi = v->begin(); vi != v->end(); vi++) {
+         plist->push_back(*vi);
+      }
+   }
+   return plist;
+}
+
+/**
+ * getProjectList generates a list of projects on this server, each list (vector) item is
  * actually a pinfo (project info) object, the list does NOT contain all projects, but
  * only contains projects relevant to the binary that is currently loaded in IDA
  * @param phash the IDA generated hash that is unique among the analysis files
@@ -166,9 +234,9 @@ vector<ProjectInfo*> *BasicConnectionManager::getProjectList(const string &phash
 }
 
 /**
- * joinProject joings a particular client to a project so that it can participate in collabREation 
- * @param c the client attempting to join 
- * @param lpid the local project id of the project on this server 
+ * joinProject joings a particular client to a project so that it can participate in collabREation
+ * @param c the client attempting to join
+ * @param lpid the local project id of the project on this server
  * @return 0 on success, negative value on failure
  */
 int BasicConnectionManager::joinProject(Client *c, uint32_t lpid) {
@@ -194,9 +262,9 @@ int BasicConnectionManager::joinProject(Client *c, uint32_t lpid) {
 }
 
 /**
- * snapProject adds a snapshop for a project, this does not change the client's 
+ * snapProject adds a snapshop for a project, this does not change the client's
  * current project, nor copy any updates, it simply marks a point-in-time (updateid wise)
- * this point-in-time can later be used as a project fork point if desired 
+ * this point-in-time can later be used as a project fork point if desired
  * @param c the client invoking the snapshot
  * @param lastupdateid the point-in-time the client wishes to save in the snapshot
  * @param desc a user provided description of the snapshot
@@ -254,8 +322,8 @@ void BasicConnectionManager::sendForkFollows(Client *originator, int oldlpid, ui
 /**
  * snapforkProject -  this is a special version of forkProject that is designed to work
  * on snapshots (instead of existing projects) this works exactly like forkProject, execpt
- * updates are copied from the 'parent' of the snapshot instead of the client's currently 
- * associated project, also updates are copied until the lastupdateid from the snapshot, 
+ * updates are copied from the 'parent' of the snapshot instead of the client's currently
+ * associated project, also updates are copied until the lastupdateid from the snapshot,
  * not from the plugin (last received update is stored in the idb)
  * @param c client invoking the snapforkProject
  * @param spid the pid of the project that is being snapshotted
@@ -269,21 +337,59 @@ int BasicConnectionManager::snapforkProject(Client *c, int spid, const string &d
 }
 
 /**
- * migrateProject adds a project to the database  
+ * importProject adds a project to the database
  * fairly similar to addProject
  * @param owner the uid to be the owner of the new project
  * @param gpid unique global id for the incoming project
  * @param hash unique hash for the binary file originally generated by IDA
- * @param desc user provided description of the project 
+ * @param desc user provided description of the project
  * @param pub the publish permissions for the project
  * @param sub the subscribe permissions for the project
  * @return the new project id on success, -1 on failure
  */
 
-int BasicConnectionManager::migrateProject(const char *owner, const string &gpid, const string &hash, const string &desc, uint64_t pub, uint64_t sub) {
+int BasicConnectionManager::importProject(const char *owner, const string &gpid, const string &hash, const string &desc, uint64_t pub, uint64_t sub) {
+   sem_wait(&pidLock);
+   int lpid = basicmodepid++;
+   Basic_it bi = basicProjects.find(hash);
+   vector<ProjectInfo*> *vpi;
+   if (bi != basicProjects.end()) {
+      vpi = (*bi).second;
+   }
+   else {
+      vpi = new vector<ProjectInfo*>;
+      basicProjects[hash] = vpi;
+   }
+   ProjectInfo *pi = new ProjectInfo(lpid, desc);
+   pi->pub = pub;
+   pi->sub = sub;
+   pi->hash = hash;
+   pi->gpid = gpid;
+   vpi->push_back(pi);
+   sem_post(&pidLock);
+   gpid_lpid_map[gpid] = lpid;
+   lpid_gpid_map[lpid] = gpid;
 
-   log(LERROR, "migrating in BASIC mode doesn't make sense!\n");
-   return -1;
+   return lpid;
+}
+
+/**
+ * exportProject dumps all project updates
+ * @param pid the local project id of the prject to be exported
+ */
+
+json_object *BasicConnectionManager::exportProject(uint32_t pid) {
+   ProjectInfo *pi = findProject(pid);
+   if (pi == NULL) {
+      return NULL;
+   }
+   json_object *updates = json_object_new_array();
+   const vector<char*> &vu = pi->get_updates();
+   for (vector<char*>::const_iterator vi = vu.begin(); vi != vu.end(); vi++) {
+      json_object *obj = json_tokener_parse(*vi);
+      json_object_array_add(updates, obj);
+   }
+   return updates;
 }
 
 //Find a project given only an lpid
@@ -300,17 +406,17 @@ ProjectInfo *BasicConnectionManager::findProject(uint32_t lpid) {
 }
 
 /**
- * addProject adds a project to the database and reflector (or merely a reflector in non-DB mode) 
+ * addProject adds a project to the database and reflector (or merely a reflector in non-DB mode)
  * @param c cliend invoking the addProject
  * @param hash unique hash for the binary file originally generated by IDA
- * @param desc user provided description of the project 
+ * @param desc user provided description of the project
  * @param pub the publish permissions for the project
  * @param sub the subscribe permissions for the project
  * @return the new project id on success, -1 on failure
  */
 
 int BasicConnectionManager::addProject(Client *c, const string &hash, const string &desc, uint64_t pub, uint64_t sub) {
-   log(LDEBUG, "in addProject\n");
+   log(LDEBUG, "in addProject, hash = %s\n", hash.c_str());
    int lpid = -1;
 //   int uid = c->getUid();
    string gpid;
@@ -329,6 +435,7 @@ int BasicConnectionManager::addProject(Client *c, const string &hash, const stri
    ProjectInfo *pi = new ProjectInfo(lpid, desc);
    pi->pub = pub;
    pi->sub = sub;
+   pi->hash = hash;
    vpi->push_back(pi);
    sem_post(&pidLock);
    c->setPid(lpid);
@@ -337,6 +444,7 @@ int BasicConnectionManager::addProject(Client *c, const string &hash, const stri
    fill_random(gpid_bytes, sizeof(gpid_bytes));
    gpid = toHexString(gpid_bytes, sizeof(gpid_bytes));
    c->setGpid(gpid);
+   pi->gpid = gpid;
 
    gpid_lpid_map[gpid] = lpid;
    lpid_gpid_map[lpid] = gpid;
@@ -357,9 +465,9 @@ int BasicConnectionManager::addProject(Client *c, const string &hash, const stri
 }
 
 /**
- * lpid2gpid converts an lpid (pid local to a particular server instance) 
+ * lpid2gpid converts an lpid (pid local to a particular server instance)
  * to a gpid (which is unique across all projects on all servers)
- * @param lpid the local pid for this particular server 
+ * @param lpid the local pid for this particular server
  * @return the glocabl pid
  */
 string BasicConnectionManager::lpid2gpid(int lpid) {

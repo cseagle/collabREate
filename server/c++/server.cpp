@@ -46,8 +46,8 @@
 
 #define ERROR_NO_USER "Failed to find user %s"
 #define ERROR_NO_PRIVS "drop_privs failed!"
-#define ERROR_BAD_GID "setgid current gid: %d target gid: %d\n"   
-#define ERROR_BAD_UID "setuid current uid: %d target uid: %d\n"   
+#define ERROR_BAD_GID "setgid current gid: %d target gid: %d\n"
+#define ERROR_BAD_UID "setuid current uid: %d target uid: %d\n"
 #define ERROR_SET_SIGCHLD "Unable to set SIGCHLD handler"
 #define ERROR_SET_SIGTERM "Unable to set SIGTERM handler"
 
@@ -79,13 +79,58 @@ void sigchld(int sig) {
 //   fprintf(stderr, "sigchld returning\n");
 }
 
+struct ClientArgs {
+   ClientArgs(ConnectionManager *_cm, NetworkIO *_nio) : cm(_cm), nio(_nio) {};
+   ConnectionManager *cm;
+   NetworkIO *nio;
+};
+
+#define AUTH_TRIES 3
+
+//perform authentication on the new connection before instantiating and running a new Client
+void *client_func(void *arg) {
+   if (arg) {
+      ClientArgs *ca = (ClientArgs*)arg;
+      for (int i = 0; i < AUTH_TRIES; i++) {
+         json_object *response = json_object_new_object();
+         append_json_string_val(response, "type", MSG_AUTH_REPLY);
+
+         uint32_t uid = ca->cm->doAuth(ca->nio);
+         if (uid < FIRST_BAD_UID) {
+            append_json_int32_val(response, "reply", AUTH_REPLY_SUCCESS);
+            ca->nio->writeJson(response);
+            Client *c = new Client(ca->cm, ca->nio, uid);
+            delete ca;
+            c->run();
+            delete c;
+            break;
+         }
+         else {
+            append_json_int32_val(response, "reply", AUTH_REPLY_FAIL);
+            ca->nio->writeJson(response);
+         }
+      }
+   }
+   return NULL;
+}
+
+//create a new thread to handle the new connection
+void start_client(ConnectionManager *cm, NetworkIO *nio) {
+   pthread_attr_t attr;
+   pthread_attr_init(&attr);
+   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+   pthread_t tid;
+   //handle the new client in a new thread
+   pthread_create(&tid, &attr, client_func, new ClientArgs(cm, nio));
+}
+
 /*
  * Enter a threaded accept loop.  Create a new thread using the
- * client_callback function for each new client connection.  If 
+ * client_callback function for each new client connection.  If
  * the client thread crashes, the entire server crashes.
  */
 void loop(NetworkService *svc) {
-   ConnectionManagerBase *mgr;
+   ConnectionManager *mgr;
    if (conf == NULL) {
       mgr = new BasicConnectionManager(conf);
    }
@@ -110,7 +155,7 @@ void loop(NetworkService *svc) {
       NetworkIO *nio = svc->accept();
       fprintf(stderr, "Accepted new client\n");
       if (nio) {
-         mgr->add(nio);
+         start_client(mgr, nio);
       }
    }
    while (!hlp.quit) {};
@@ -129,7 +174,7 @@ int drop_privs(struct passwd *pw) {
 #if defined DO_CHROOT
    dir = "/";
    if (chroot(pw->pw_dir) == -1) {;
-#ifdef DEBUG      
+#ifdef DEBUG
       perror("chroot");
       fprintf(stderr, "Failed chroot to %s", pw->pw_dir);
 #endif
@@ -142,13 +187,13 @@ int drop_privs(struct passwd *pw) {
    if (setresgid(pw->pw_gid, pw->pw_gid, pw->pw_gid) < 0) return -1;
    if (setresuid(pw->pw_uid, pw->pw_uid, pw->pw_uid) < 0) return -1;
    if (pw->pw_gid != gid && (setgid(gid) != -1 || setegid(gid) != -1)) {
-#ifdef DEBUG      
+#ifdef DEBUG
       printf(ERROR_BAD_GID, getgid(), pw->pw_gid);
 #endif
       return -1;
    }
    if (pw->pw_uid != uid && (setuid(uid) != -1 || seteuid(uid) != -1)) {
-#ifdef DEBUG      
+#ifdef DEBUG
       printf(ERROR_BAD_UID, getuid(), pw->pw_uid);
 #endif
       return -1;
@@ -157,7 +202,7 @@ int drop_privs(struct passwd *pw) {
    if (getuid() != pw->pw_uid || geteuid() != pw->pw_uid) return -1;
 
    if (chdir(dir) == -1) {;
-#ifdef DEBUG      
+#ifdef DEBUG
       perror("chdir");
       fprintf(stderr, "Failed chdir to %s", dir);
 #endif
@@ -172,14 +217,14 @@ int drop_privs(struct passwd *pw) {
 int drop_privs_user(const char *user_name) {
    struct passwd *pw = getpwnam(user_name);
    if (pw == NULL) {
-#ifdef DEBUG      
+#ifdef DEBUG
       err(-1, ERROR_NO_USER, user_name);
 #else
       exit(-1);
 #endif
    }
    if (drop_privs(pw) == -1) {
-#ifdef DEBUG      
+#ifdef DEBUG
       err(-1, ERROR_NO_PRIVS);
 #else
       exit(-1);
@@ -210,14 +255,14 @@ int main(int argc, char **argv, char **envp) {
    Tcp6Service *svc;
    srand(time(NULL));
    if (signal(SIGCHLD, sigchld) == SIG_ERR) {
-#ifdef DEBUG      
+#ifdef DEBUG
       err(-1, ERROR_SET_SIGCHLD);
 #else
       exit(-1);
 #endif
    }
    if (signal(SIGTERM, sigterm) == SIG_ERR) {
-#ifdef DEBUG      
+#ifdef DEBUG
       err(-1, ERROR_SET_SIGTERM);
 #else
       exit(-1);
