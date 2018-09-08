@@ -48,10 +48,10 @@ public:
    void importUpdate(const char *newowner, int pid, const char *cmd, json_object *obj);
    void post(Client *src, const char *cmd, json_object *obj);
    void sendLatestUpdates(Client *c, uint64_t lastUpdate);
-   ProjectInfo *getProjectInfo(uint32_t pid);
+   const Project *getProject(uint32_t pid);
 
-   vector<ProjectInfo*> *getProjectList(const string & phash);
-   vector<ProjectInfo*> *getAllProjects();
+   vector<const Project*> *getProjectList(const string &phash);
+   vector<Project*> *getAllProjects();
    int joinProject(Client *c, uint32_t lpid);
    int snapProject(Client *c, uint64_t lastupdateid, const string &desc);
    int forkProject(Client *c, uint64_t lastupdateid, const string &desc);
@@ -66,6 +66,8 @@ public:
    string lpid2gpid(int lpid);
 
 private:
+   map<uint32_t,Project*> pid_project_map;
+      
    void init_queries();
 
    sem_t pu_sem;
@@ -80,6 +82,7 @@ private:
    sem_t glu_sem;
    sem_t cu_sem;
    sem_t ppu_sem;
+   sem_t map_sem;
 
    PGconn *dbConn;
 };

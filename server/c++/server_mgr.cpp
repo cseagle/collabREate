@@ -227,7 +227,7 @@ void ServerManager::mng_project_list(json_object *reply, ServerManager *sm)  {
       const char *desc = string_from_json(project, "description");
       const char *hash = string_from_json(project, "hash");
 
-      ProjectInfo *temppi = new ProjectInfo(pid, desc);
+      Project *temppi = new Project(pid, desc);
 
       printf("%-4u %-32s %s\n", pid, hash, desc);
       temppi->pub = pub;
@@ -650,15 +650,15 @@ void ServerManager::shutdownServer() {
 }
 
 /**
- * getProjectInfo gets project information for a previously listed project
+ * getProject gets project information for a previously listed project
  * @param lpid the local PID for the project to get info on
  * @param pinfo a project info object to populate with information
  * @return 0 on success
  */
-int ServerManager::getProjectInfo(uint32_t lpid, ProjectInfo *pinfo) {
+int ServerManager::getProject(uint32_t lpid, Project *pinfo) {
    int rval = -1;
-   for (vector<ProjectInfo*>::iterator it = plist.begin(); it != plist.end(); it++) {
-      ProjectInfo *pi = *it;
+   for (vector<Project*>::iterator it = plist.begin(); it != plist.end(); it++) {
+      Project *pi = *it;
       if (pi->lpid == lpid ) {
          pinfo->lpid = pi->lpid;
          pinfo->desc = pi->desc;
@@ -706,8 +706,8 @@ static time_t PQ_to_time_t(double pqtime) {
 int ServerManager::exportDatabaseProject(uint32_t lpid) {
    int rval = -1;
    if (mode == MODE_DB) {
-      ProjectInfo pi(1, "none");
-      if (getProjectInfo(lpid, &pi) == 0) {
+      Project pi(1, "none");
+      if (getProject(lpid, &pi) == 0) {
          if (pi.snapupdateid > 0 ) {
             fprintf(stderr, "snapshot exporting is currently not implimented\n");
             return -1;
@@ -757,7 +757,7 @@ int ServerManager::exportDatabaseProject(uint32_t lpid) {
                //printf("processing update %d...", (i + 1));
                printf(".");
                uint64_t updateid = htonll(*((uint64_t*)PQgetvalue(rset, i, 0)));
-               const char *uid = PQgetvalue(rset, i, 1);
+               //const char *uid = PQgetvalue(rset, i, 1);
                int pid = ntohl(*(int*)PQgetvalue(rset, i, 2));
                const char *json = (const char*)PQgetvalue(rset, i, 3);
 
@@ -768,7 +768,7 @@ int ServerManager::exportDatabaseProject(uint32_t lpid) {
 
                json_object *update = json_tokener_parse(json);
                append_json_uint64_val(update, "updateid", updateid);
-               append_json_string_val(update, "uid", uid);
+               //append_json_string_val(update, "uid", uid);
                append_json_int32_val(update, "pid", pid);
 
                //write timestamp?
@@ -809,8 +809,8 @@ int ServerManager::exportDatabaseProject(uint32_t lpid) {
  * @return 0 on success
  */
 int ServerManager::exportBasicProject(uint32_t lpid) {
-   ProjectInfo pi(1, "none");
-   if (getProjectInfo(lpid, &pi) == 0) {
+   Project pi(1, "none");
+   if (getProject(lpid, &pi) == 0) {
       if (pi.snapupdateid > 0 ) {
          fprintf(stderr, "snapshot exporting is currently not implimented\n");
          return -1;
@@ -1087,7 +1087,7 @@ void ServerManager::listUsers() {
  */
 void ServerManager::listBasicProjects() {
    //start fresh by clearing any old listing
-   vector<ProjectInfo*>::iterator pi;
+   vector<Project*>::iterator pi;
    for (pi = plist.begin(); pi != plist.end(); pi++) {
       delete *pi;
    }
@@ -1107,7 +1107,7 @@ void ServerManager::listBasicProjects() {
  */
 void ServerManager::listDatabaseProjects() {
    //start fresh by clearing any old listing
-   vector<ProjectInfo*>::iterator pi;
+   vector<Project*>::iterator pi;
    for (pi = plist.begin(); pi != plist.end(); pi++) {
       delete *pi;
    }
@@ -1149,7 +1149,7 @@ void ServerManager::listDatabaseProjects() {
                //printf(hash);
                lastHash = hash;
             }
-            ProjectInfo *temppi = new ProjectInfo(pid, desc);
+            Project *temppi = new Project(pid, desc);
             const char *isSnap = (snapupdateid > 0) ? " X " : "   ";
             printf("%-4d %-4d %-4s %-10" PRIx64 " %-10" PRIx64 " %s %s\n", pid, ppid, isSnap, pub, sub, getPermRowString(pub, sub, 6).c_str(), desc);
             temppi->parent = ppid;

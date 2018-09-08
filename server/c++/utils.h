@@ -29,6 +29,10 @@
 
 using namespace std;
 
+//most common case for adding json key:value pairs in collabreate
+//this says that the key is both a constant char* is new to the json object
+//(ie the key does not already exist within the object)
+//this provides some efficiencies within json-c
 #define JSON_NEW_CONST_KEY (JSON_C_OBJECT_ADD_KEY_IS_NEW | JSON_C_OBJECT_KEY_IS_CONSTANT)
 
 #define COMMAND_BYTE_PATCHED         "byte_patched"

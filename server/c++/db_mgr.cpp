@@ -169,6 +169,7 @@ void DatabaseConnectionManager::init_queries() {
 DatabaseConnectionManager::DatabaseConnectionManager(json_object *conf) : ConnectionManager(conf) {
 //   if (dbConn) return;
    map<string,string> dbkeys;
+   sem_init(&map_sem, 0, 1);
 
    string dbHost = getStringOption(conf, "DB_HOST", "");
    if (dbHost.length() > 0) {
@@ -433,12 +434,12 @@ void DatabaseConnectionManager::sendLatestUpdates(Client *c, uint64_t lastUpdate
 }
 
 /**
- * getProjectInfo gets informatio related to a local project
+ * getProject gets informatio related to a local project
  * @param pid the local pid of a project to get info on
  * @return a  project info object for the provided pid
  */
-ProjectInfo *DatabaseConnectionManager::getProjectInfo(uint32_t pid) {
-   ProjectInfo *pinfo = NULL;
+const Project *DatabaseConnectionManager::getProject(uint32_t pid) {
+   Project *pinfo = NULL;
 
    static const int plens[1] = {4};
    static const int pformats[1] = {1};
@@ -474,7 +475,19 @@ ProjectInfo *DatabaseConnectionManager::getProjectInfo(uint32_t pid) {
          if (!PQgetisnull(rset, 0, 6)) {
             pdesc = PQgetvalue(rset, 0, 6);
          }
-         pinfo = new ProjectInfo(lpid, desc);
+
+         sem_wait(&map_sem);
+         map<uint32_t,Project*>::iterator pi = pid_project_map.find(lpid);
+         if (pi != pid_project_map.end()) {
+            pinfo = (*pi).second;
+         }
+         else {
+            pinfo = new Project(lpid, "");
+            pid_project_map[lpid] = pinfo;
+         }
+         sem_post(&map_sem);
+         //now make sure all project info is consistent with database, even if Project record already existed
+         pinfo->desc = desc;
          pinfo->parent = parent;
          pinfo->pdesc = pdesc;
          pinfo->snapupdateid = snapupdateid;
@@ -483,9 +496,7 @@ ProjectInfo *DatabaseConnectionManager::getProjectInfo(uint32_t pid) {
          pinfo->owner = PQgetvalue(rset, 0, 9);
          pinfo->proto = proto;
          ClientSet *cs = projects.get(lpid);
-         if (cs != NULL) {
-            pinfo->connected = cs->size();
-         }
+         pinfo->connected = cs ? cs->size() : 0;
       }
    }
    PQclear(rset);
@@ -493,11 +504,11 @@ ProjectInfo *DatabaseConnectionManager::getProjectInfo(uint32_t pid) {
 }
 
 /**
- * getAllProjects generates a list of projects on this server, each list (vector) item is
- * actually a pinfo (project info) object
+ * getAllProjects generates a list of projects on this server, each list item is
+ * a pointer to a Project object
  * @return a vector of project info objects
  */
-vector<ProjectInfo*> *DatabaseConnectionManager::getAllProjects() {
+vector<Project*> *DatabaseConnectionManager::getAllProjects() {
    log(LERROR, "project listing in DB mode should be handled using server manager.\n");
    return NULL;
 }
@@ -509,8 +520,8 @@ vector<ProjectInfo*> *DatabaseConnectionManager::getAllProjects() {
  * @param phash the IDA generated hash that is unique among the analysis files
  * @return a vector of project info objects for the provided phash
  */
-vector<ProjectInfo*> *DatabaseConnectionManager::getProjectList(const string &phash) {
-   vector<ProjectInfo*> *plist = new vector<ProjectInfo*>;
+vector<const Project*> *DatabaseConnectionManager::getProjectList(const string &phash) {
+   vector<const Project*> *plist = new vector<const Project*>;
 
    static const int plens[1] = {0};
    static const int pformats[1] = {0};
@@ -548,7 +559,20 @@ vector<ProjectInfo*> *DatabaseConnectionManager::getProjectList(const string &ph
          if (!PQgetisnull(rset, i, 6)) {
             pdesc = PQgetvalue(rset, i, 6);
          }
-         ProjectInfo *pinfo = new ProjectInfo(lpid, desc);
+
+         Project *pinfo;
+         sem_wait(&map_sem);
+         map<uint32_t,Project*>::iterator pi = pid_project_map.find(lpid);
+         if (pi != pid_project_map.end()) {
+            pinfo = (*pi).second;
+         }
+         else {
+            pinfo = new Project(lpid, "");
+            pid_project_map[lpid] = pinfo;
+         }
+         sem_post(&map_sem);
+         //now make sure all project info is consistent with database, even if Project record already existed
+         pinfo->desc = desc;
          pinfo->parent = parent;
          pinfo->pdesc = pdesc;
          pinfo->snapupdateid = snapupdateid;
@@ -557,16 +581,11 @@ vector<ProjectInfo*> *DatabaseConnectionManager::getProjectList(const string &ph
          pinfo->owner = PQgetvalue(rset, i, 9);
          pinfo->proto = proto;
          ClientSet *cs = projects.get(lpid);
-         if (cs != NULL) {
-            pinfo->connected = cs->size();
-         }
-
+         pinfo->connected = cs ? cs->size() : 0;
          plist->push_back(pinfo);
-
       }
    }
    PQclear(rset);
-
    return plist;
 }
 
@@ -627,6 +646,32 @@ int DatabaseConnectionManager::joinProject(Client *c, uint32_t lpid) {
          c->setGpid(gpid);
 
          const char *owner = PQgetvalue(rset, 0, 9);
+         const char *desc = PQgetvalue(rset, 0, 4);
+         const char *pdesc = PQgetvalue(rset, 0, 6);
+         uint32_t parent = ntohl(*(uint32_t*)PQgetvalue(rset, 0, 5));
+
+         Project *pinfo;
+         sem_wait(&map_sem);
+         map<uint32_t,Project*>::iterator pi = pid_project_map.find(lpid);
+         if (pi != pid_project_map.end()) {
+            pinfo = (*pi).second;
+         }
+         else {
+            pinfo = new Project(lpid, "");
+            pid_project_map[lpid] = pinfo;
+         }
+         sem_post(&map_sem);
+         //now make sure all project info is consistent with database, even if Project record already existed
+         pinfo->desc = desc;
+         pinfo->parent = parent;
+         pinfo->pdesc = pdesc;
+         pinfo->snapupdateid = snapupdateid;
+         pinfo->pub = ntohll(*(uint64_t*)PQgetvalue(rset, 0, 7));
+         pinfo->sub = ntohll(*(uint64_t*)PQgetvalue(rset, 0, 8));
+         pinfo->owner = owner;
+         pinfo->proto = proto;
+         ClientSet *cs = projects.get(lpid);
+         pinfo->connected = cs ? cs->size() : 0;
 
          if (c->getUser() == owner) { //project owner gets full perms, regardless of user, project, or requested perms
             log(LINFO3, "Project Owner joined! yay!");
@@ -634,24 +679,8 @@ int DatabaseConnectionManager::joinProject(Client *c, uint32_t lpid) {
             c->setSub(FULL_PERMISSIONS);
          }
          else { //effective permissions are user perms ANDed with project perms ANDed with the perms requested by the user
-            uint64_t pub = ntohll(*(uint64_t*)PQgetvalue(rset, 0, 7));
-   /*
-            logln(LINFO1, "effective publish  : " +
-                  Long.toHexString(pub)) + " & " +
-                  Long.toHexString(c->getReqPub()) + " & " +
-                  Long.toHexString(c->getUserPub()) + " = " +
-                  Long.toHexString(pub & c->getUserPub() & c->getReqPub()));
-   */
-            uint64_t sub = ntohll(*(uint64_t*)PQgetvalue(rset, 0, 8));
-   /*
-            logln(LINFO1, "effective subscribe: " +
-                  Long.toHexString(sub) + " & " +
-                  Long.toHexString(c->getReqSub()) + " & " +
-                  Long.toHexString(c->getUserSub()) + " = " +
-                  Long.toHexString(sub & c->getUserSub() & c->getReqSub()));
-   */
-            c->setPub(pub & c->getUserPub() & c->getReqPub());
-            c->setSub(sub & c->getUserSub() & c->getReqSub());
+            c->setPub(pinfo->pub & c->getUserPub() & c->getReqPub());
+            c->setSub(pinfo->sub & c->getUserSub() & c->getReqSub());
          }
 
          foundPid = true;
@@ -1115,6 +1144,21 @@ int DatabaseConnectionManager::addProject(Client *c, const string &hash, const s
       }
       else {
          lpid = ntohl(*(int*)PQgetvalue(rset, 0, 0));
+
+         Project *pinfo;
+         sem_wait(&map_sem);
+         pinfo = new Project(lpid, desc);
+         pid_project_map[lpid] = pinfo;
+         sem_post(&map_sem);
+         //now make sure all project info is consistent with database, even if Project record already existed
+         pinfo->owner = c->getUser();
+         pinfo->gpid = gpid;
+         pinfo->hash = hash;
+         pinfo->pub = pub;
+         pinfo->sub = sub;
+         pinfo->proto = proto;
+         pinfo->connected = 1;
+
          c->setPid(lpid);
          c->setGpid(gpid);
          //this is a newly created project, user of c must be the owner

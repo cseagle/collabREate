@@ -23,7 +23,7 @@
 
 sem_t uidMutex;
 
-ProjectInfo::ProjectInfo(uint32_t localpid, const string &description, uint32_t currentlyconnected, uint64_t init_uid) {
+Project::Project(uint32_t localpid, const string &description, uint32_t currentlyconnected) {
    lpid = localpid;
    desc = description;
    connected = currentlyconnected;
@@ -34,22 +34,29 @@ ProjectInfo::ProjectInfo(uint32_t localpid, const string &description, uint32_t 
    proto = 0;
    hash = "";
    gpid = "";
-   updateid = init_uid;
+}
 
+Project::Project(const Project &p) {
+   *this = p;
+}
+
+BasicProject::BasicProject(uint32_t localpid, const string &description, uint32_t currentlyconnected, uint64_t init_uid) :
+         Project(localpid, description, currentlyconnected) {
+   updateid = init_uid;
    sem_init(&uidMutex, 0, 1);
 }
 
-ProjectInfo::ProjectInfo(const ProjectInfo &pi) {
-   *this = pi;
+BasicProject::BasicProject(const BasicProject &bp) {
+   *this = bp;
 }
 
-ProjectInfo::~ProjectInfo() {
+BasicProject::~BasicProject() {
    for (vector<char*>::iterator i = updates.begin(); i != updates.end(); i++) {
       free(*i);
    }
 }
 
-uint64_t ProjectInfo::next_uid() {
+uint64_t BasicProject::next_uid() {
    uint64_t result;
    sem_wait(&uidMutex);
    result = ++updateid;
@@ -57,7 +64,7 @@ uint64_t ProjectInfo::next_uid() {
    return result;
 }
 
-void ProjectInfo::append_update(const char *update) {
+void BasicProject::append_update(const char *update) {
    updates.push_back(strdup(update));
 }
 

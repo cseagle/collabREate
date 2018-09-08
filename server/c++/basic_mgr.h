@@ -30,6 +30,8 @@
 
 using namespace std;
 
+class BasicProject;
+
 /**
  * BasicConnectionManager
  * This class is responsible for routing incoming packets to all
@@ -39,19 +41,18 @@ using namespace std;
  * @version 0.4.0, August 2012, 2018
  */
 
-typedef map<string,vector<ProjectInfo*>*>::iterator Basic_it;
-typedef vector<ProjectInfo*>::iterator Info_it;
-
 class BasicConnectionManager : public ConnectionManager {
    friend class ManagerHelper;
 private:
    map<string,uint32_t> gpid_lpid_map;
    map<uint32_t,string> lpid_gpid_map;
-   map<string,vector<ProjectInfo*>*> basicProjects;
+   map<string,vector<BasicProject*>*> basicProjects;  //binary hash:local pid
+   map<uint32_t,BasicProject*> pid_project_map;
    int basicmodepid;
    sem_t pidLock;
    sem_t uidLock;
-   ProjectInfo *findProject(uint32_t lpid);
+   sem_t mapLock;
+   BasicProject *findProject(uint32_t lpid);
    uint32_t basic_mode_uid;
    map<string,uint32_t> basic_mode_users;
    uint32_t uid_for_user(const char *user);
@@ -98,18 +99,18 @@ public:
    void sendLatestUpdates(Client *c, uint64_t lastUpdate);
 
    /**
-    * getProjectInfo gets information related to a local project
+    * getProject gets information related to a local project
     * @param pid the local pid of a project to get info on
     * @return a  project info object for the provided pid, caller needs to delete this
     */
-   ProjectInfo *getProjectInfo(uint32_t pid);
+   const Project *getProject(uint32_t pid);
 
    /**
-    * getAllProjects generates a list of projects on this server, each list (vector) item is
-    * actually a pinfo (project info) object
+    * getAllProjects generates a list of projects on this server, each list item is
+    * a pointer to a Project object
     * @return a vector of project info objects
     */
-   vector<ProjectInfo*> *getAllProjects();
+   vector<Project*> *getAllProjects();
 
    /**
     * getProjectList generates a list of projects on this server, each list (vector) item is
@@ -118,7 +119,7 @@ public:
     * @param phash the IDA generated hash that is unique among the analysis files
     * @return a vector of project info objects for the provided phash
     */
-   vector<ProjectInfo*> *getProjectList(const string &phash);
+   vector<const Project*> *getProjectList(const string &phash);
 
    /**
     * joinProject joings a particular client to a project so that it can participate in collabREation

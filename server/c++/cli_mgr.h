@@ -34,11 +34,8 @@
 
 using namespace std;
 
-class ProjectInfo;
+class Project;
 class NetworkIO;
-
-typedef set<Client*>::iterator Client_it;
-typedef map<int,set<Client*>*>::iterator Projects_it;
 
 #define AUTH_INVALID_USER ((uint32_t)-1)
 #define AUTH_FAIL ((uint32_t)-2)
@@ -156,18 +153,18 @@ public:
    virtual void sendLatestUpdates(Client *c, uint64_t lastUpdate) = 0;
 
    /**
-    * getProjectInfo gets information related to a local project
+    * getProject gets information related to a local project
     * @param pid the local pid of a project to get info on
     * @return a  project info object for the provided pid, caller needs to delete this
     */
-   virtual ProjectInfo *getProjectInfo(uint32_t pid) = 0;
+   virtual const Project *getProject(uint32_t pid) = 0;
 
    /**
-    * getAllProjects generates a list of projects on this server, each list (vector) item is
-    * actually a pinfo (project info) object
+    * getAllProjects generates a list of projects on this server, each list item is
+    * a pointer to a Project object
     * @return a vector of project info objects
     */
-   virtual vector<ProjectInfo*> *getAllProjects() = 0;
+   virtual vector<Project*> *getAllProjects() = 0;
 
    /**
     * getProjectList generates a list of projects on this server, each list (vector) item is
@@ -176,7 +173,7 @@ public:
     * @param phash the IDA generated hash that is unique among the analysis files
     * @return a vector of project info objects for the provided phash
     */
-   virtual vector<ProjectInfo*> *getProjectList(const string &phash) = 0;
+   virtual vector<const Project*> *getProjectList(const string &phash) = 0;
 
    /**
     * listConnection displays the current connections to the collabREate connection manager

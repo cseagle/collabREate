@@ -268,15 +268,16 @@ void Client::run() {
             done = (*h)(obj, this);
             json_object_put(obj);
          }
+         else if (pid == INVALID_PID) {
+            send_error("Not allowed to send project updates before joining a project\n");
+         }
          else {
             //no handler found so this is not a control message, post it
-            //only accept commands if the client is authenticated
-//            log(LINFO, "no handler found for %s\n", cmd);
+            //only accept commands if the client is
             if (publish > 0) {
                //only post if this client chose to publish,
                //(though they really shouldn't have sent any data if they are not publishing)
                if (checkPermissions(cmd, publish)) {
-   //               log(LDEBUG, "posting command %s (allowed to  publish)\n", cmd);
                   cm->post(this, cmd, obj);
                }
                else {
@@ -286,14 +287,13 @@ void Client::run() {
             }
             else {
                log(LINFO, "Skipping update. publish: 0x%X\n", (uint32_t)publish);
-   /*
-               logln("Client " + hash + ":" + conn.getInetAddress().getHostAddress()
-                                  + ":" + conn.getPeerPort() + " skipping post command.", LINFO);
-   */
                json_object_put(obj);
             }
          }
 /*
+         //currently disabled stat tracking, type codes used to be integers
+         //so this was easier to maintain. change to a map of command strings
+         //to counts if we want to re-enable stats
          log(LDEBUG, "received data len: %d, cmd: %d\n", len, command);
          if (command < MAX_COMMAND && command > 0) {
             stats[1][command]++;
@@ -570,12 +570,12 @@ bool Client::msg_project_list(json_object *obj, Client *c) {
    c->hash = string_from_json(obj, "md5");
 //   c->clog(LINFO4, "project hash: %s\n", c->hash.c_str());
    json_object *projects = json_object_new_array();
-   vector<ProjectInfo*> *plist = c->cm->getProjectList(c->hash);
+   vector<const Project*> *plist = c->cm->getProjectList(c->hash);
 //   int nump = plist->size();
 //   c->clog(LINFO3, " Found %u projects\n", nump);
    //create list of projects
    if (plist) {
-      for (vector<ProjectInfo*>::iterator pi = plist->begin(); pi != plist->end(); pi++) {
+      for (vector<const Project*>::iterator pi = plist->begin(); pi != plist->end(); pi++) {
    //      c->clog(LINFO4, " " + pi.lpid + " "+ pi.desc, LINFO4);
          char buf[256];
          json_object *proj = json_object_new_object();
@@ -638,7 +638,7 @@ bool Client::msg_set_req_perms(json_object *obj, Client *c) {
    uint64_from_json(obj, "sub", &c->rsubscribe);
    c->rsubscribe &= 0x7FFFFFFF;
 
-   ProjectInfo *pi = c->cm->getProjectInfo(c->pid);
+   const Project *pi = c->cm->getProject(c->pid);
 /*
   logln("effective publish  : " +
          uint64_t.toHexString(pi.pub) + " & " +
@@ -651,15 +651,19 @@ bool Client::msg_set_req_perms(json_object *obj, Client *c) {
          uint64_t.toHexString(usubscribe) + " = " +
          uint64_t.toHexString(pi.sub & usubscribe & rsubscribe),LINFO1);
 */
-   if ( c->username != pi->owner ) {
-      c->setPub(pi->pub & c->upublish & c->rpublish);
-      c->setSub(pi->sub & c->usubscribe & c->rsubscribe);
+   if (pi) {
+      if ( c->username != pi->owner ) {
+         c->setPub(pi->pub & c->upublish & c->rpublish);
+         c->setSub(pi->sub & c->usubscribe & c->rsubscribe);
+      }
+      else {
+         c->clog(LINFO, "not honoring SET_REQ_PERMS for owner\n");
+         c->send_error("You are the owner.  FULL permissions granted.");
+      }
    }
    else {
-      c->clog(LINFO, "not honoring SET_REQ_PERMS for owner\n");
-      c->send_error("You are the owner.  FULL permissions granted.");
+      //something is really wrong
    }
-   delete pi;
    return false;
 }
 
@@ -671,35 +675,11 @@ bool Client::msg_get_req_perms(json_object *obj, Client *c) {
    append_json_uint64_val(resp, "sub", c->rsubscribe);
 
    //send the max possible values for requested permissions (mask)
-   ProjectInfo *pi = c->cm->getProjectInfo(c->pid);
+   const Project *pi = c->cm->getProject(c->pid);
 
-   append_json_uint64_val(resp, "pub_mask", pi->pub & c->upublish);
-   append_json_uint64_val(resp, "sub_mask", pi->sub & c->usubscribe);
-
-   //also append list of permissions supported by this server
-   json_object *perms = json_object_new_array();
-   for ( int i = 0; permStrings[i]; i++) {
-      json_object_array_add(perms, json_object_new_string(permStrings[i]));
-   }
-
-   json_object_object_add_ex(resp, "perms", perms, JSON_NEW_CONST_KEY);
-
-   c->send_data(MSG_GET_REQ_PERMS_REPLY, resp);
-   delete pi;
-   return false;
-}
-
-bool Client::msg_get_proj_perms(json_object *obj, Client *c) {
-//                 logln("Received GET_PROJ_PERMS request", LINFO1);
-   ProjectInfo *pi = c->cm->getProjectInfo(c->pid);
-   if (c->username == pi->owner) {
-      json_object *resp = json_object_new_object();
-      //send the two project permissions
-      append_json_uint64_val(resp, "pub", pi->pub);
-      append_json_uint64_val(resp, "sub", pi->sub);
-      //since this is the owner managing possible values for requested permissions (mask) is full
-      append_json_uint64_val(resp, "pub_mask", FULL_PERMISSIONS);
-      append_json_uint64_val(resp, "sub_mask", FULL_PERMISSIONS);
+   if (pi) {
+      append_json_uint64_val(resp, "pub_mask", pi->pub & c->upublish);
+      append_json_uint64_val(resp, "sub_mask", pi->sub & c->usubscribe);
 
       //also append list of permissions supported by this server
       json_object *perms = json_object_new_array();
@@ -709,12 +689,44 @@ bool Client::msg_get_proj_perms(json_object *obj, Client *c) {
 
       json_object_object_add_ex(resp, "perms", perms, JSON_NEW_CONST_KEY);
 
-     c->send_data(MSG_GET_PROJ_PERMS_REPLY, resp);
+      c->send_data(MSG_GET_REQ_PERMS_REPLY, resp);
    }
    else {
-      c->send_error("You are not the owner!");
+      //something is really wrong
    }
-   delete pi;
+   return false;
+}
+
+bool Client::msg_get_proj_perms(json_object *obj, Client *c) {
+//                 logln("Received GET_PROJ_PERMS request", LINFO1);
+   const Project *pi = c->cm->getProject(c->pid);
+   if (pi) {
+      if (c->username == pi->owner) {
+         json_object *resp = json_object_new_object();
+         //send the two project permissions
+         append_json_uint64_val(resp, "pub", pi->pub);
+         append_json_uint64_val(resp, "sub", pi->sub);
+         //since this is the owner managing possible values for requested permissions (mask) is full
+         append_json_uint64_val(resp, "pub_mask", FULL_PERMISSIONS);
+         append_json_uint64_val(resp, "sub_mask", FULL_PERMISSIONS);
+
+         //also append list of permissions supported by this server
+         json_object *perms = json_object_new_array();
+         for ( int i = 0; permStrings[i]; i++) {
+            json_object_array_add(perms, json_object_new_string(permStrings[i]));
+         }
+
+         json_object_object_add_ex(resp, "perms", perms, JSON_NEW_CONST_KEY);
+
+        c->send_data(MSG_GET_PROJ_PERMS_REPLY, resp);
+      }
+      else {
+         c->send_error("You are not the owner!");
+      }
+   }
+   else {
+      //something is relly wrong
+   }
    return false;
 }
 
@@ -725,13 +737,17 @@ bool Client::msg_set_proj_perms(json_object *obj, Client *c) {
    pub &= 0x7FFFFFFF;
    uint64_from_json(obj, "sub", &sub);
    sub &= 0x7FFFFFFF;
-   ProjectInfo *pi = c->cm->getProjectInfo(c->pid);
-   if (c->username == pi->owner) {
-      c->cm->updateProjectPerms(c, pub, sub);
+   const Project *pi = c->cm->getProject(c->pid);
+   if (pi) {
+      if (c->username == pi->owner) {
+         c->cm->updateProjectPerms(c, pub, sub);
+      }
+      else {
+         c->send_error("You are not the owner!");
+      }
    }
    else {
-      c->send_error("You are not the owner!");
+      //something is really wrong
    }
-   delete pi;
    return false;
 }

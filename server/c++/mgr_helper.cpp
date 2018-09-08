@@ -271,11 +271,11 @@ void ManagerHelper::mng_import_update(json_object *obj, ManagerHelper *mh) {
 
 void ManagerHelper::mng_project_list(json_object *obj, ManagerHelper *mh) {
    json_object *list = json_object_new_array();
-   vector<ProjectInfo*> *all = mh->cm->getAllProjects();
+   vector<Project*> *all = mh->cm->getAllProjects();
    if (all) {
-      map<string,vector<ProjectInfo*>*>::iterator pi;
-      for (vector<ProjectInfo*>::iterator vi = all->begin(); vi != all->end(); vi++) {
-         ProjectInfo *p = *vi;
+      map<string,vector<Project*>*>::iterator pi;
+      for (vector<Project*>::iterator vi = all->begin(); vi != all->end(); vi++) {
+         Project *p = *vi;
          json_object *proj = json_object_new_object();
          append_json_string_val(proj, "description", p->desc);
          append_json_string_val(proj, "hash", p->hash);

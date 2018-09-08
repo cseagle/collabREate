@@ -28,7 +28,10 @@
 
 using namespace std;
 
-class ProjectInfo {
+/*
+ * A class that wraps project metadata
+ */
+class Project {
 public:
    uint32_t lpid;
    string desc;
@@ -43,9 +46,22 @@ public:
    string hash;
    string gpid;
 
-   ProjectInfo(uint32_t localpid, const string &description, uint32_t currentlyconnected = 0, uint64_t init_uid = 0);
-   ProjectInfo(const ProjectInfo &pi);
-   ~ProjectInfo();
+   Project(uint32_t localpid, const string &description, uint32_t currentlyconnected = 0);
+   Project(const Project &pi);
+
+protected:
+   Project() {};
+};
+
+/*
+ * Subclass that provides for basic (as opposed to database backed) storage of received updates
+ */
+
+class BasicProject : public Project {
+public:
+   BasicProject(uint32_t localpid, const string &description, uint32_t currentlyconnected = 0, uint64_t init_uid = 0);
+   BasicProject(const BasicProject &pi);
+   ~BasicProject();
 
    uint64_t next_uid();
    uint64_t curr_uid();
@@ -56,9 +72,7 @@ public:
 private:
    sem_t uidMutex;
    uint64_t updateid;
-
    vector<char*> updates;
-
 };
 
 #endif

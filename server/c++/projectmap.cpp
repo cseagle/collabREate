@@ -22,8 +22,6 @@
 #include "projectmap.h"
 #include "clientset.h"
 
-typedef map<uint32_t,ClientSet*>::iterator Projects_it;
-
 ProjectMap::ProjectMap() {
    pthread_mutexattr_t attr;
    pthread_mutexattr_init(&attr);
@@ -39,7 +37,7 @@ ProjectMap::~ProjectMap() {
 //iterate over all projects in the set
 void ProjectMap::loop(pcb func, void *user) {
    pthread_mutex_lock(&mutex);
-   for (Projects_it i = projects.begin(); i != projects.end(); i++) {
+   for (map<uint32_t,ClientSet*>::iterator i = projects.begin(); i != projects.end(); i++) {
       ClientSet *s = (*i).second;
       if (!(*func)(s, user)) {
          break;
@@ -59,7 +57,7 @@ void ProjectMap::loopProject(uint32_t key, ccb func, void *user) {
 //loop across all clients in all projects
 void ProjectMap::loopClients(ccb func, void *user) {
    pthread_mutex_lock(&mutex);
-   for (Projects_it i = projects.begin(); i != projects.end(); i++) {
+   for (map<uint32_t,ClientSet*>::iterator i = projects.begin(); i != projects.end(); i++) {
       ClientSet *s = (*i).second;
       s->loop(func, user);
    }
@@ -76,7 +74,7 @@ void ProjectMap::put(uint32_t key, ClientSet *val) {
 //call this only if you already hold a lock
 ClientSet *ProjectMap::getPriv(uint32_t key) {
    ClientSet *res = NULL;
-   Projects_it it = projects.find(key);
+   map<uint32_t,ClientSet*>::iterator it = projects.find(key);
    if (it != projects.end()) {
       res = (*it).second;
    }
@@ -136,7 +134,7 @@ int ProjectMap::numClients(uint32_t key) {
 ClientSet *ProjectMap::get(uint32_t key) {
    ClientSet *res = NULL;
    pthread_mutex_lock(&mutex);
-   Projects_it it = projects.find(key);
+   map<uint32_t,ClientSet*>::iterator it = projects.find(key);
    if (it != projects.end()) {
       res = (*it).second;
    }

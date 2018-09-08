@@ -46,12 +46,13 @@ BasicConnectionManager::BasicConnectionManager(json_object *conf) : ConnectionMa
    basic_mode_uid = 1;
    sem_init(&pidLock, 0, 1);
    sem_init(&uidLock, 0, 1);
+   sem_init(&mapLock, 0, 1);
 }
 
 BasicConnectionManager::~BasicConnectionManager() {
-   for (map<string,vector<ProjectInfo*>*>::iterator mi = basicProjects.begin(); mi != basicProjects.end(); mi++) {
-      vector<ProjectInfo*>* v = mi->second;
-      for (vector<ProjectInfo*>::iterator vi = v->begin(); vi != v->end(); vi++) {
+   for (map<string,vector<BasicProject*>*>::iterator mi = basicProjects.begin(); mi != basicProjects.end(); mi++) {
+      vector<BasicProject*>* v = mi->second;
+      for (vector<BasicProject*>::iterator vi = v->begin(); vi != v->end(); vi++) {
          delete *vi;
       }
       delete v;
@@ -125,10 +126,10 @@ uint32_t BasicConnectionManager::doAuth(NetworkIO *nio) {
  * @param data the 'data' portion of the command (the comment text, etc)
  */
 void BasicConnectionManager::importUpdate(const char *newowner, int pid, const char *cmd, json_object *obj) {
-   ProjectInfo *pi = findProject(pid);
-   const char *json = json_object_to_json_string(obj);
-   if (pi != NULL) {
-      pi->append_update(json);
+   BasicProject *p = findProject(pid);
+   if (p != NULL) {
+      const char *json = json_object_to_json_string(obj);
+      p->append_update(json);
    }
 }
 
@@ -140,14 +141,16 @@ void BasicConnectionManager::importUpdate(const char *newowner, int pid, const c
  * @param data the 'data' portion of the command (the comment text, etc)
  */
 void BasicConnectionManager::post(Client *src, const char * cmd, json_object *obj) {
-   sem_wait(&queueMutex);
-   ProjectInfo *pi = findProject(src->getPid());
-   Packet *pkt = new Packet(src, cmd, obj, pi->next_uid());
-   const char *json = json_object_to_json_string(pkt->obj);
-   pi->append_update(json);
-   queue.push_back(pkt);   //add a new packet with the binary data to the queue
-   sem_post(&queueMutex);
-   sem_post(&queueSem);  //notify is the compliment to wait
+   BasicProject *p = findProject(src->getPid());
+   if (p) {
+      Packet *pkt = new Packet(src, cmd, obj, p->next_uid());
+      const char *json = json_object_to_json_string(pkt->obj);
+      sem_wait(&queueMutex);  //prevent simultaneous update to these storage structures
+      p->append_update(json);
+      queue.push_back(pkt);   //add a new packet with the binary data to the queue
+      sem_post(&queueMutex);
+      sem_post(&queueSem);  //notify is the compliment to wait
+   }
 }
 
 /**
@@ -159,75 +162,68 @@ void BasicConnectionManager::post(Client *src, const char * cmd, json_object *ob
  * @param lastUpdate the last update the client received
  */
 void BasicConnectionManager::sendLatestUpdates(Client *c, uint64_t lastUpdate) {
-   ProjectInfo *pi = findProject(c->getPid());
-   const vector<char*> &updates = pi->get_updates();
-   for (vector<char*>::const_iterator i = updates.begin(); i != updates.end(); i++) {
-      json_object *obj = json_tokener_parse(*i);
-      uint64_t uid;
-      if (uint64_from_json(obj, "updateid", &uid) && uid > lastUpdate) {
-         const char *cmd = string_from_json(obj, "type");
-         if (cmd) {
-            c->post(cmd, obj);
+   BasicProject *p = findProject(c->getPid());
+   if (p) {
+      const vector<char*> &updates = p->get_updates();
+      for (vector<char*>::const_iterator i = updates.cbegin(); i != updates.cend(); i++) {
+         json_object *obj = json_tokener_parse(*i);
+         uint64_t uid;
+         if (uint64_from_json(obj, "updateid", &uid) && uid > lastUpdate) {
+            const char *cmd = string_from_json(obj, "type");
+            if (cmd) {
+               c->post(cmd, obj);
+            }
          }
       }
    }
 }
 
 /**
- * getProjectInfo gets information related to a local project
+ * getProject gets information related to a local project
  * @param pid the local pid of a project to get info on
  * @return a  project info object for the provided pid
+ *            caller must delete the returned pointer
  */
-ProjectInfo *BasicConnectionManager::getProjectInfo(uint32_t pid) {
-   for (Basic_it bi = basicProjects.begin(); bi != basicProjects.end(); bi++) {
-      vector<ProjectInfo*> *vpi = (*bi).second;
-      for (Info_it pi = vpi->begin(); pi != vpi->end(); pi++) {
-         if ((*pi)->lpid == pid) {
-            (*pi)->connected = projects.numClients(pid);
-            ProjectInfo *pret = new ProjectInfo(**pi);
-            return pret;
-         }
-      }
-   }
-   return NULL;
+const Project *BasicConnectionManager::getProject(uint32_t pid) {
+   //just use findProject and return as a const *
+   return findProject(pid);
 }
 
 /**
- * getAllProjects generates a list of projects on this server, each list (vector) item is
- * actually a pinfo (project info) object
+ * getAllProjects generates a list of projects on this server, each list item is
+ * a pointer to a Project object
  * @return a vector of project info objects
  */
-vector<ProjectInfo*> *BasicConnectionManager::getAllProjects() {
-   vector<ProjectInfo*> *plist = new vector<ProjectInfo*>;
-   map<string,vector<ProjectInfo*>*>::iterator pi;
-   for (pi = basicProjects.begin(); pi != basicProjects.end(); pi++) {
-      vector<ProjectInfo*> *v = (*pi).second;
-      for (vector<ProjectInfo*>::iterator vi = v->begin(); vi != v->end(); vi++) {
-         plist->push_back(*vi);
-      }
+vector<Project*> *BasicConnectionManager::getAllProjects() {
+   vector<Project*> *plist = new vector<Project*>;
+   map<uint32_t,BasicProject*>::iterator pi;
+   sem_wait(&mapLock);
+   for (pi = pid_project_map.begin(); pi != pid_project_map.end(); pi++) {
+      plist->push_back((*pi).second);
    }
+   sem_post(&mapLock);
    return plist;
 }
 
 /**
- * getProjectList generates a list of projects on this server, each list (vector) item is
- * actually a pinfo (project info) object, the list does NOT contain all projects, but
+ * getProjectList generates a list of projects on this server, each list item is
+ * actually a pointer to a Project object, the list does NOT contain all projects, but
  * only contains projects relevant to the binary that is currently loaded in IDA
  * @param phash the IDA generated hash that is unique among the analysis files
  * @return a vector of project info objects for the provided phash
  */
-vector<ProjectInfo*> *BasicConnectionManager::getProjectList(const string &phash) {
-   vector<ProjectInfo*> *plist = NULL;
+vector<const Project*> *BasicConnectionManager::getProjectList(const string &phash) {
+   vector<const Project*> *plist = NULL;
    //build a basic mode project list
-   Basic_it bi = basicProjects.find(phash);
+   map<string,vector<BasicProject*>*>::iterator bi = basicProjects.find(phash);
    if (bi != basicProjects.end()) {
-      plist = new vector<ProjectInfo*>(*(*bi).second);
-      for (Info_it it = plist->begin(); it != plist->end(); it++) {
+      plist = new vector<const Project*>;
+      vector<BasicProject*> *bpv = (*bi).second;
+      for (vector<BasicProject*>::iterator it = bpv->begin(); it != bpv->end(); it++) {
+         //get the current Client count for this project
          ClientSet *cs = projects.get((*it)->lpid);
-         if (cs != NULL) {
-            (*it)->connected = cs->size();
-            break;
-         }
+         (*it)->connected = cs ? cs->size() : 0;
+         plist->push_back(*it);
       }
    }
    return plist;
@@ -242,8 +238,8 @@ vector<ProjectInfo*> *BasicConnectionManager::getProjectList(const string &phash
 int BasicConnectionManager::joinProject(Client *c, uint32_t lpid) {
    int rval = -1;
    log(LDEBUG, "joining in basic mode\n");
-   ProjectInfo *pi = findProject(lpid);
-   if (pi) {
+   BasicProject *p = findProject(lpid);
+   if (p) {
       c->setGpid(lpid2gpid(lpid));
       c->setPid(lpid);
       log(LDEBUG, "BASIC mode has no notion of users, setting permissions based on REQ\n");
@@ -351,24 +347,26 @@ int BasicConnectionManager::snapforkProject(Client *c, int spid, const string &d
 int BasicConnectionManager::importProject(const char *owner, const string &gpid, const string &hash, const string &desc, uint64_t pub, uint64_t sub) {
    sem_wait(&pidLock);
    int lpid = basicmodepid++;
-   Basic_it bi = basicProjects.find(hash);
-   vector<ProjectInfo*> *vpi;
+   map<string,vector<BasicProject*>*>::iterator bi = basicProjects.find(hash);
+   vector<BasicProject*> *vpi;
    if (bi != basicProjects.end()) {
       vpi = (*bi).second;
    }
    else {
-      vpi = new vector<ProjectInfo*>;
+      vpi = new vector<BasicProject*>;
       basicProjects[hash] = vpi;
    }
-   ProjectInfo *pi = new ProjectInfo(lpid, desc);
-   pi->pub = pub;
-   pi->sub = sub;
-   pi->hash = hash;
-   pi->gpid = gpid;
-   vpi->push_back(pi);
-   sem_post(&pidLock);
+   BasicProject *p = new BasicProject(lpid, desc);
+   vpi->push_back(p);
    gpid_lpid_map[gpid] = lpid;
    lpid_gpid_map[lpid] = gpid;
+   pid_project_map[lpid] = p;
+   sem_post(&pidLock);
+
+   p->pub = pub;
+   p->sub = sub;
+   p->hash = hash;
+   p->gpid = gpid;
 
    return lpid;
 }
@@ -379,13 +377,13 @@ int BasicConnectionManager::importProject(const char *owner, const string &gpid,
  */
 
 json_object *BasicConnectionManager::exportProject(uint32_t pid) {
-   ProjectInfo *pi = findProject(pid);
-   if (pi == NULL) {
+   BasicProject *p = findProject(pid);
+   if (p == NULL) {
       return NULL;
    }
    json_object *updates = json_object_new_array();
-   const vector<char*> &vu = pi->get_updates();
-   for (vector<char*>::const_iterator vi = vu.begin(); vi != vu.end(); vi++) {
+   const vector<char*> &vu = p->get_updates();
+   for (vector<char*>::const_iterator vi = vu.cbegin(); vi != vu.cend(); vi++) {
       json_object *obj = json_tokener_parse(*vi);
       json_object_array_add(updates, obj);
    }
@@ -393,16 +391,15 @@ json_object *BasicConnectionManager::exportProject(uint32_t pid) {
 }
 
 //Find a project given only an lpid
-ProjectInfo *BasicConnectionManager::findProject(uint32_t lpid) {
-   for (Basic_it bi = basicProjects.begin(); bi != basicProjects.end(); bi++) {
-      vector<ProjectInfo*> *vpi = (*bi).second;
-      for (Info_it it = vpi->begin(); it != vpi->end(); it++) {
-         if ((*it)->lpid == lpid) {
-            return *it;
-         }
-      }
+BasicProject *BasicConnectionManager::findProject(uint32_t lpid) {
+   BasicProject *p = NULL;
+   sem_wait(&mapLock);
+   map<uint32_t,BasicProject*>::iterator pi = pid_project_map.find(lpid);
+   if (pi != pid_project_map.end()) {
+      p = (*pi).second;
    }
-   return NULL;
+   sem_wait(&mapLock);
+   return p;
 }
 
 /**
@@ -417,50 +414,51 @@ ProjectInfo *BasicConnectionManager::findProject(uint32_t lpid) {
 
 int BasicConnectionManager::addProject(Client *c, const string &hash, const string &desc, uint64_t pub, uint64_t sub) {
    log(LDEBUG, "in addProject, hash = %s\n", hash.c_str());
-   int lpid = -1;
+   int lpid;
 //   int uid = c->getUid();
    string gpid;
    //log(LINFO1, "incrementing basic mode pid to : %u\n", basicmodepid);
    sem_wait(&pidLock);
    lpid = basicmodepid++;
-   Basic_it bi = basicProjects.find(hash);
-   vector<ProjectInfo*> *vpi;
+   map<string,vector<BasicProject*>*>::iterator bi = basicProjects.find(hash);
+   vector<BasicProject*> *vpi;
    if (bi != basicProjects.end()) {
       vpi = (*bi).second;
    }
    else {
-      vpi = new vector<ProjectInfo*>;
+      vpi = new vector<BasicProject*>;
       basicProjects[hash] = vpi;
    }
-   ProjectInfo *pi = new ProjectInfo(lpid, desc);
-   pi->pub = pub;
-   pi->sub = sub;
-   pi->hash = hash;
-   vpi->push_back(pi);
+   BasicProject *p = new BasicProject(lpid, desc);
+   vpi->push_back(p);
+   gpid_lpid_map[gpid] = lpid;
+   lpid_gpid_map[lpid] = gpid;
+   pid_project_map[lpid] = p;
    sem_post(&pidLock);
-   c->setPid(lpid);
+
+   p->pub = pub;
+   p->sub = sub;
+   p->hash = hash;
 
    uint8_t gpid_bytes[32];
    fill_random(gpid_bytes, sizeof(gpid_bytes));
    gpid = toHexString(gpid_bytes, sizeof(gpid_bytes));
-   c->setGpid(gpid);
-   pi->gpid = gpid;
-
-   gpid_lpid_map[gpid] = lpid;
-   lpid_gpid_map[lpid] = gpid;
+   p->gpid = gpid;
 
    log(LINFO, "BASIC mode has no notion of users, setting permissions based on REQ\n");
-   //c.setPub(c.getReqPub());
-   //c.setSub(c.getReqSub());
+   c->setGpid(gpid);
+   c->setPid(lpid);
    c->setPub(FULL_PERMISSIONS);
    c->setSub(FULL_PERMISSIONS);
    c->setUserPub(FULL_PERMISSIONS);
    c->setUserSub(FULL_PERMISSIONS);
    c->setReqPub(FULL_PERMISSIONS);
    c->setReqSub(FULL_PERMISSIONS);
+
    if (lpid != -1) {
       projects.addClient(c);
    }
+
    return lpid;
 }
 
@@ -471,16 +469,22 @@ int BasicConnectionManager::addProject(Client *c, const string &hash, const stri
  * @return the glocabl pid
  */
 string BasicConnectionManager::lpid2gpid(int lpid) {
+   string gpid;
+   sem_wait(&mapLock);
    if (lpid_gpid_map.find(lpid) != lpid_gpid_map.end()) {
-      return lpid_gpid_map[lpid];
+      gpid = lpid_gpid_map[lpid];
    }
-   return string();
+   sem_post(&mapLock);
+   return gpid;
 }
 
 int BasicConnectionManager::gpid2lpid(const string &gpid) {
+   uint32_t lpid = INVALID_PID;
+   sem_wait(&mapLock);
    if (gpid_lpid_map.find(gpid) != gpid_lpid_map.end()) {
-      return gpid_lpid_map[gpid];
+      lpid = gpid_lpid_map[gpid];
    }
-   return -1;
+   sem_post(&mapLock);
+   return lpid;
 }
 

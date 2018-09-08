@@ -21,8 +21,6 @@
 #include "client.h"
 #include "clientset.h"
 
-typedef set<Client*>::iterator Client_it;
-
 ClientSet::ClientSet() {
    pthread_mutexattr_t attr;
    pthread_mutexattr_init(&attr);
@@ -52,7 +50,7 @@ void ClientSet::remove(Client *c) {
 //iterate over all clients in the set
 void ClientSet::loop(cb func, void *user) {
    pthread_mutex_lock(&mutex);
-   for (Client_it i = clients.begin(); i != clients.end(); i++) {
+   for (set<Client*>::iterator i = clients.begin(); i != clients.end(); i++) {
       Client *c = *i;
       if (!(*func)(c, user)) {
          break;

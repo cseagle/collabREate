@@ -33,7 +33,7 @@
 
 using namespace std;
 
-class ProjectInfo;
+class Project;
 class ServerManager;
 
 typedef void (*MsgHandler)(json_object *obj, ServerManager *sm);
@@ -65,7 +65,7 @@ private:
 
    json_object *readJson();
 
-   vector<ProjectInfo*> plist;
+   vector<Project*> plist;
    static map<string,MsgHandler> handlers;
 
    static void *reader(void *arg);
@@ -146,12 +146,12 @@ private:
    void shutdownServer();
 
    /**
-    * getProjectInfo gets project information for a previously listed project
+    * getProject gets project information for a previously listed project
     * @param lpid the local PID for the project to get info on
     * @param pinfo a project info object to populate with information
     * @return 0 on success
     */
-   int getProjectInfo(uint32_t lpid, ProjectInfo *pinfo);
+   int getProject(uint32_t lpid, Project *pinfo);
 
    /**
     * exportProject exports a project to a binary final
