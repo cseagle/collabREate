@@ -270,7 +270,7 @@ void CollabSocket::cleanup(bool warn) {
 /*
  * TODO: rethink this. Is joining on the comm thread necessary?
  *       All paths to cleanup SHOULD come via the IDA work thread
- *       which means this should NOT dedlock, but it seems to
+ *       which means this should NOT deadlock, but it seems to
 */
 /*
 #ifdef _WIN32
@@ -404,7 +404,11 @@ void *CollabSocket::recvHandler(void *_sock) {
 
    while (sock->isConnected()) {
       int len = sock->recv(buf, sizeof(buf) - 1);
-      if (len <= 0) {
+      if (len == 0) {
+         //end of file
+         break;
+      }
+      if (len < 0) {
 #ifdef _WIN32
          //timeouts are okay
          if (WSAGetLastError() == WSAETIMEDOUT) {
@@ -439,7 +443,8 @@ void *CollabSocket::recvHandler(void *_sock) {
             else if (jerr != json_tokener_success) {
                //need to reconnect socket and in the meantime start caching event locally
 //               msg("jerr != json_tokener_success for %s\n", b.c_str());
-               break;
+               //need to break out of both loops
+               goto end_loop;
             }
             else if (jobj != NULL) {
                //we extracted a json object from the front of the string
@@ -458,7 +463,9 @@ void *CollabSocket::recvHandler(void *_sock) {
          json_tokener_reset(tok);
       }
    }
+end_loop:
    json_tokener_free(tok);
+   sock->cleanup();
    return 0;
 }
 
