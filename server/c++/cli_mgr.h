@@ -296,14 +296,6 @@ public:
     */
    virtual int gpid2lpid(const string &gpid) = 0;
 
-   /**
-    * lpid2gpid converts an lpid (pid local to a particular server instance)
-    * to a gpid (which is unique across all projects on all servers)
-    * @param lpid the local pid for this particular server
-    * @return the glocabl pid
-    */
-   virtual string lpid2gpid(int lpid) = 0;
-
 protected:
    static void *run(void *arg);
 

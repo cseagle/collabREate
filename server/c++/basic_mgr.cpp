@@ -59,14 +59,14 @@ BasicConnectionManager::~BasicConnectionManager() {
    }
 }
 
-map<uint32_t,string> basic_mode_users;
 uint32_t BasicConnectionManager::uid_for_user(const char *user) {
+   sem_wait(&uidLock);
    if (basic_mode_users.find(user) == basic_mode_users.end()) {
-      sem_wait(&uidLock);
       basic_mode_users[user] = basic_mode_uid++;
-      sem_post(&uidLock);
    }
-   return basic_mode_users[user];
+   uint32_t uid = basic_mode_users[user];
+   sem_post(&uidLock);
+   return uid;
 }
 
 uint32_t BasicConnectionManager::doAuth(NetworkIO *nio) {
@@ -215,6 +215,7 @@ vector<Project*> *BasicConnectionManager::getAllProjects() {
 vector<const Project*> *BasicConnectionManager::getProjectList(const string &phash) {
    vector<const Project*> *plist = NULL;
    //build a basic mode project list
+   sem_wait(&pidLock);
    map<string,vector<BasicProject*>*>::iterator bi = basicProjects.find(phash);
    if (bi != basicProjects.end()) {
       plist = new vector<const Project*>;
@@ -226,6 +227,7 @@ vector<const Project*> *BasicConnectionManager::getProjectList(const string &pha
          plist->push_back(*it);
       }
    }
+   sem_post(&pidLock);
    return plist;
 }
 
@@ -240,7 +242,7 @@ int BasicConnectionManager::joinProject(Client *c, uint32_t lpid) {
    log(LDEBUG, "joining in basic mode\n");
    BasicProject *p = findProject(lpid);
    if (p) {
-      c->setGpid(lpid2gpid(lpid));
+      c->setGpid(p->gpid);
       c->setPid(lpid);
       log(LDEBUG, "BASIC mode has no notion of users, setting permissions based on REQ\n");
       //c->setPub(c.getReqPub());
@@ -359,7 +361,6 @@ int BasicConnectionManager::importProject(const char *owner, const string &gpid,
    BasicProject *p = new BasicProject(lpid, desc);
    vpi->push_back(p);
    gpid_lpid_map[gpid] = lpid;
-   lpid_gpid_map[lpid] = gpid;
    pid_project_map[lpid] = p;
    sem_post(&pidLock);
 
@@ -398,7 +399,7 @@ BasicProject *BasicConnectionManager::findProject(uint32_t lpid) {
    if (pi != pid_project_map.end()) {
       p = (*pi).second;
    }
-   sem_wait(&mapLock);
+   sem_post(&mapLock);
    return p;
 }
 
@@ -415,9 +416,11 @@ BasicProject *BasicConnectionManager::findProject(uint32_t lpid) {
 int BasicConnectionManager::addProject(Client *c, const string &hash, const string &desc, uint64_t pub, uint64_t sub) {
    log(LDEBUG, "in addProject, hash = %s\n", hash.c_str());
    int lpid;
-//   int uid = c->getUid();
    string gpid;
-   //log(LINFO1, "incrementing basic mode pid to : %u\n", basicmodepid);
+   uint8_t gpid_bytes[32];
+   fill_random(gpid_bytes, sizeof(gpid_bytes));
+   gpid = toHexString(gpid_bytes, sizeof(gpid_bytes));
+
    sem_wait(&pidLock);
    lpid = basicmodepid++;
    map<string,vector<BasicProject*>*>::iterator bi = basicProjects.find(hash);
@@ -432,17 +435,12 @@ int BasicConnectionManager::addProject(Client *c, const string &hash, const stri
    BasicProject *p = new BasicProject(lpid, desc);
    vpi->push_back(p);
    gpid_lpid_map[gpid] = lpid;
-   lpid_gpid_map[lpid] = gpid;
    pid_project_map[lpid] = p;
    sem_post(&pidLock);
 
    p->pub = pub;
    p->sub = sub;
    p->hash = hash;
-
-   uint8_t gpid_bytes[32];
-   fill_random(gpid_bytes, sizeof(gpid_bytes));
-   gpid = toHexString(gpid_bytes, sizeof(gpid_bytes));
    p->gpid = gpid;
 
    log(LINFO, "BASIC mode has no notion of users, setting permissions based on REQ\n");
@@ -460,22 +458,6 @@ int BasicConnectionManager::addProject(Client *c, const string &hash, const stri
    }
 
    return lpid;
-}
-
-/**
- * lpid2gpid converts an lpid (pid local to a particular server instance)
- * to a gpid (which is unique across all projects on all servers)
- * @param lpid the local pid for this particular server
- * @return the glocabl pid
- */
-string BasicConnectionManager::lpid2gpid(int lpid) {
-   string gpid;
-   sem_wait(&mapLock);
-   if (lpid_gpid_map.find(lpid) != lpid_gpid_map.end()) {
-      gpid = lpid_gpid_map[lpid];
-   }
-   sem_post(&mapLock);
-   return gpid;
 }
 
 int BasicConnectionManager::gpid2lpid(const string &gpid) {

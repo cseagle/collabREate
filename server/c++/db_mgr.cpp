@@ -476,6 +476,9 @@ const Project *DatabaseConnectionManager::getProject(uint32_t pid) {
             pdesc = PQgetvalue(rset, 0, 6);
          }
 
+         const char *hash = PQgetvalue(rset, 0, 1);
+         const char *owner = PQgetvalue(rset, 0, 9);
+
          sem_wait(&map_sem);
          map<uint32_t,Project*>::iterator pi = pid_project_map.find(lpid);
          if (pi != pid_project_map.end()) {
@@ -486,14 +489,19 @@ const Project *DatabaseConnectionManager::getProject(uint32_t pid) {
             pid_project_map[lpid] = pinfo;
          }
          sem_post(&map_sem);
+
+         const char *gpid = PQgetvalue(rset, 0, 2);
+
          //now make sure all project info is consistent with database, even if Project record already existed
          pinfo->desc = desc;
+         pinfo->gpid = gpid;
+         pinfo->hash = hash;
          pinfo->parent = parent;
          pinfo->pdesc = pdesc;
          pinfo->snapupdateid = snapupdateid;
          pinfo->pub = ntohll(*(uint64_t*)PQgetvalue(rset, 0, 7));
          pinfo->sub = ntohll(*(uint64_t*)PQgetvalue(rset, 0, 8));
-         pinfo->owner = PQgetvalue(rset, 0, 9);
+         pinfo->owner = owner;
          pinfo->proto = proto;
          ClientSet *cs = projects.get(lpid);
          pinfo->connected = cs ? cs->size() : 0;
@@ -571,8 +579,13 @@ vector<const Project*> *DatabaseConnectionManager::getProjectList(const string &
             pid_project_map[lpid] = pinfo;
          }
          sem_post(&map_sem);
+
+         const char *gpid = PQgetvalue(rset, 0, 2);
+
          //now make sure all project info is consistent with database, even if Project record already existed
          pinfo->desc = desc;
+         pinfo->gpid = gpid;
+         pinfo->hash = phash;
          pinfo->parent = parent;
          pinfo->pdesc = pdesc;
          pinfo->snapupdateid = snapupdateid;
@@ -661,8 +674,11 @@ int DatabaseConnectionManager::joinProject(Client *c, uint32_t lpid) {
             pid_project_map[lpid] = pinfo;
          }
          sem_post(&map_sem);
+
          //now make sure all project info is consistent with database, even if Project record already existed
          pinfo->desc = desc;
+         pinfo->gpid = gpid;
+         pinfo->hash = hash;
          pinfo->parent = parent;
          pinfo->pdesc = pdesc;
          pinfo->snapupdateid = snapupdateid;
@@ -905,7 +921,6 @@ int DatabaseConnectionManager::forkProject(Client *c, uint64_t lastupdateid, con
       //at this point the project has forked and the plugin that forked is on the new project
 
       //allow anyone else on the project (w/ exactly the same updates) to follow the fork
-      string gpid = lpid2gpid(lpid);
       log(LINFO, "sending fork follows\n");
       sendForkFollows(c, oldlpid, lastupdateid, desc);
    }
@@ -1276,41 +1291,4 @@ int DatabaseConnectionManager::gpid2lpid(const string &gpid) {
    PQclear(rset);
 
    return lpid;
-}
-
-/**
- * lpid2gpid converts an lpid (pid local to a particular server instance)
- * to a gpid (which is unique across all projects on all servers)
- * @param lpid the local pid for this particular server
- * @return the glocabl pid
- */
-string DatabaseConnectionManager::lpid2gpid(int lpid) {
-   const char *rval = "";
-
-   static const int plens[1] = {4};
-   static const int pformats[1] = {1};
-
-   lpid = htonl(lpid);
-   const char * const parms[1] = {(char*)&lpid};
-
-   sem_wait(&fpbp_sem);
-   PGresult *rset = PQexecPrepared(dbConn, "findProjectByPid",
-                       1, //int nParams,   size of arrays that follow
-                       parms, //parms,  //const char * const *paramValues, array of string values
-                       plens, //const int *paramLengths,
-                       pformats, //const int *paramFormats,
-                       1); //int resultFormat); 0 == text, 1 == binary
-   sem_post(&fpbp_sem);
-
-   ExecStatusType qres = PQresultStatus(rset);
-   //expecting exactly 1 result row
-   if (qres != PGRES_TUPLES_OK || PQntuples(rset) != 1) {
-      log(LSQL, "findProjectByPid: %s\n", PQerrorMessage(dbConn));
-   }
-   else {
-      rval = PQgetvalue(rset, 0, 2);
-   }
-   PQclear(rset);
-
-   return rval;
 }

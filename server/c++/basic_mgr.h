@@ -45,7 +45,6 @@ class BasicConnectionManager : public ConnectionManager {
    friend class ManagerHelper;
 private:
    map<string,uint32_t> gpid_lpid_map;
-   map<uint32_t,string> lpid_gpid_map;
    map<string,vector<BasicProject*>*> basicProjects;  //binary hash:local pid
    map<uint32_t,BasicProject*> pid_project_map;
    int basicmodepid;
@@ -237,14 +236,6 @@ public:
     * @return the local pid
     */
    int gpid2lpid(const string &gpid);
-
-   /**
-    * lpid2gpid converts an lpid (pid local to a particular server instance)
-    * to a gpid (which is unique across all projects on all servers)
-    * @param lpid the local pid for this particular server
-    * @return the glocabl pid
-    */
-   string lpid2gpid(int lpid);
 
 };
 

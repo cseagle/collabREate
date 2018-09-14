@@ -63,7 +63,6 @@ public:
    int addProject(Client *c, const string &hash, const string &desc, uint64_t pub, uint64_t sub);
    void updateProjectPerms(Client *c, uint64_t pub, uint64_t sub);
    int gpid2lpid(const string &gpid);
-   string lpid2gpid(int lpid);
 
 private:
    map<uint32_t,Project*> pid_project_map;
