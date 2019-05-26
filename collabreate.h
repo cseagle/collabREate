@@ -1,5 +1,5 @@
 /*
-    IDA Pro Collabreation/Synchronization Plugin
+    IDA Pro Collaboration/Synchronization Plugin
     Copyright (C) 2018 Chris Eagle <cseagle at gmail d0t com>
     Copyright (C) 2018 Tim Vidas <tvidas at gmail d0t com>
 
