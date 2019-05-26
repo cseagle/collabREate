@@ -28,6 +28,11 @@
  *
  */
 
+/*
+ * Functions in this file are responsible for handling incoming
+ * messages from the collabreate server
+ */
+
 #include "collabreate.h"
 #include "collabreate_ui.h"
 
@@ -271,7 +276,7 @@ void do_send_user_message(const char *msg) {
 int cmd_undefine(json_object *json) {
    ea_t ea;
    ea_from_json(json, "addr", &ea);
-#if 0
+#ifdef EXPERIMENTAL
    do_unknown(ea, DOUNK_SIMPLE);
 #else
    qstring a1;
@@ -290,7 +295,7 @@ int cmd_make_code(json_object *json) {
    ea_from_json(json, "addr", &ea);
    uint64_from_json(json, "length", &tmp);
    asize_t sz = (asize_t)tmp;
-#if 0
+#ifdef EXPERIMENTAL
    create_insn(ea);
 #else
    qstring a1;
@@ -313,7 +318,7 @@ int cmd_make_data(json_object *json) {
    asize_t a = (asize_t)tmp;
    const char *name = string_from_json(json, "struc");  //name only exists if we are creating a struct
    tid_t t = (name && *name) ? get_struc_id(name) : BADNODE;
-#if 0
+#ifdef EXPERIMENTAL
    do_data_ex(ea, f, a, t);
 #else
    qstring a1;
@@ -328,11 +333,21 @@ int cmd_make_data(json_object *json) {
 }
 
 int cmd_move_segm(json_object *json) {
-   ea_t ea, to;
-   ea_from_json(json, "from", &ea);
-   segment_t *s = getseg(ea);
+   ea_t frm, to;
+   ea_from_json(json, "from", &frm);
    ea_from_json(json, "to", &to);
+#ifdef EXPERIMENTAL
+   segment_t *s = getseg(frm);
    move_segm(s, to);
+#else
+   qstring a1, a2;
+   format_llx(frm, a1);
+   format_llx(to, a2);
+   const char *user = string_from_json(json, "user");
+   char tmsg[128];
+   ::qsnprintf(tmsg, sizeof(tmsg), "<%s> MOVE SEGM from 0x%s to 0x%s", user, a1.c_str(), a2.c_str());
+   postCollabMessage(tmsg);
+#endif   
    return 0;
 }
 
@@ -353,33 +368,72 @@ int cmd_renamed(json_object *json) {
 }
 
 int cmd_add_func(json_object *json) {
-   ea_t endea, ea;
-   ea_from_json(json, "startea", &ea);
+   ea_t endea, startea;
+   ea_from_json(json, "startea", &startea);
    ea_from_json(json, "endea", &endea);
-   add_func(ea, endea);
+#ifdef EXPERIMENTAL
+   add_func(startea, endea);
+#else
+   qstring a1, a2;
+   format_llx(startea, a1);
+   format_llx(endea, a2);
+   const char *user = string_from_json(json, "user");
+   char tmsg[128];
+   ::qsnprintf(tmsg, sizeof(tmsg), "<%s> ADD FUNC start 0x%s, end 0x%s", user, a1.c_str(), a2.c_str());
+   postCollabMessage(tmsg);
+#endif   
    return 0;
 }
 
 int cmd_del_func(json_object *json) {
    ea_t ea;
    ea_from_json(json, "addr", &ea);
+#ifdef EXPERIMENTAL
    del_func(ea);
+#else
+   qstring a1;
+   format_llx(ea, a1);
+   const char *user = string_from_json(json, "user");
+   char tmsg[128];
+   ::qsnprintf(tmsg, sizeof(tmsg), "<%s> DEL FUNC at 0x%s", user, a1.c_str());
+   postCollabMessage(tmsg);
+#endif   
    return 0;
 }
 
 int cmd_set_func_start(json_object *json) {
-   ea_t newstart, ea;
-   ea_from_json(json, "old_start", &ea);
+   ea_t newstart, oldstart;
+   ea_from_json(json, "old_start", &oldstart);
    ea_from_json(json, "new_start", &newstart);
-   set_func_start(ea, newstart);
+#ifdef EXPERIMENTAL
+   set_func_start(oldstart, newstart);
+#else
+   qstring a1, a2;
+   format_llx(oldstart, a1);
+   format_llx(newstart, a2);
+   const char *user = string_from_json(json, "user");
+   char tmsg[128];
+   ::qsnprintf(tmsg, sizeof(tmsg), "<%s> SET FUNC START old 0x%s, new 0x%s", user, a1.c_str(), a2.c_str());
+   postCollabMessage(tmsg);
+#endif   
    return 0;
 }
 
 int cmd_set_func_end(json_object *json) {
-   ea_t endea, ea;
-   ea_from_json(json, "startea", &ea);
+   ea_t endea, startea;
+   ea_from_json(json, "startea", &startea);
    ea_from_json(json, "endea", &endea);
-   set_func_end(ea, endea);
+#ifdef EXPERIMENTAL
+   set_func_end(startea, endea);
+#else
+   qstring a1, a2;
+   format_llx(startea, a1);
+   format_llx(endea, a2);
+   const char *user = string_from_json(json, "user");
+   char tmsg[128];
+   ::qsnprintf(tmsg, sizeof(tmsg), "<%s> SET FUNC END start 0x%s, end 0x%s", user, a1.c_str(), a2.c_str());
+   postCollabMessage(tmsg);
+#endif   
    return 0;
 }
 
@@ -413,7 +467,9 @@ int cmd_validate_flirt_func(json_object *json) {
    if (name) {
       set_name(ea, name, SN_NOWARN);
    }
+#ifdef EXPERIMENTAL
    add_func(ea, has_end ? endea : BADADDR);
+#endif
    func_t *f = get_func(ea);
    if (f) {
       //any function this calls is also a library (support) function
@@ -430,7 +486,7 @@ int cmd_add_cref(json_object *json) {
    ea_from_json(json, "to", &to);
    uint32_from_json(json, "reftype", &reftype);
    cref_t type = (cref_t)reftype;
-#if 0
+#ifdef EXPERIMENTAL
    add_cref(from, to, type);
 #else
    qstring a1, a2;
@@ -452,7 +508,17 @@ int cmd_add_dref(json_object *json) {
    ea_from_json(json, "to", &to);
    uint32_from_json(json, "reftype", &reftype);
    dref_t type = (dref_t)reftype;
+#ifdef EXPERIMENTAL
    add_dref(from, to, type);
+#else
+   qstring a1, a2;
+   format_llx(from, a1);
+   format_llx(to, a2);
+   const char *user = string_from_json(json, "user");
+   char tmsg[128];
+   ::qsnprintf(tmsg, sizeof(tmsg), "<%s> add_dref from 0x%s to 0x%s, type %d", user, a1.c_str(), a2.c_str(), (int32_t)type);
+   postCollabMessage(tmsg);
+#endif
    return 0;
 }
 
@@ -463,7 +529,7 @@ int cmd_del_cref(json_object *json) {
    ea_from_json(json, "from", &from);
    ea_from_json(json, "to", &to);
    bool_from_json(json, "expand", &expand);
-#if 0
+#ifdef EXPERIMENTAL
    del_cref(from, to, expand);
 #else
    qstring a1, a2;
@@ -482,7 +548,17 @@ int cmd_del_dref(json_object *json) {
    ea_t from, to;
    ea_from_json(json, "from", &from);
    ea_from_json(json, "to", &to);
+#ifdef EXPERIMENTAL
    del_dref(from, to);
+#else
+   qstring a1, a2;
+   format_llx(from, a1);
+   format_llx(to, a2);
+   const char *user = string_from_json(json, "user");
+   char tmsg[128];
+   ::qsnprintf(tmsg, sizeof(tmsg), "<%s> del_dref from 0x%s to 0x%s", user, a1.c_str(), a2.c_str());
+   postCollabMessage(tmsg);
+#endif
    return 0;
 }
 
@@ -493,7 +569,16 @@ int cmd_patch_byte(json_object *json) {
    ea_t ea;
    int val;
    if (ea_from_json(json, "addr", &ea) && int32_from_json(json, "value", (int32_t*)&val)) {
+#ifdef EXPERIMENTAL
       patch_byte(ea, val);
+#else
+      qstring a1;
+      format_llx(ea, a1);
+      const char *user = string_from_json(json, "user");
+      char tmsg[128];
+      ::qsnprintf(tmsg, sizeof(tmsg), "<%s> patch_byte at 0x%s to 0x%02x", user, a1.c_str(), val & 0xff);
+      postCollabMessage(tmsg);
+#endif
    }
    return 0;
 }
@@ -1126,7 +1211,18 @@ int cmd_func_tail_appended(json_object *json) {
    
    func_t *f = get_func(start_ea);
    if (f) {
+#ifdef EXPERIMENTAL
       append_func_tail(f, tail_start, tail_end);
+#else
+      qstring a1, a2, a3;
+      format_llx(start_ea, a1);
+      format_llx(tail_start, a2);
+      format_llx(tail_end, a3);
+      const char *user = string_from_json(json, "user");
+      char tmsg[128];
+      ::qsnprintf(tmsg, sizeof(tmsg), "<%s> func_tail_appended for func 0x%s from 0x%s to 0x%s", user, a1.c_str(), a2.c_str(), a3.c_str());
+      postCollabMessage(tmsg);
+#endif
    }
    return 0;
 }
@@ -1139,7 +1235,17 @@ int cmd_func_tail_removed(json_object *json) {
    }
    func_t *f = get_func(start_ea);
    if (f) {
+#ifdef EXPERIMENTAL
       remove_func_tail(f, tail);
+#else
+      qstring a1, a2;
+      format_llx(start_ea, a1);
+      format_llx(tail, a2);
+      const char *user = string_from_json(json, "user");
+      char tmsg[128];
+      ::qsnprintf(tmsg, sizeof(tmsg), "<%s> func_tail_removed for func 0x%s at 0x%s", user, a1.c_str(), a2.c_str());
+      postCollabMessage(tmsg);
+#endif
    }
    return 0;
 }
@@ -1206,7 +1312,16 @@ int cmd_segm_deleted(json_object *json) {
    if (!ea_from_json(json, "addr", &ea)) {
       return -1;
    }
+#ifdef EXPERIMENTAL
    del_segm(ea, SEGMOD_KEEP | SEGMOD_SILENT);
+#else
+   qstring a1;
+   format_llx(ea, a1);
+   const char *user = string_from_json(json, "user");
+   char tmsg[128];
+   ::qsnprintf(tmsg, sizeof(tmsg), "<%s> del_segm at 0x%s", user, a1.c_str());
+   postCollabMessage(tmsg);
+#endif
    return 0;
 }
 
@@ -1215,7 +1330,17 @@ int cmd_segm_start_changed(json_object *json) {
    if (!ea_from_json(json, "startea", &new_start) || !ea_from_json(json, "endea", &old_end)) {
       return -1;
    }
+#ifdef EXPERIMENTAL
    set_segm_start(old_end, new_start, 0);
+#else
+   qstring a1, a2;
+   format_llx(old_end, a1);
+   format_llx(new_start, a2);
+   const char *user = string_from_json(json, "user");
+   char tmsg[128];
+   ::qsnprintf(tmsg, sizeof(tmsg), "<%s> segm_start_changed, endea 0x%s, new_start 0x%s", user, a1.c_str(), a2.c_str());
+   postCollabMessage(tmsg);
+#endif
    return 0;
 }
 
@@ -1224,7 +1349,17 @@ int cmd_segm_end_changed(json_object *json) {
    if (!ea_from_json(json, "startea", &old_start) || !ea_from_json(json, "endea", &new_end)) {
       return -1;
    }
+#ifdef EXPERIMENTAL
    set_segm_start(old_start, new_end, 0);
+#else
+   qstring a1, a2;
+   format_llx(old_start, a1);
+   format_llx(new_end, a2);
+   const char *user = string_from_json(json, "user");
+   char tmsg[128];
+   ::qsnprintf(tmsg, sizeof(tmsg), "<%s> segm_start_changed, old_start 0x%s, new_end 0x%s", user, a1.c_str(), a2.c_str());
+   postCollabMessage(tmsg);
+#endif
    return 0;
 }
 
@@ -1235,7 +1370,17 @@ int cmd_segm_moved(json_object *json) {
       return -1;
    }
    segment_t *s = getseg(from);
+#ifdef EXPERIMENTAL
    move_segm(s, to, MSF_SILENT);
+#else
+   qstring a1, a2;
+   format_llx(from, a1);
+   format_llx(to, a2);
+   const char *user = string_from_json(json, "user");
+   char tmsg[128];
+   ::qsnprintf(tmsg, sizeof(tmsg), "<%s> segm_moved, from 0x%s, to 0x%s", user, a1.c_str(), a2.c_str());
+   postCollabMessage(tmsg);
+#endif
    return 0;
 }
 
