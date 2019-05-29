@@ -67,8 +67,6 @@ Client::Client(ConnectionManager *mgr, NetworkIO *s, uint32_t uid) {
    username = ui.username;
    pid = INVALID_PID;  //not associated with a project yet
 
-   memset(stats, 0, sizeof(stats));
-
    cm = mgr;
    conn = s;
 
@@ -114,8 +112,9 @@ void Client::post(const char *msg, json_object *obj) {
    if (checkPermissions(msg, subscribe)) {
       //only post if client is subscribing and is allowed to recieve that particular command
       log(LDEBUG, "post- %s\n", json_object_to_json_string(obj));
+      const char *cmd = string_from_json(obj, "type");
+      rx_stats[cmd]++;
       conn->writeJson(obj);
-//      stats[0][data[7] & 0xff]++;
    }
    else {
 /*
@@ -145,7 +144,7 @@ void Client::send_data(const char *command, json_object *obj) {
       log(LDEBUG, "Client::send_data calling conn->writeJson\n");
       conn->writeJson(obj);  //calls json_object_put
       //fprintf(stderr, "send_data- cmd: %s\n");
-//      stats[0][command]++;    //figure out way to count messages - map???
+      rx_stats[command]++;
 /*
    }
    else {
@@ -190,18 +189,22 @@ void Client::terminate() {
 }
 
 /**
- * dumpStats displace the receive / transmit stats for each command
+ * dumpStats displays the receive / transmit stats for each command
  */
 string Client::dumpStats() {
-//   string sb = "Stats for " + hash + ":" + conn->getPeerAddr() + ":" + conn.getPeerPort() + "\n";
    string sb = "Stats for " + hash + ":" + conn->getPeerAddr() + "\n";
-   sb += "command     rx     tx\n";
-   for (int i = 0; i < 256; i++) {
-      if (stats[0][i] != 0 || stats[1][i] != 0) {
+   sb += "rx     tx     command\n";
+   for (map<string,int>::iterator mi = tx_stats.begin(); mi != tx_stats.end(); mi++) {
+      if (rx_stats[mi->first] == 0) {
          char buf[128];
-         snprintf(buf, sizeof(buf), "%5d %7d %7d\n", i, stats[0][i], stats[1][i]);
+         snprintf(buf, sizeof(buf), "%-7d%-7d%s\n", 0, mi->second, mi->first.c_str());
          sb += buf;
       }
+   }
+   for (map<string,int>::iterator mi = rx_stats.begin(); mi != rx_stats.end(); mi++) {
+      char buf[128];
+      snprintf(buf, sizeof(buf), "%-7d%-7d%s\n", mi->second, tx_stats[mi->first], mi->first.c_str());
+      sb += buf;
    }
    return sb;
 }
@@ -211,7 +214,7 @@ string Client::dumpStats() {
  * @param command the command to check permissions on
  * @param permType the permission types to check (publish/subscribe)
  */
-/* These are grouped into 'collabREate' permissions, just so there are less permissions to manage
+/* These are grouped into 'collabREate' permissions, just so there are fewer permissions to manage
  * for example all the segment operations (add, del, start/end change, etc) are grouped into
  * 'segment' permissions.
  */
@@ -290,17 +293,8 @@ void Client::run() {
                json_object_put(obj);
             }
          }
-/*
-         //currently disabled stat tracking, type codes used to be integers
-         //so this was easier to maintain. change to a map of command strings
-         //to counts if we want to re-enable stats
-         log(LDEBUG, "received data len: %d, cmd: %d\n", len, command);
-         if (command < MAX_COMMAND && command > 0) {
-            stats[1][command]++;
-         }
-         if (command < MSG_CONTROL_FIRST) {
-         }
-*/
+         log(LDEBUG, "received cmd: %s\n", cmd);
+         tx_stats[cmd]++;
       }
    } catch (IOException ex) {
       log(LERROR, "An IOException occurred: %s\n", ex.getMessage().c_str());
@@ -337,7 +331,6 @@ void Client::init_handlers() {
    perms_map[COMMAND_SEGM_END_CHANGED] = MASK_SEGMENTS;
    perms_map[COMMAND_SEGM_MOVED] = MASK_SEGMENTS;
    perms_map[COMMAND_MOVE_SEGM] = MASK_SEGMENTS;
-
 
    perms_map[COMMAND_SET_STACK_VAR_NAME] = MASK_RENAME;
    perms_map[COMMAND_RENAMED] = MASK_RENAME;
@@ -397,6 +390,7 @@ void Client::init_handlers() {
    perms_map[COMMAND_DEL_CREF] = MASK_XREF;
    perms_map[COMMAND_DEL_DREF] = MASK_XREF;
 
+   perms_map[COMMAND_USER_MESSAGE] = MASK_MESSAGE;
 }
 
 bool Client::msg_project_new_request(json_object *obj, Client *c) {

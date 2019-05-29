@@ -185,7 +185,7 @@ public:
    void terminate();
 
    /**
-    * dumpStats displace the receive / transmit stats for each command
+    * dumpStats displays the receive / transmit stats for each command
     */
    string dumpStats();
 
@@ -339,7 +339,8 @@ private:
 
    ConnectionManager *cm;
 
-   int stats[2][MAX_COMMAND];
+   map<string,int> tx_stats;
+   map<string,int> rx_stats;
 
    static map<string,ClientMsgHandler> *handlers;
 

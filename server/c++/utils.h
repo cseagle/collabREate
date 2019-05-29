@@ -147,16 +147,15 @@ using namespace std;
 #define MSG_ERROR                    "collab_error"
 #define MSG_FATAL                    "collab_fatal"
 
-
-#define default_pub 0x3fff
-#define default_sub 0x3fff
+#define default_pub 0x7fff
+#define default_sub 0x7fff
 
 #define FULL_PERMISSIONS            0x7fffffff
 
 #define PROTOCOL_VERSION             4
 
-   //the above commands are grouped in order to provide
-   //permissions based on these masks
+//the above commands are grouped in order to provide
+//permissions based on these masks
 
 #define MASK_UNDEFINE               0x00000001
 #define MASK_MAKE_CODE              0x00000002
@@ -172,6 +171,7 @@ using namespace std;
 #define MASK_FLIRT                  0x00000800
 #define MASK_THUNK                  0x00001000
 #define MASK_XREF                   0x00002000
+#define MASK_MESSAGE                0x00004000
 
 #define SERVER_THRESHOLD            200
 #define SERVER_MAP_TID              200
