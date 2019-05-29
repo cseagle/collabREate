@@ -29,9 +29,9 @@ enum collab_form_actions
 };
 
 #if IDA_SDK_VERSION < 700
-static int idaapi send_cb(TView *[], int) {
+static int idaapi send_cb(TView *[], int x) {
 #else
-static int idaapi send_cb(TWidget *[], int) {
+static int idaapi send_cb(TWidget *[], int x) {
 #endif
    return 0;
 }
@@ -63,11 +63,20 @@ static int idaapi collab_cb(int fid, form_actions_t &fa) {
             msg("Sending: %s\n", val.c_str());
 
             //*** are next two lines necessary or should we wait
-            //for message to get send back from the server following timestamping
+            //for message to get sent back from the server following timestamping
             msgHistory.push_back(val.c_str());
             refresh_chooser("Collab form:1");
 
             do_send_user_message(val.c_str());
+
+            val.clear();
+#if IDA_SDK_VERSION <= 650
+            fa.set_field_value(2, &val);
+#elif IDA_SDK_VERSION <= 670
+            fa._set_field_value(2, &val);
+#else
+            fa.set_string_value(2, &val);
+#endif
          }
          break;
       }
@@ -249,7 +258,7 @@ void createCollabStatus() {
     "BUTTON NO NONE\nBUTTON YES NONE\nBUTTON CANCEL NONE\n"
     "Collab form\n\n"
     "%/\n"        // placeholder for the form's callback
-    "<Messages:E1:::::>\n<Send:B3:20:::>< :q2::100:::>\n";
+    "<Messages:E1:::::>\n<Send:B3:20:::>< :q2::128:::>\n";
    chooser_info_t ci;
    ci.columns = 1;
    ci.getl = collab_getl;
