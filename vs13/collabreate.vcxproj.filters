@@ -15,36 +15,36 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="collabreate.h">
+    <ClInclude Include="..\collabreate.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="collabreate_ui.h">
+    <ClInclude Include="..\collabreate_ui.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="idanet.h">
+    <ClInclude Include="..\idanet.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="sdk_versions.h">
+    <ClInclude Include="..\sdk_versions.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="collabreate.cpp">
+    <ClCompile Include="..\collabreate.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="collabreate_common.cpp">
+    <ClCompile Include="..\collabreate_common.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="idanet.cpp">
+    <ClCompile Include="..\idanet.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="ida_ui.cpp">
+    <ClCompile Include="..\ida_ui.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="collab_hooks.cpp">
+    <ClCompile Include="..\collab_hooks.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="collab_msgs.cpp">
+    <ClCompile Include="..\collab_msgs.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
