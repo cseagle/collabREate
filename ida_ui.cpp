@@ -291,13 +291,17 @@ static sizevec_t status_ivec;
 const int collab_msg_chooser::widths[] = { 128 };
 const char* collab_msg_chooser::header[] = { "Messages" };
 
+#if IDA_SDK_VERSION < 730
+#define WOPN_DP_TAB WOPN_TAB
+#endif
+
 void createCollabStatus() {
    static const char format[] =
       "BUTTON NO NONE\nBUTTON YES NONE\nBUTTON CANCEL NONE\n"
       "Collab form\n\n"
       "%/\n"        // placeholder for the form's callback
       "<Messages:E1:::::>\n<Send:B3:20:::>< :q2::100:::>\n";
-   collab_tform = OpenForm_c(format, WOPN_TAB, collab_cb, &status, &status_ivec, send_cb, &msg_text);
+   collab_tform = OpenForm_c(format, WOPN_DP_TAB, collab_cb, &status, &status_ivec, send_cb, &msg_text);
 }
 #endif
 
