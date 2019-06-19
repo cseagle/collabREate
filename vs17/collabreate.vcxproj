@@ -125,7 +125,7 @@
     <Link>
       <AdditionalDependencies>ida.lib;ws2_32.lib;json-c.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <OutputFile>$(OutDir)$(ProjectName)$(TargetExt)</OutputFile>
-      <AdditionalLibraryDirectories>..\lib\x86;..\..\..\lib\x86_win_vc_32;..\..\..\lib\vc.w32;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>lib\x86;..\..\..\lib\x86_win_vc_32;..\..\..\lib\vc.w32;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
@@ -150,7 +150,7 @@
     <Link>
       <AdditionalDependencies>ida.lib;ws2_32.lib;json-c.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <OutputFile>$(OutDir)$(ProjectName)$(TargetExt)</OutputFile>
-      <AdditionalLibraryDirectories>..\lib\x64;..\..\..\lib\x64_win_vc_32;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>lib\x64;..\..\..\lib\x64_win_vc_32;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
@@ -172,7 +172,7 @@
     <Link>
       <AdditionalDependencies>ida.lib;ws2_32.lib;json-c.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <OutputFile>$(OutDir)$(ProjectName)$(TargetExt)</OutputFile>
-      <AdditionalLibraryDirectories>..\lib\x86;..\..\..\lib\x86_win_vc_32;..\..\..\lib\vc.w32;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>lib\x86;..\..\..\lib\x86_win_vc_32;..\..\..\lib\vc.w32;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
@@ -199,7 +199,7 @@
     <Link>
       <AdditionalDependencies>ida.lib;ws2_32.lib;json-c.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <OutputFile>$(OutDir)$(ProjectName)$(TargetExt)</OutputFile>
-      <AdditionalLibraryDirectories>..\lib\x64;..\..\..\lib\x64_win_vc_32;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>lib\x64;..\..\..\lib\x64_win_vc_32;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
@@ -224,7 +224,7 @@
     <Link>
       <AdditionalDependencies>ida.lib;ws2_32.lib;json-c.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <OutputFile>$(OutDir)$(ProjectName)$(TargetExt)</OutputFile>
-      <AdditionalLibraryDirectories>..\lib\x86;..\..\..\lib\x86_win_vc_64;..\..\..\lib\vc.w64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>lib\x86;..\..\..\lib\x86_win_vc_64;..\..\..\lib\vc.w64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
@@ -250,7 +250,7 @@
     <Link>
       <AdditionalDependencies>ida.lib;ws2_32.lib;json-c.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile>
-      <AdditionalLibraryDirectories>..\lib\x64;..\..\..\lib\x64_win_vc_64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>lib\x64;..\..\..\lib\x64_win_vc_64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
