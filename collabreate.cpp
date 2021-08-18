@@ -166,7 +166,11 @@ void unhookAll() {
 //      You may or may not check any other conditions to decide what you do:
 //      whether you agree to work with the database or not.
 //
-int idaapi init(void) {
+#if IDA_SDK_VERSION < 750
+int idaapi collab_init_common(void) {
+#else
+size_t idaapi collab_init_common(void) {
+#endif
    unsigned char md5[MD5_LEN];
    msg(PLUGIN_NAME": collabREate has been loaded\n");
    //while the md5 is not used here, it has the side effect of ensuring
@@ -204,12 +208,7 @@ int idaapi init(void) {
       qfree(thist);
    }
    build_handler_map();
-   if (init_network()) {
-      return PLUGIN_KEEP;
-   }
-   else {
-      return PLUGIN_SKIP;
-   }
+   return init_network();
 }
 
 //--------------------------------------------------------------------------
@@ -221,7 +220,7 @@ int idaapi init(void) {
 //      IDA will call this function when the user asks to exit.
 //      This function won't be called in the case of emergency exits.
 
-void idaapi term(void) {
+void idaapi collab_term_common(void) {
    msg(PLUGIN_NAME": collabREate is being unloaded\n");
    authenticated = false;
    if (is_connected()) {
@@ -261,9 +260,9 @@ void idaapi term(void) {
 //                    plugins.cfg file. The default is zero.
 
 #if IDA_SDK_VERSION < 700
-void idaapi run(int /*arg*/) {
+void idaapi collab_run_common(int /*arg*/) {
 #else
-bool idaapi run(size_t /*arg*/) {
+bool idaapi collab_run_common(size_t /*arg*/) {
 #endif
    bool result = true;
    if (is_connected()) {
@@ -380,6 +379,92 @@ bool idaapi run(size_t /*arg*/) {
 #endif
 }
 
+
+#if IDA_SDK_VERSION < 750
+
+//make life easier in a post 7.5 world
+#define PLUGIN_MULTI 0
+
+int idaapi collab_init(void) {
+   //This simple plugin works for all processor types
+   if (collab_init_common()) {
+      return PLUGIN_KEEP;
+   }
+   else {
+      return PLUGIN_SKIP;
+   }
+}
+
+//--------------------------------------------------------------------------
+//      Terminate.
+//      Usually this callback is empty.
+//      The plugin should unhook from the notification lists if
+//      hook_to_notification_point() was used.
+//
+//      IDA will call this function when the user asks to exit.
+//      This function won't be called in the case of emergency exits.
+
+void idaapi collab_term(void) {
+   collab_term_common();
+}
+
+//--------------------------------------------------------------------------
+//
+//      The plugin method
+//
+//      This is the main function of plugin.
+//
+//      It will be called when the user activates the plugin.
+//
+//              arg - the input argument, it can be specified in
+//                    plugins.cfg file. The default is zero.
+//
+//
+
+#if IDA_SDK_VERSION >= 700
+bool idaapi collab_run(size_t arg) {
+#else
+void idaapi collab_run(int arg) {
+#endif
+  return collab_run_common(arg);
+}
+
+#else // IDA_SDK_VERSION >= 750
+
+#define collab_run NULL
+#define collab_term NULL
+
+struct collab_plugmod_t : public plugmod_t {
+   
+  /// Invoke the plugin.
+  virtual bool idaapi run(size_t arg);
+
+  /// Virtual destructor.
+  virtual ~collab_plugmod_t();
+};
+
+static collab_plugmod_t *collab_plugmod;
+
+plugmod_t *idaapi collab_init(void) {
+   if (collab_init_common()) {
+      collab_plugmod = new collab_plugmod_t();
+      return collab_plugmod;
+   }
+   else {
+      return NULL;
+   }
+}
+
+collab_plugmod_t::~collab_plugmod_t(void) {
+   collab_term_common();
+}
+
+bool idaapi collab_plugmod_t::run(size_t arg) {
+   return collab_run_common(arg);
+}
+
+#endif
+
 //--------------------------------------------------------------------------
 //char comment[] = "This is a skeleton plugin. It doesn't do a thing.";
 char *comment = NULL;
@@ -408,9 +493,9 @@ char wanted_hotkey[] = "Alt-F6";
 plugin_t PLUGIN = {
   IDP_INTERFACE_VERSION,
   0,                    // plugin flags
-  init,                 // initialize
-  term,                 // terminate. this pointer may be NULL.
-  run,                  // invoke plugin
+  collab_init,                 // initialize
+  collab_term,                 // terminate. this pointer may be NULL.
+  collab_run,                  // invoke plugin
   comment,              // long comment about the plugin
                         // it could appear in the status line
                         // or as a hint
