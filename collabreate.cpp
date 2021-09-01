@@ -361,10 +361,11 @@ bool idaapi collab_run_common(size_t /*arg*/) {
       }
    }
    else {
+      msg(PLUGIN_NAME": collabREate activated\n");
       authenticated = false;
       memset(stats, 0, sizeof(stats));
       if (do_connect(msg_dispatcher)) {
-         msg(PLUGIN_NAME": collabREate activated\n");
+         msg(PLUGIN_NAME": collabREate connected\n");
 #if IDA_SDK_VERSION >= 600
          createCollabStatus();
 #endif
@@ -492,7 +493,7 @@ char wanted_hotkey[] = "Alt-F6";
 //--------------------------------------------------------------------------
 plugin_t PLUGIN = {
   IDP_INTERFACE_VERSION,
-  0,                    // plugin flags
+  PLUGIN_MULTI | PLUGIN_MOD,   // plugin flags
   collab_init,                 // initialize
   collab_term,                 // terminate. this pointer may be NULL.
   collab_run,                  // invoke plugin

@@ -102,6 +102,7 @@ bool do_connect(Dispatcher disp) {
    cnn.supstr(LAST_SERVER_SUPVAL, host, sizeof(host));
 
    int res = AskUsingForm_c(format, host, &port);
+
    if (res == ASKBTN_YES) {
       cnn.altset(LAST_PORT_ALTVAL, port);
       cnn.supset(LAST_SERVER_SUPVAL, host);
